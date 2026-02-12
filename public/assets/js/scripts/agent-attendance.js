@@ -1,4 +1,5 @@
 import { get } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
 
 function destroyDatatable(tableEl) {
     const $ = window.$;
@@ -66,11 +67,15 @@ new Vue({
             isLoading: false,
             agentId: null,
             agent: {},
+            schedule: null,
+            todayStatus: null,
+            sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
             rows: [],
             filters: {
                 from: "",
                 to: "",
                 status: "",
+                station_id: "",
             },
             stats: {
                 totalHoursPeriod: "0.0",
@@ -88,7 +93,18 @@ new Vue({
         this.agentId = getQueryParam("agent_id");
         if (!this.agentId) return;
 
+        this.$nextTick(() => {
+            initSelect2ForVue(this.$refs.stationSelect, {
+                placeholder: "Toutes les stations",
+                getValue: () => this.filters.station_id,
+                setValue: (v) => {
+                    this.filters.station_id = v;
+                },
+            });
+        });
+
         this.initRangePicker();
+        this.loadSummary();
         this.load();
     },
 
@@ -100,10 +116,7 @@ new Vue({
             }
 
             const end = window.moment();
-            const start = window.moment().subtract(6, "days");
-
-            this.filters.from = start.format("YYYY-MM-DD");
-            this.filters.to = end.format("YYYY-MM-DD");
+            const start = window.moment().startOf ? window.moment().startOf("month") : window.moment();
 
             input.daterangepicker(
                 {
@@ -123,6 +136,55 @@ new Vue({
             );
         },
 
+        async loadSummary() {
+            if (!this.agentId) return;
+
+            try {
+                const params = new URLSearchParams();
+                params.set("agent_id", this.agentId);
+
+                const { data } = await get(`/agents/attendances/summary?${params.toString()}`);
+                this.agent = data?.agent ?? {};
+                this.schedule = data?.schedule ?? null;
+                this.todayStatus = data?.today_status ?? null;
+
+                const stats = data?.stats ?? {};
+                this.stats = {
+                    totalHoursPeriod: String(stats.total_hours_daily ?? "0.0"),
+                    presences: Number(stats.presences_monthly ?? 0),
+                    retards: Number(stats.retards_monthly ?? 0),
+                };
+            } catch (_) {
+                this.schedule = null;
+                this.todayStatus = null;
+                this.stats = { totalHoursPeriod: "0.0", presences: 0, retards: 0 };
+            }
+        },
+
+        async refreshAll() {
+            this.filters.status = "";
+            this.filters.from = "";
+            this.filters.to = "";
+            this.filters.station_id = "";
+
+            try {
+                const input = window.$?.(".bookingrange");
+                if (input && input.length) {
+                    input.val("");
+                }
+            } catch (_) {}
+
+            try {
+                const $ = window.$;
+                if (this.$refs.stationSelect && $ && $.fn && $.fn.select2) {
+                    $(this.$refs.stationSelect).val("").trigger("change.select2");
+                }
+            } catch (_) {}
+
+            await this.loadSummary();
+            await this.load();
+        },
+
         async load() {
             if (!this.agentId) return;
             if (this.isLoading) return;
@@ -135,18 +197,19 @@ new Vue({
                 params.set("per_page", "500");
                 if (this.filters.from) params.set("from", this.filters.from);
                 if (this.filters.to) params.set("to", this.filters.to);
+                if (this.filters.station_id) params.set("station_id", this.filters.station_id);
 
                 const { data } = await get(`/agents/attendances/history?${params.toString()}`);
                 const page = data?.history ?? null;
                 this.rows = page?.data ?? [];
-                this.agent = this.rows.length > 0 ? this.rows[0].agent ?? {} : {};
-                this.recomputeStats();
+                if ((!this.agent || !this.agent.id) && this.rows.length > 0) {
+                    this.agent = this.rows[0].agent ?? {};
+                }
 
                 this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.rows = [];
-                this.agent = {};
-                this.recomputeStats();
+                if (!this.agent) this.agent = {};
             } finally {
                 this.isLoading = false;
             }
@@ -196,6 +259,58 @@ new Vue({
     },
 
     computed: {
+        timeSlots() {
+            // Keep the same visual "timeline" already used in the template.
+            return [
+                "06:00",
+                "07:00",
+                "08:00",
+                "09:00",
+                "10:00",
+                "11:00",
+                "12:00",
+                "01:00",
+                "02:00",
+                "03:00",
+                "04:00",
+                "05:00",
+                "06:00",
+                "07:00",
+                "08:00",
+                "09:00",
+                "10:00",
+                "11:00",
+            ];
+        },
+
+        highlightedTimeIndices() {
+            const start = this.schedule?.expected_start || null;
+            const end = this.schedule?.expected_end || null;
+            if (!start && !end) return { startIdx: -1, endIdx: -1 };
+
+            const startMatches = [];
+            const endMatches = [];
+            for (let i = 0; i < this.timeSlots.length; i++) {
+                if (start && this.timeSlots[i] === start) startMatches.push(i);
+                if (end && this.timeSlots[i] === end) endMatches.push(i);
+            }
+
+            const startIdx = startMatches.length ? startMatches[0] : -1;
+            let endIdx = -1;
+
+            if (endMatches.length) {
+                // Prefer an end index after the chosen start index, to avoid highlighting the wrong duplicate.
+                if (startIdx >= 0) {
+                    const after = endMatches.find((i) => i > startIdx);
+                    endIdx = typeof after === "number" ? after : endMatches[endMatches.length - 1];
+                } else {
+                    endIdx = endMatches[endMatches.length - 1];
+                }
+            }
+
+            return { startIdx, endIdx };
+        },
+
         filteredRows() {
             if (!this.filters.status) return this.rows;
 
@@ -215,8 +330,12 @@ new Vue({
         },
 
         agentStatusText() {
+            if (this.todayStatus === "conge") return "En congé";
+            if (this.todayStatus === "present") return "Présent";
+            if (this.todayStatus === "absent") return "Absent";
+
             const today = new Date().toISOString().slice(0, 10);
-            const todayRow = this.rows.find((r) => r.date_reference === today);
+            const todayRow = this.rows.find((r) => (r.date_reference_iso || r.date_reference) === today);
             if (todayRow) {
                 return todayRow.started_at ? "Présent" : "Absent";
             }
@@ -230,14 +349,21 @@ new Vue({
         },
 
         agentStatusBadgeClass() {
-            return this.agentStatusText === "Présent" ? "badge-primary" : "badge-danger";
+            if (this.todayStatus === "conge") return "badge-primary";
+            if (this.todayStatus === "present") return "badge-success";
+            if (this.todayStatus === "absent") return "badge-danger";
+            return this.agentStatusText === "Présent" ? "badge-success" : "badge-danger";
         },
 
         arrivedAtText() {
             const today = new Date().toISOString().slice(0, 10);
-            const todayRow = this.rows.find((r) => r.date_reference === today && r.started_at);
+            const todayRow = this.rows.find((r) => (r.date_reference_iso || r.date_reference) === today && r.started_at);
             const started = (todayRow?.started_at ?? this.rows.find((r) => r.started_at)?.started_at) ?? null;
             if (!started) return "--:--";
+
+            if (typeof started === "string" && /^\d{2}:\d{2}/.test(started)) {
+                return started.slice(0, 5);
+            }
 
             if (window.moment) {
                 const m = parseDateTime(started);
@@ -265,6 +391,9 @@ new Vue({
     },
 
     watch: {
+        "filters.station_id"() {
+            this.load();
+        },
         "filters.status"() {
             destroyDatatable(this.$refs.table);
             this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));

@@ -28,7 +28,7 @@
                     <div class="card-body">
                         <div class="mb-3 text-center">
                             <h6 class="fw-medium text-gray-5 mb-2">Profile Agent</h6>
-                            <h4>@{{ agent.fullname || '---' }}</h4>
+                            <h4>@{{ agent.fullname || '---' }} <small>(@{{ agent.matricule || '---' }})</small></h4>
                         </div>
                         <div class="attendance-circle-progress mx-auto mb-3" :data-value="profileProgress">
                             <span class="progress-left">
@@ -48,6 +48,14 @@
                                 Arrivé à @{{ arrivedAtText }}
                             </h6>
                         </div>
+
+                        <div class="border-top pt-3">
+
+                            <div class="d-flex align-items-center justify-content-between">
+                                <span class="text-gray-5">Station affectée</span>
+                                <span class="fw-bold text-info">@{{ (agent.station && agent.station.name) ? agent.station.name : '---' }}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -59,7 +67,7 @@
                                 <div class="border-bottom mb-2 pb-2">
                                     <span class="avatar avatar-sm bg-primary mb-2"><i class="ti ti-clock-stop"></i></span>
                                     <h2 class="mb-2">@{{ stats.totalHoursPeriod }} <span class="fs-20 text-gray-5">h</span></h2>
-                                    <p class="fw-medium text-truncate">Total heure (période)</p>
+                                    <p class="fw-medium text-truncate">Total heure (journalier)</p>
                                 </div>
 
                             </div>
@@ -71,7 +79,7 @@
                                 <div class="border-bottom mb-2 pb-2">
                                     <span class="avatar avatar-sm bg-dark mb-2"><i class="ti ti-clock-up"></i></span>
                                     <h2 class="mb-2">@{{ stats.presences }} <span class="fs-20 text-gray-5">jours</span></h2>
-                                    <p class="fw-medium text-truncate">Présences (période)</p>
+                                    <p class="fw-medium text-truncate">Présences (mensuel)</p>
                                 </div>
 
                             </div>
@@ -83,7 +91,7 @@
                                 <div class="border-bottom mb-2 pb-2">
                                     <span class="avatar avatar-sm bg-warning mb-2"><i class="ti ti-clock-exclamation"></i></span>
                                     <h2 class="mb-2">@{{ stats.retards }}</h2>
-                                    <p class="fw-medium text-truncate">Retards (période)</p>
+                                    <p class="fw-medium text-truncate">Retards (mensuel)</p>
                                 </div>
 
                             </div>
@@ -97,19 +105,19 @@
                                     <div class="col-xl-4">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-dark-transparent me-1"></i>Horaire affecté</p>
-                                            <h3>Nom de l'horaire</h3>
+                                            <h3>@{{ schedule ? schedule.name : '---' }}</h3>
                                         </div>
                                     </div>
                                     <div class="col-xl-4">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-success me-1"></i>Heure début</p>
-                                            <h3>08h 36m</h3>
+                                            <h3>@{{ (schedule && schedule.expected_start) ? schedule.expected_start.replace(':','h') : '--:--' }}</h3>
                                         </div>
                                     </div>
                                     <div class="col-xl-4">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-warning me-1"></i>Heure fin</p>
-                                            <h3>22m 15s</h3>
+                                            <h3>@{{ (schedule && schedule.expected_end) ? schedule.expected_end.replace(':','h') : '--:--' }}</h3>
                                         </div>
                                     </div>
 
@@ -132,24 +140,14 @@
                                     </div>
                                     <div class="co-md-12">
                                         <div class="d-flex align-items-center justify-content-between flex-wrap row-gap-2">
-                                            <span class="fs-10">06:00</span>
-                                            <span class="fs-10">07:00</span>
-                                            <span class="fs-10">08:00</span>
-                                            <span class="fs-10">09:00</span>
-                                            <span class="fs-10">10:00</span>
-                                            <span class="fs-10">11:00</span>
-                                            <span class="fs-10">12:00</span>
-                                            <span class="fs-10">01:00</span>
-                                            <span class="fs-10">02:00</span>
-                                            <span class="fs-10">03:00</span>
-                                            <span class="fs-10">04:00</span>
-                                            <span class="fs-10">05:00</span>
-                                            <span class="fs-10">06:00</span>
-                                            <span class="fs-10">07:00</span>
-                                            <span class="fs-10">08:00</span>
-                                            <span class="fs-10">09:00</span>
-                                            <span class="fs-10">10:00</span>
-                                            <span class="fs-10">11:00</span>
+                                            <span
+                                                v-for="(t, idx) in timeSlots"
+                                                :key="idx"
+                                                class="fs-10"
+                                                :class="{ 'text-success fw-semibold': idx === highlightedTimeIndices.startIdx || idx === highlightedTimeIndices.endIdx }"
+                                            >
+                                                @{{ t }}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -165,6 +163,14 @@
                     <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                         <h5>Historique des pointages</h5>
                         <div class="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+
+                            <div class="flex-fill me-3" style="width: 260px;">
+                                <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                                    <option value="">Toutes les stations</option>
+                                    <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                                </select>
+                            </div>
+
                             <div class="me-3">
                                 <div class="input-icon position-relative">
                                             <span class="input-icon-addon">
@@ -184,7 +190,7 @@
                                     <li><a href="javascript:void(0);" class="dropdown-item rounded-1" @click="filters.status = 'late'">Retard</a></li>
                                 </ul>
                             </div>
-                            <button class="btn btn-white border" @click="load">Filtrer</button>
+                            <button class="btn btn-info-light" @click="refreshAll">Actualiser</button>
                             <span class="text-muted ms-2" v-if="isLoading">Chargement...</span>
                         </div>
                     </div>
@@ -206,35 +212,35 @@
                                 </thead>
                                 <tbody>
                                 <tr v-for="p in filteredRows" :key="p.id">
-                                    <td>@{{ p.date_reference }}</td>
+                                    <td>@{{ p.date_reference_iso || p.date_reference }}</td>
                                     <td>@{{ (p.assigned_station && p.assigned_station.name) ? p.assigned_station.name : '-' }}</td>
                                     <td>@{{ (p.station_check_in && p.station_check_in.name) ? p.station_check_in.name : '-' }}</td>
                                     <td>@{{ (p.station_check_out && p.station_check_out.name) ? p.station_check_out.name : '-' }}</td>
-                                    <td>@{{ p.started_at || '--:--' }}</td>
-                                    <td>@{{ p.ended_at || '--:--' }}</td>
+                                    <td><span class="badge badge-success-transparent">@{{ p.started_at || '--:--' }}</span></td>
+                                    <td><span class="badge badge-danger-transparent">@{{ p.ended_at || '--:--' }}</span></td>
                                     <td>
-                                                <span class="badge badge-success-transparent d-inline-flex align-items-center" v-if="p.started_at && p.ended_at">
-                                                    <i class="ti ti-point-filled me-1"></i>Présent
-                                                </span>
+                                        <span class="badge badge-success-transparent d-inline-flex align-items-center" v-if="p.started_at && p.ended_at">
+                                            <i class="ti ti-point-filled me-1"></i>Présent
+                                        </span>
                                         <span class="badge badge-warning-transparent d-inline-flex align-items-center" v-else-if="p.started_at">
-                                                    <i class="ti ti-point-filled me-1"></i>En poste
-                                                </span>
+                                            <i class="ti ti-point-filled me-1"></i>En poste
+                                        </span>
                                         <span class="badge badge-danger-transparent d-inline-flex align-items-center" v-else>
-                                                    <i class="ti ti-point-filled me-1"></i>Absent
-                                                </span>
+                                            <i class="ti ti-point-filled me-1"></i>Absent
+                                        </span>
                                     </td>
                                     <td>
-                                                <span class="badge badge-warning d-inline-flex align-items-center" v-if="p.retard === 'oui'">
-                                                    <i class="ti ti-clock-hour-11 me-1"></i>Oui
-                                                </span>
+                                        <span class="badge badge-warning d-inline-flex align-items-center" v-if="p.retard === 'oui'">
+                                            <i class="ti ti-clock-hour-11 me-1"></i>Oui
+                                        </span>
                                         <span class="badge badge-success d-inline-flex align-items-center" v-else>
-                                                    <i class="ti ti-clock-hour-11 me-1"></i>Non
-                                                </span>
+                                            <i class="ti ti-clock-hour-11 me-1"></i>Non
+                                        </span>
                                     </td>
                                     <td>
-                                                <span class="badge badge-success d-inline-flex align-items-center">
-                                                    <i class="ti ti-clock-hour-11 me-1"></i>@{{ p.duree || '--' }}
-                                                </span>
+                                        <span class="badge badge-info d-inline-flex align-items-center">
+                                            <i class="ti ti-clock-hour-11 me-1"></i>@{{ p.duree || '--' }}
+                                        </span>
                                     </td>
                                 </tr>
                                 </tbody>
@@ -249,6 +255,9 @@
 @endsection
 
 @push("scripts")
+    <script>
+        window.__SITES__ = @json($sites ?? []);
+    </script>
     <script type="module" src="{{ asset("assets/js/scripts/agent-attendance.js") }}"></script>
 @endpush
 

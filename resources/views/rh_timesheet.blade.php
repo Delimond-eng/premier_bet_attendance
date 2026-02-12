@@ -35,8 +35,12 @@
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <h5>Synthèse par station</h5>
                 <div class="d-flex align-items-center gap-2">
-                    <input type="number" min="1" max="12" class="form-control" v-model="filters.month" style="max-width: 100px;">
-                    <input type="number" min="2020" class="form-control" v-model="filters.year" style="max-width: 100px;">
+                    <select class="form-select" v-model.number="filters.month" style="max-width: 160px;">
+                        <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
+                    </select>
+                    <select class="form-select" v-model.number="filters.year" style="max-width: 120px;">
+                        <option v-for="y in yearOptions" :key="y" :value="y">@{{ y }}</option>
+                    </select>
                     <div class="flex-fill" style="width: 260px;">
                         <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                             <option value="">Toutes les stations</option>
@@ -63,7 +67,7 @@
                         </thead>
                         <tbody>
                         <tr v-for="r in rows" :key="r.station_id">
-                            <td>@{{ r.station }}</td>
+                            <td><span class="badge badge-purple badge-lg">@{{ r.station }}</span></td>
                             <td>@{{ r.agents }}</td>
                             <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>
@@ -71,7 +75,7 @@
                             <td>@{{ r.conge }}</td>
                             <td>@{{ r.autorisation }}</td>
                             <td class="text-end">
-                                <a class="btn btn-sm btn-white border" :href="stationReportUrl(r)">
+                                <a class="btn btn-sm btn-outline-info" :href="stationReportUrl(r)">
                                     <i class="ti ti-info-circle me-1"></i>Infos
                                 </a>
                             </td>

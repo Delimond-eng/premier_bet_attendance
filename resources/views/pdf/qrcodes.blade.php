@@ -2,92 +2,129 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>QR CODES DES ZONES</title>
+    <title>QR CODES DES STATIONS</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            margin: 0;
-            padding: 20px;
+        @page {
+            margin: 16px;
         }
 
-        table {
+        body {
+            font-family: DejaVu Sans, Arial, sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: 0;
+            color: #111827;
+        }
+
+        .doc-title {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 0.4px;
+            margin: 0 0 10px;
+        }
+
+        .doc-subtitle {
+            font-size: 10px;
+            color: #6b7280;
+            margin: 0 0 14px;
+        }
+
+        table.qr-grid {
             width: 100%;
             border-collapse: collapse;
         }
 
-        td {
+        td.qr-cell {
             width: 25%;
-            padding: 10px;
+            padding: 10px 8px;
             vertical-align: top;
         }
 
         .qr-card {
             width: 100%;
-            border-radius: 15px;
             overflow: hidden;
-            border: 1px solid #3498db;
-            background-color: #fff;
-            text-align: center;
-            position: relative;
-            padding: 0;
+            border: 1px solid #e5e7eb;
+            background-color: #ffffff;
+            page-break-inside: avoid;
         }
 
-        .top-banner {
-            background-color: #3498db;
-            color: #fff;
-            padding: 8px 5px 4px;
-            border-top-left-radius: 13.5px;
-            border-top-right-radius: 13.5px;
+        .qr-header {
+            background: #0f766e;
+            color: #ffffff;
+            padding: 10px 12px 8px;
+        }
+
+        .qr-header .title {
+            font-weight: bold;
+            font-size: 12px;
+            letter-spacing: 0.6px;
             margin: 0;
         }
 
-
-        .top-banner .title {
-            font-weight: bold;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-
-        .top-banner .subtitle {
-            font-size: 8px;
+        .qr-header .subtitle {
+            font-size: 9px;
+            opacity: 0.92;
+            margin: 2px 0 0;
         }
 
         .qr-body {
             background: #fff;
-            padding: 10px;
+            padding: 14px 12px 10px;
+            text-align: center;
         }
 
-        .qr-body img {
-            width: 100px;
-            height: 100px;
+        .qr-img {
+            width: 110px;
+            height: 110px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .qr-footer {
+            padding: 10px 12px 12px;
+            border-top: 1px solid #f3f4f6;
+            text-align: center;
         }
 
         .label {
             font-size: 10px;
             font-weight: bold;
             text-transform: uppercase;
-            color: #000000;
-            margin-top: 5px;
+            color: #111827;
+            margin: 0;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .slogan {
+            font-size: 9px;
+            color: #6b7280;
+            margin: 4px 0 0;
         }
     </style>
 </head>
 <body>
-    <table>
+    <p class="doc-title">QR codes des stations</p>
+    <p class="doc-subtitle">Scan pour pointer sur site</p>
+
+    <table class="qr-grid">
         @foreach($areas as $index => $area)
             @if($index % 4 === 0)
                 <tr>
             @endif
 
-            <td>
+            <td class="qr-cell">
                 <div class="qr-card">
-                    <div class="top-banner">
-                        <div class="title">SCAN ME</div>
-                        <div class="subtitle">Hold the camera to the image</div>
+                    <div class="qr-header">
+                        <p class="title">SCAN</p>
+                        <p class="subtitle">Approche la camera du code</p>
                     </div>
                     <div class="qr-body">
-                        <img src="{!! $area['qrcode'] !!}" alt="QR Code">
-                        <div class="label">{{ $area["name"] }}</div>
+                        <img class="qr-img" src="{{ $area['qrcode'] }}" alt="QR Code">
+                    </div>
+                    <div class="qr-footer">
+                        <p class="label">{{ $area["name"] }}</p>
+                        <p class="slogan">Salama attendance</p>
                     </div>
                 </div>
             </td>

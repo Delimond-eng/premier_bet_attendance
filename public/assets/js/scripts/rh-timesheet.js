@@ -149,6 +149,34 @@ new Vue({
     },
 
     computed: {
+        monthOptions() {
+            return [
+                { value: 1, label: "Janvier" },
+                { value: 2, label: "Fevrier" },
+                { value: 3, label: "Mars" },
+                { value: 4, label: "Avril" },
+                { value: 5, label: "Mai" },
+                { value: 6, label: "Juin" },
+                { value: 7, label: "Juillet" },
+                { value: 8, label: "Aout" },
+                { value: 9, label: "Septembre" },
+                { value: 10, label: "Octobre" },
+                { value: 11, label: "Novembre" },
+                { value: 12, label: "Decembre" },
+            ];
+        },
+
+        yearOptions() {
+            const current = new Date().getFullYear();
+            const years = [];
+            years.push(current - 1);
+            years.push(current);
+            for (let y = current - 2; y >= current - 10; y -= 1) {
+                years.push(y);
+            }
+            return years;
+        },
+
         exportPdfUrl() {
             const params = new URLSearchParams();
             params.set("month", String(this.filters.month));

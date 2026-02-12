@@ -253,14 +253,21 @@ class AdminController extends Controller
                 'type' => 'station_pointage',
             ]);
 
-            $qrCode = QrCode::format('png')->size(200)->generate($qrData);
+            // Use SVG to avoid requiring the Imagick extension for PNG rendering.
+            $qrCode = QrCode::format('svg')->size(200)->generate($qrData);
+            // The generated SVG includes an XML declaration which can break HTML parsing in Dompdf.
+            $qrCode = preg_replace('/^<\\?xml[^>]*\\?>\\s*/', '', $qrCode) ?? $qrCode;
+            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrCode);
+
             $data[] = [
                 'name' => $station->name,
-                'qrcode' => 'data:image/png;base64,' . base64_encode($qrCode),
+                'qrcode' => $qrDataUri,
             ];
         }
 
-        $pdf = Pdf::loadView('pdf.qrcodes', ['areas' => $data]);
+        $pdf = Pdf::loadView('pdf.qrcodes', ['areas' => $data])
+            ->setPaper('a4', 'portrait')
+            ->setOption('isHtml5ParserEnabled', true);
         return $pdf->download('qrcodes_stations.pdf');
     }
 

@@ -31,8 +31,8 @@
                     </td>
                     <td>@{{ j.presence?.assigned_station?.name ?? j.agent?.station?.name ?? '-' }}</td>
                     <td>@{{ j.date_reference_label ?? j.date_reference }}</td>
-                    <td>@{{ kindLabel(j.kind) }}</td>
-                    <td>@{{ statusLabel(j.status) }}</td>
+                    <td><span class="badge badge-soft-warning">@{{ kindLabel(j.kind) }}</span></td>
+                    <td><span class="badge" :class="{'badge-success' : j.status ==='approved', 'badge-danger' : j.status ==='rejected', 'badge-warning' : j.status ==='pending',}">@{{ statusLabel(j.status) }}</span></td>
                     <td>
                         <a href="javascript:void(0);" class="me-2 text-info" @click="edit(j)"><i class="ti ti-edit"></i></a>
                         <a href="javascript:void(0);" class="text-danger" @click="remove(j)"><i class="ti ti-trash"></i></a>
@@ -81,9 +81,9 @@
                             <div class="mb-3">
                                 <label class="form-label">Statut</label>
                                 <select class="form-select" v-model="form.status">
-                                    <option value="pending">pending</option>
-                                    <option value="approved">approved</option>
-                                    <option value="rejected">rejected</option>
+                                    <option value="pending">@{{ statusLabel("pending") }}</option>
+                                    <option value="approved">@{{ statusLabel("approved") }}</option>
+                                    <option value="rejected">@{{ statusLabel("rejected") }}</option>
                                 </select>
                             </div>
                         </div>

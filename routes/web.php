@@ -48,11 +48,15 @@ Route::middleware(['auth'])->group(function () {
         })->name('view');
 
         Route::get('/view/attendances', function() {
-            return view('agent_attendance', ['agent' => null]);
+            return view('agent_attendance', [
+                'agent' => null,
+                'sites' => \App\Models\Station::all(),
+            ]);
         })->name('view.attendances');
 
         Route::get('/data', [AdminController::class, 'fetchAgents'])->name('data');
         Route::post('/store', [AdminController::class, 'createAgent'])->name('store');
+        Route::get('/attendances/summary', [PresenceController::class, 'agentAttendanceSummary'])->name('attendances.summary');
         Route::get('/attendances/history', [PresenceController::class, 'agentHistory'])->name('attendances.history');
         Route::get('/export/pdf', [ExportController::class, 'agentsPdf'])->name('export.pdf');
         Route::get('/export/excel', [ExportController::class, 'agentsExcel'])->name('export.excel');
