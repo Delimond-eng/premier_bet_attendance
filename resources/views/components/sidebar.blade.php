@@ -105,7 +105,14 @@
                             </a>
                             <ul>
                                 <li><a href="#">Pointage mensuel</a></li>
-                                <li><a href="#">Gestion des congés</a></li>
+                                <li class="submenu">
+                                    <a href="javascript:void(0);">Congés & attribution<span
+                                            class="menu-arrow"></span></a>
+                                    <ul>
+                                        <li><a href="#">Congés</a></li>
+                                        <li><a href="#">Attribution agent</a></li>
+                                    </ul>
+                                </li>
                                 <li><a href="#">Attribution congé</a></li>
                                 <li><a href="#">Justification retard</a></li>
                                 <li><a href="#">Justification absence</a></li>

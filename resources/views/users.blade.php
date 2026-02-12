@@ -19,29 +19,10 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-                <div class="me-2 mb-2">
-                    <div class="dropdown">
-                        <a href="javascript:void(0);"
-                           class="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                           data-bs-toggle="dropdown">
-                            <i class="ti ti-file-export me-1"></i>Export
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1"><i
-                                        class="ti ti-file-type-pdf me-1"></i>Export as PDF</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1"><i
-                                        class="ti ti-file-type-xls me-1"></i>Export as Excel </a>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
                 <div class="mb-2">
                     <a href="#" data-bs-toggle="modal" data-bs-target="#add_users"
                        class="btn btn-primary d-flex align-items-center"><i
-                            class="ti ti-circle-plus me-2"></i>Ajouter utilisateur</a>
+                            class="ti ti-circle-plus me-2"></i>Ajout Utilisateur</a>
                 </div>
             </div>
         </div>
@@ -55,70 +36,16 @@
                     <div class="me-3">
                         <div class="input-icon-end position-relative">
                             <input type="text" class="form-control date-range bookingrange"
-                                   placeholder="dd/mm/yyyy - dd/mm/yyyy">
+                                   placeholder="Recherche...">
                             <span class="input-icon-addon">
-                            <i class="ti ti-chevron-down"></i>
+                            <i class="ti ti-search"></i>
                         </span>
                         </div>
-                    </div>
-                    <div class="dropdown me-3">
-                        <a href="javascript:void(0);"
-                           class="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                           data-bs-toggle="dropdown">
-                            Role
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Employee</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Client</a>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="dropdown me-3">
-                        <a href="javascript:void(0);"
-                           class="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                           data-bs-toggle="dropdown">
-                            Status
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Active</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Inactive</a>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="dropdown">
-                        <a href="javascript:void(0);"
-                           class="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                           data-bs-toggle="dropdown">
-                            Sort By : Last 7 Days
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Recently Added</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Ascending</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Desending</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Last Month</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Last 7 Days</a>
-                            </li>
-                        </ul>
                     </div>
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="custom-datatable-filter table-responsive">
+                <div class="table-responsive">
                     <table class="table" v-cloak>
                         <thead class="thead-light">
                         <tr>
@@ -146,7 +73,7 @@
                             <td>
                                 <div class="d-flex align-items-center file-name-icon">
                                     <a href="#" class="avatar avatar-md avatar-rounded">
-                                        <img src="assets/img/users/user.avif" class="img-fluid" alt="img">
+                                        <img src="{{asset("assets/img/profiles/avatar-05.jpg")}}" class="img-fluid" alt="img">
                                     </a>
                                     <div class="ms-2">
                                         <h6 class="fw-medium"><a href="#">@{{ data.name }}</a></h6>

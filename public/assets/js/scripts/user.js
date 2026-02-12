@@ -38,7 +38,7 @@ new Vue({
 
     methods: {
         viewAllUsers() {
-            if (location.pathname === "/users") {
+            if (location.pathname === "/admin/users") {
                 this.isDataLoading = true;
                 get("/users/all")
                     .then(({ data, status }) => {
@@ -52,7 +52,7 @@ new Vue({
         },
 
         viewAllRoles() {
-            if (location.pathname === "/roles") {
+            if (location.pathname === "/admin/roles") {
                 this.isDataLoading = true;
             }
             get("/roles/all")

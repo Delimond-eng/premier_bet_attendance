@@ -22,7 +22,7 @@
                 <div class="mb-2">
                     <a href="#" data-bs-toggle="modal" data-bs-target="#role-create"
                        class="btn btn-primary d-flex align-items-center"><i
-                            class="ti ti-circle-plus me-2"></i>Ajouter rôles</a>
+                            class="ti ti-circle-plus me-2"></i>Ajout Rôle</a>
                 </div>
             </div>
         </div>
@@ -34,7 +34,7 @@
                 <h5>Liste des Rôles</h5>
             </div>
             <div class="card-body p-0" v-cloak>
-                <div class="custom-datatable-filter table-responsive">
+                <div class="table-responsive">
                     <table class="table">
                         <thead class="thead-light rounded-0">
                         <tr>
