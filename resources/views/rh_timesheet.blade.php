@@ -15,6 +15,20 @@
                     </ol>
                 </nav>
             </div>
+
+            <div class="dropdown">
+                <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-file-export me-1"></i>Exporter
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end p-3">
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                    </li>
+                </ul>
+            </div>
         </div>
 
         <div class="card">
@@ -23,10 +37,12 @@
                 <div class="d-flex align-items-center gap-2">
                     <input type="number" min="1" max="12" class="form-control" v-model="filters.month" style="max-width: 100px;">
                     <input type="number" min="2020" class="form-control" v-model="filters.year" style="max-width: 100px;">
-                    <select class="form-select" v-model="filters.station_id" style="max-width:300px;">
-                        <option value="">Toutes les stations</option>
-                        <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
-                    </select>
+                    <div class="flex-fill" style="width: 260px;">
+                        <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
+                    </div>
                     <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
                 </div>
             </div>
@@ -71,4 +87,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/rh-timesheet.js") }}"></script>
 @endpush
-

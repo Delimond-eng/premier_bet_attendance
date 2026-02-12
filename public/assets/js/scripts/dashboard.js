@@ -211,7 +211,7 @@ new Vue({
                 ],
                 chart: {
                     type: "donut",
-                    height: 160,
+                    height: 75,
                     toolbar: { show: false },
                 },
                 labels: ["Malades", "Congés", "Autres"],

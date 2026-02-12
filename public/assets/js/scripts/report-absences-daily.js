@@ -4,25 +4,23 @@ import { initSelect2ForVue } from "../modules/select2.js";
 function destroyDatatable(tableEl) {
     const $ = window.$;
     if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
-
     if ($.fn.DataTable.isDataTable(tableEl)) {
-        const dt = $(tableEl).DataTable();
-        // Keep the table element in DOM (Vue owns rendering).
-        dt.destroy();
+        $(tableEl).DataTable().destroy();
     }
 }
 
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
-    if (!$ || !$.fn || !$.fn.DataTable) return;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
 
     destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[4, "desc"]],
+        order: [[0, "desc"]],
         info: true,
+        pageLength: 25,
         language: {
             search: " ",
             sLengthMenu: "Lignes par page _MENU_",
@@ -44,15 +42,18 @@ new Vue({
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, "0");
         const dd = String(today.getDate()).padStart(2, "0");
+        const d = `${yyyy}-${mm}-${dd}`;
 
         return {
             isLoading: false,
             sites: [],
-            presences: [],
             filters: {
-                date: `${yyyy}-${mm}-${dd}`,
+                from: d,
+                to: d,
                 station_id: "",
             },
+            range: { from: "", to: "" },
+            rows: [],
         };
     },
 
@@ -60,19 +61,18 @@ new Vue({
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
         }
-
         this.init();
     },
 
     methods: {
         async init() {
-            await this.loadSites();
-            await this.load();
-        },
+            try {
+                const { data } = await get("/stations/list");
+                this.sites = data?.sites ?? [];
+            } catch (e) {
+                this.sites = [];
+            }
 
-        async loadSites() {
-            const { data } = await get("/stations/list");
-            this.sites = data?.sites ?? [];
             this.$nextTick(() => {
                 initSelect2ForVue(this.$refs.stationSelect, {
                     placeholder: "Toutes les stations",
@@ -82,6 +82,8 @@ new Vue({
                     },
                 });
             });
+
+            await this.load();
         },
 
         async load() {
@@ -96,20 +98,21 @@ new Vue({
                 destroyDatatable(this.$refs.table);
 
                 const params = new URLSearchParams();
-                if (this.filters.date) params.set("date", this.filters.date);
+                if (this.filters.from) params.set("from", this.filters.from);
+                if (this.filters.to) params.set("to", this.filters.to);
                 if (stationId) params.set("station_id", stationId);
+                params.set("per_page", "2000");
 
-                const { data } = await get(`/presences/data?${params.toString()}`);
-                let presences = data?.presences ?? [];
-                if (stationId) {
-                    presences = presences.filter(
-                        (p) => String(p?.site_id ?? "") === String(stationId)
-                    );
-                }
-                this.presences = presences;
+                const { data } = await get(`/reports/absences/daily/data?${params.toString()}`);
+
+                this.range = { from: data?.from ?? "", to: data?.to ?? "" };
+                const page = data?.absences ?? null;
+                this.rows = page?.data ?? [];
+
                 this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
-                this.presences = [];
+                this.range = { from: "", to: "" };
+                this.rows = [];
             } finally {
                 this.isLoading = false;
             }
@@ -119,16 +122,18 @@ new Vue({
     computed: {
         exportPdfUrl() {
             const params = new URLSearchParams();
-            if (this.filters.date) params.set("date", this.filters.date);
+            if (this.filters.from) params.set("from", this.filters.from);
+            if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
-            return `/presences/export/pdf?${params.toString()}`;
+            return `/reports/absences/daily/export/pdf?${params.toString()}`;
         },
 
         exportExcelUrl() {
             const params = new URLSearchParams();
-            if (this.filters.date) params.set("date", this.filters.date);
+            if (this.filters.from) params.set("from", this.filters.from);
+            if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
-            return `/presences/export/excel?${params.toString()}`;
+            return `/reports/absences/daily/export/excel?${params.toString()}`;
         },
     },
 });

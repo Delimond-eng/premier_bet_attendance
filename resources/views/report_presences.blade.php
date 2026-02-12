@@ -17,6 +17,12 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                <div class="flex-fill mb-2" style="width: 260px;">
+                    <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                        <option value="">Toutes les stations</option>
+                        <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                    </select>
+                </div>
                 <div class="me-2 mb-2">
                     <input type="date" class="form-control" v-model="filters.date">
                 </div>
@@ -24,9 +30,19 @@
                     <button class="btn btn-primary" @click="load">Charger</button>
                 </div>
                 <div class="mb-2">
-                    <a class="btn btn-white border" :href="pdfUrl" target="_blank">
-                        <i class="ti ti-file-type-pdf me-1"></i> Export PDF
-                    </a>
+                    <div class="dropdown">
+                        <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="ti ti-file-export me-1"></i>Exporter
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end p-3">
+                            <li>
+                                <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>

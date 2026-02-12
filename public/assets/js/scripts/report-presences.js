@@ -1,12 +1,21 @@
 import { get } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
+
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
 
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -37,8 +46,10 @@ new Vue({
 
         return {
             isLoading: false,
+            sites: [],
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
+                station_id: "",
             },
             count: {
                 agents: 0,
@@ -57,15 +68,51 @@ new Vue({
             document.getElementById("global-loader").style.display = "none";
         }
 
-        this.load();
+        this.init();
     },
 
     methods: {
+        async init() {
+            try {
+                const { data } = await get("/stations/list");
+                this.sites = data?.sites ?? [];
+            } catch (e) {
+                this.sites = [];
+            }
+
+            this.$nextTick(() => {
+                initSelect2ForVue(this.$refs.stationSelect, {
+                    placeholder: "Toutes les stations",
+                    getValue: () => this.filters.station_id,
+                    setValue: (v) => {
+                        this.filters.station_id = v;
+                    },
+                });
+            });
+
+            await this.load();
+        },
+
         async load() {
+            if (this.isLoading) return;
             this.isLoading = true;
+
+            const stationId =
+                (this.$refs.stationSelect && String(this.$refs.stationSelect.value || "")) ||
+                String(this.filters.station_id || "");
+            this.filters.station_id = stationId;
+
+            // Destroy current DataTables before Vue updates grouped tables.
+            const tables = this.$refs.tables;
+            if (Array.isArray(tables)) {
+                tables.forEach((t) => destroyDatatable(t));
+            } else if (tables) {
+                destroyDatatable(tables);
+            }
 
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
+            if (stationId) params.set("station_id", stationId);
             params.set("per_page", "200");
 
             try {
@@ -78,12 +125,14 @@ new Vue({
                 this.grouped = this.groupByStation(this.rows, this.stationStatsById);
 
                 this.$nextTick(() => {
-                    const tables = this.$refs.tables;
-                    if (Array.isArray(tables)) {
-                        tables.forEach((t) => initOrRefreshDatatable(t));
-                    } else if (tables) {
-                        initOrRefreshDatatable(tables);
-                    }
+                    setTimeout(() => {
+                        const tables = this.$refs.tables;
+                        if (Array.isArray(tables)) {
+                            tables.forEach((t) => initOrRefreshDatatable(t));
+                        } else if (tables) {
+                            initOrRefreshDatatable(tables);
+                        }
+                    }, 0);
                 });
             } catch (e) {
                 this.rows = [];
@@ -167,10 +216,18 @@ new Vue({
     },
 
     computed: {
-        pdfUrl() {
+        exportPdfUrl() {
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
-            return `/reports/export/pdf?${params.toString()}`;
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/reports/daily/export/pdf?${params.toString()}`;
+        },
+
+        exportExcelUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.date) params.set("date", this.filters.date);
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/reports/daily/export/excel?${params.toString()}`;
         },
     },
 });

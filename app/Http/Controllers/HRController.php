@@ -193,11 +193,18 @@ class HRController extends Controller
      */
     public function monthlyTimesheet(Request $request, AttendanceReportService $service): JsonResponse
     {
-        $month = (int) $request->query('month', Carbon::now()->month);
-        $year = (int) $request->query('year', Carbon::now()->year);
+        $data = $request->validate([
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'group_id' => 'nullable|integer|exists:agent_groups,id',
+        ]);
 
-        $stationId = $request->query('station_id');
-        $groupId = $request->query('group_id');
+        $month = (int) ($data['month'] ?? Carbon::now()->month);
+        $year = (int) ($data['year'] ?? Carbon::now()->year);
+
+        $stationId = $data['station_id'] ?? null;
+        $groupId = $data['group_id'] ?? null;
 
         $stations = $stationId
             ? \App\Models\Station::query()->where('id', $stationId)->get()
@@ -312,4 +319,3 @@ class HRController extends Controller
         ]);
     }
 }
-

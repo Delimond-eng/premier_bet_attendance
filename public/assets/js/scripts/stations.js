@@ -1,12 +1,20 @@
 import { get, postJson } from "../modules/http.js";
 
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
+
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -63,6 +71,7 @@ new Vue({
         async load() {
             this.isLoading = true;
             try {
+                destroyDatatable(this.$refs.table);
                 const params = new URLSearchParams();
                 if (this.filters.date) params.set("date", this.filters.date);
                 const { data } = await get(`/stations/list?${params.toString()}`);
@@ -131,4 +140,3 @@ new Vue({
         },
     },
 });
-

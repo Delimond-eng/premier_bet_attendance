@@ -10,6 +10,7 @@ use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ConfigController;
 use App\Http\Controllers\HRController;
+use App\Http\Controllers\ExportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,6 +54,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/data', [AdminController::class, 'fetchAgents'])->name('data');
         Route::post('/store', [AdminController::class, 'createAgent'])->name('store');
         Route::get('/attendances/history', [PresenceController::class, 'agentHistory'])->name('attendances.history');
+        Route::get('/export/pdf', [ExportController::class, 'agentsPdf'])->name('export.pdf');
+        Route::get('/export/excel', [ExportController::class, 'agentsExcel'])->name('export.excel');
     });
 
     // 4️⃣ PLANIFICATION & ROTATIONS
@@ -61,6 +64,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get("/groupes.view", fn() => view("groupes"))->name("groupes.view");
         Route::get("/plannings.view", fn() => view("plannings"))->name("plannings.view");
         Route::get('/horaires', [PresenceController::class, 'getAllHoraires'])->name('horaires.data');
+        Route::get('/horaires/export/pdf', [ExportController::class, 'horairesPdf'])->name('horaires.export.pdf');
+        Route::get('/horaires/export/excel', [ExportController::class, 'horairesExcel'])->name('horaires.export.excel');
         Route::post('/generate', [PlanningController::class, 'generateMonthlyPlanning'])->name('planning.generate');
         Route::post('/horaire/store', [PresenceController::class, 'createHoraire'])->name('horaire.store');
         Route::get('/groups', [PresenceController::class, 'getAllGroups'])->name('groups.data');
@@ -89,6 +94,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/justifications/delete', [HRController::class, 'justificationsDelete'])->name('justifications.delete');
 
         Route::get('/timesheet/monthly', [HRController::class, 'monthlyTimesheet'])->name('timesheet.monthly');
+        Route::get('/timesheet/export/pdf', [ExportController::class, 'timesheetMonthlyPdf'])->name('timesheet.export.pdf');
+        Route::get('/timesheet/export/excel', [ExportController::class, 'timesheetMonthlyExcel'])->name('timesheet.export.excel');
         Route::get('/attributions', [HRController::class, 'attributionsIndex'])->name('attributions.index');
         Route::post('/attributions/store', [HRController::class, 'attributionsStore'])->name('attributions.store');
         Route::post('/attributions/delete', [HRController::class, 'attributionsDelete'])->name('attributions.delete');
@@ -99,17 +106,29 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/live', function() { return view('attendances'); })->name('presences.live');
         Route::get('/data', [PresenceController::class, 'getPresencesBySiteAndDate'])->name('presences.data');
         Route::post('/store', [PresenceController::class, 'createPresenceAgent'])->name('presence.store');
+        Route::get('/export/pdf', [ExportController::class, 'attendancesPdf'])->name('presences.export.pdf');
+        Route::get('/export/excel', [ExportController::class, 'attendancesExcel'])->name('presences.export.excel');
     });
 
     // 6️⃣ RAPPORTS & ANALYSE
     Route::prefix('reports')->group(function () {
         Route::get('/daily', function() { return view('report_presences'); })->name('reports.presences');
+        Route::get('/absences/daily', function() { return view('report_absences_daily'); })->name('reports.absences.daily.view');
         Route::get('/weekly', function() { return view('report_presences_weekly'); })->name('reports.weekly.view');
         Route::get('/monthly/view', function() { return view('report_presences_monthly'); })->name('reports.monthly.view');
         Route::get('/daily/data', [PresenceController::class, 'dailyReport'])->name('reports.daily.data');
+        Route::get('/daily/export/pdf', [ExportController::class, 'dailyPresencesPdf'])->name('reports.daily.export.pdf');
+        Route::get('/daily/export/excel', [ExportController::class, 'dailyPresencesExcel'])->name('reports.daily.export.excel');
+        Route::get('/absences/daily/data', [PresenceController::class, 'dailyAbsenceReport'])->name('reports.absences.daily.data');
         Route::get('/weekly/data', [PresenceController::class, 'weeklyReport'])->name('reports.weekly.data');
         Route::get('/monthly', [PresenceController::class, 'monthlyReport'])->name('reports.monthly');
         Route::get('/export/pdf', [AdminController::class, 'exportPresenceReport'])->name('reports.export.presence');
+        Route::get('/absences/daily/export/pdf', [ExportController::class, 'absencesDailyPdf'])->name('reports.absences.daily.export.pdf');
+        Route::get('/absences/daily/export/excel', [ExportController::class, 'absencesDailyExcel'])->name('reports.absences.daily.export.excel');
+        Route::get('/weekly/export/pdf', [ExportController::class, 'weeklyPresenceSummaryPdf'])->name('reports.weekly.export.pdf');
+        Route::get('/weekly/export/excel', [ExportController::class, 'weeklyPresenceSummaryExcel'])->name('reports.weekly.export.excel');
+        Route::get('/monthly/export/pdf', [ExportController::class, 'monthlyPresenceSummaryPdf'])->name('reports.monthly.export.pdf');
+        Route::get('/monthly/export/excel', [ExportController::class, 'monthlyPresenceSummaryExcel'])->name('reports.monthly.export.excel');
     });
 
     // 7️⃣ ADMINISTRATION & SÉCURITÉ

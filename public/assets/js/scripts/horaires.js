@@ -1,12 +1,21 @@
 import { get, postJson } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
+
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
 
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -63,6 +72,15 @@ new Vue({
         async loadSites() {
             const { data } = await get("/stations/list");
             this.sites = data?.sites ?? [];
+            this.$nextTick(() => {
+                initSelect2ForVue(this.$refs.stationFilterSelect, {
+                    placeholder: "Toutes les stations",
+                    getValue: () => this.filters.site_id,
+                    setValue: (v) => {
+                        this.filters.site_id = v;
+                    },
+                });
+            });
         },
 
         stationName(id) {
@@ -71,13 +89,22 @@ new Vue({
         },
 
         async load() {
+            if (this.isLoading) return;
             this.isLoading = true;
             try {
+                const siteId =
+                    (this.$refs.stationFilterSelect &&
+                        String(this.$refs.stationFilterSelect.value || "")) ||
+                    String(this.filters.site_id || "");
+                this.filters.site_id = siteId;
+
+                destroyDatatable(this.$refs.table);
+
                 const params = new URLSearchParams();
-                if (this.filters.site_id) params.set("site_id", this.filters.site_id);
+                if (siteId) params.set("site_id", siteId);
                 const { data } = await get(`/rh/horaires?${params.toString()}`);
                 this.horaires = data?.horaires ?? [];
-                this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.horaires = [];
             } finally {
@@ -138,5 +165,32 @@ new Vue({
             }
         },
     },
-});
 
+    computed: {
+        exportPdfUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
+            return `/rh/horaires/export/pdf?${params.toString()}`;
+        },
+
+        exportExcelUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
+            return `/rh/horaires/export/excel?${params.toString()}`;
+        },
+    },
+
+    computed: {
+        exportPdfUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
+            return `/rh/horaires/export/pdf?${params.toString()}`;
+        },
+
+        exportExcelUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
+            return `/rh/horaires/export/excel?${params.toString()}`;
+        },
+    },
+});

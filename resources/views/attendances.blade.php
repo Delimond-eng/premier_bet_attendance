@@ -2,7 +2,7 @@
 
 @section("content")
     <div class="content" id="App" v-cloak>
-        <div class="d-md-flex d-block align-items-center justify-content-between mb-3">
+        <div class="d-md-flex d-block align-items-center page-breadcrumb justify-content-between mb-3">
             <div class="my-auto mb-2">
                 <h2 class="mb-1">Pointages Globaux</h2>
                 <nav>
@@ -11,26 +11,43 @@
                     </ol>
                 </nav>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-2">
-                <select class="form-select mb-2" v-model="filters.station_id" style="max-width: 260px;">
-                    <option value="">Toutes les stations</option>
-                    <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
-                </select>
-                <div class="me-2 mb-2">
-                    <input type="date" class="form-control" v-model="filters.date">
-                </div>
-                <div class="mb-2">
-                    <button class="btn btn-white border d-inline-flex align-items-center" @click="load">
-                        <i class="ti ti-refresh me-1"></i>Actualiser
-                    </button>
-                </div>
+
+            <div class="dropdown">
+                <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-file-export me-1"></i>Exporter
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end p-3" style="">
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                    </li>
+                </ul>
             </div>
+
         </div>
 
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5>Journal de Pointage</h5>
-                <div class="text-muted" v-if="isLoading">Chargement...</div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill" style="width: 260px;">
+                        <select class="form-select mb-2" v-model="filters.station_id" ref="stationSelect">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
+                    </div>
+                    <div class="me-2">
+                        <input type="date" class="form-control" v-model="filters.date">
+                    </div>
+                    <div class="">
+                        <button class="btn btn-outline-info border d-inline-flex align-items-center" @click="load">
+                            <i class="ti ti-refresh me-1"></i>Actualiser
+                        </button>
+                    </div>
+                    <span class="text-muted" v-if="isLoading">Chargement...</span>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -61,13 +78,13 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>@{{ p.assigned_station?.name ?? '-' }}</td>
-                            <td>@{{ p.station_check_in?.name ?? '-' }}</td>
-                            <td>@{{ p.station_check_out?.name ?? '-' }}</td>
+                            <td><span class="badge badge-soft-success">@{{ p.assigned_station?.name ?? '-' }}</span></td>
+                            <td><span class="badge badge-soft-info">@{{ p.station_check_in?.name ?? '-' }}</span></td>
+                            <td><span class="badge badge-soft-dark">@{{ p.station_check_out?.name ?? '-' }}</span></td>
                             <td>@{{ p.date_reference }}</td>
-                            <td class="fw-bold text-success">@{{ p.started_at ?? '--:--' }}</td>
-                            <td class="fw-bold text-danger">@{{ p.ended_at ?? '--:--' }}</td>
-                            <td>@{{ p.duree ?? '--' }}</td>
+                            <td><span class="badge badge-success">@{{ p.started_at ?? '--:--' }}</span></td>
+                            <td><span class="badge badge-purple">@{{ p.ended_at ?? '--:--' }}</span></td>
+                            <td><span class="badge badge-info">@{{ p.duree ?? '--' }}</span></td>
                             <td>
                                 <span class="badge badge-soft-danger" v-if="p.retard === 'oui'">Oui</span>
                                 <span class="badge badge-soft-success" v-else>Non</span>

@@ -15,88 +15,77 @@
                     </ol>
                 </nav>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <input type="date" class="form-control mb-2" v-model="filters.date" style="max-width: 180px;">
-                <button class="btn btn-primary mb-2" @click="load">Charger</button>
+
+            <div class="dropdown">
+                <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ti ti-file-export me-1"></i>Exporter
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end p-3">
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                    </li>
+                </ul>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-                <h5>Liste des pointages (semaine @{{ range.from }} → @{{ range.to }})</h5>
-                <span class="text-muted" v-if="isLoading">Chargement...</span>
+            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <h5>Synthèse agents (semaine @{{ range.from }} → @{{ range.to }})</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill" style="width: 260px;">
+                        <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
+                </div>
             </div>
             <div class="card-body">
-                <div v-if="grouped.length === 0" class="text-muted">Aucune donnée.</div>
-
-                <div v-for="g in grouped" :key="g.key" class="border-bottom mb-3">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <h2 class="card-title d-flex align-items-center gap-2 mb-0">
-                            <i class="ti ti-home-bolt text-primary fs-16"></i>@{{ g.station_name }}
-                        </h2>
-
-                        <div class="d-flex gap-2 align-items-center">
-                            <div class="active-user-item">
-                                <div class="avatar avatar-md bg-success rounded"> <i class="ti ti-clock-check fs-16"></i> </div>
-                                <p class="fs-12 mb-0">Présence <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.presences }}</span></p>
-                            </div>
-
-                            <div class="active-user-item">
-                                <div class="avatar avatar-md bg-warning rounded"> <i class="ti ti-clock-exclamation fs-16"></i> </div>
-                                <p class="fs-12 mb-0">Retard <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.retards }}</span></p>
-                            </div>
-
-                            <div class="active-user-item">
-                                <div class="avatar avatar-md bg-danger rounded"> <i class="ti ti-clock-x fs-16"></i> </div>
-                                <p class="fs-12 mb-0">Absence <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.absents }}</span></p>
-                            </div>
-                            <span class="text-muted fs-12">@{{ g.rows.length }} ligne(s)</span>
-                        </div>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="table" ref="tables">
-                            <thead class="thead-light">
-                            <tr>
-                                <th>Date</th>
-                                <th>Agent</th>
-                                <th>Affectation</th>
-                                <th>Check-in</th>
-                                <th>Check-out</th>
-                                <th>Heure entrée</th>
-                                <th>Heure sortie</th>
-                                <th>Retard</th>
-                                <th>Durée</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <tr v-for="row in g.rows" :key="row.id">
-                                <td>@{{ row.date_reference }}</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <span class="avatar avatar-sm me-2">
-                                            <img :src="row.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
-                                        </span>
-                                        <div>
-                                            <h6 class="mb-0">@{{ row.agent?.fullname ?? '-' }}</h6>
-                                            <small class="text-muted">@{{ row.agent?.matricule ?? '' }}</small>
-                                        </div>
+                <div class="table-responsive">
+                    <table class="table" ref="table">
+                        <thead class="thead-light">
+                        <tr>
+                            <th>Agent</th>
+                            <th>Station</th>
+                            <th>Présent</th>
+                            <th>Retard</th>
+                            <th>Absent</th>
+                            <th>Congé</th>
+                            <th>Autorisation</th>
+                            <th>Justif retard</th>
+                            <th>Justif absence</th>
+                            <th>Total</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="r in rows" :key="r.agent_key">
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-sm me-2">
+                                        <img :src="r.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-0">@{{ r.agent?.fullname ?? '-' }}</h6>
+                                        <small class="text-muted">@{{ r.agent?.matricule ?? '' }}</small>
                                     </div>
-                                </td>
-                                <td>@{{ row.assigned_station?.name ?? '-' }}</td>
-                                <td>@{{ row.station_check_in?.name ?? '-' }}</td>
-                                <td>@{{ row.station_check_out?.name ?? '-' }}</td>
-                                <td>@{{ row.started_at ?? '--:--' }}</td>
-                                <td>@{{ row.ended_at ?? '--:--' }}</td>
-                                <td>
-                                    <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
-                                    <span class="badge badge-soft-success" v-else>Non</span>
-                                </td>
-                                <td>@{{ row.duree ?? '--' }}</td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
+                            <td>@{{ r.present }}</td>
+                            <td>@{{ r.retard }}</td>
+                            <td>@{{ r.absent }}</td>
+                            <td>@{{ r.conge }}</td>
+                            <td>@{{ r.autorisation }}</td>
+                            <td>@{{ r.retard_justifie }}</td>
+                            <td>@{{ r.absence_justifiee }}</td>
+                            <td><span class="badge badge-info ms-2">Total presté : @{{ r.total_preste }}</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -106,4 +95,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/report-presences-weekly.js") }}"></script>
 @endpush
-

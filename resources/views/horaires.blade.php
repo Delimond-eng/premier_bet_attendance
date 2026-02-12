@@ -20,9 +20,25 @@
                 </nav>
             </div>
 
-            <a href="#" data-bs-toggle="modal" data-bs-target="#add_horaire" class="btn btn-primary d-flex align-items-center">
-                <i class="ti ti-circle-plus me-2"></i>Ajout horaire
-            </a>
+            <div class="d-flex align-items-center gap-2">
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="ti ti-file-export me-1"></i>Exporter
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end p-3">
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <a href="#" data-bs-toggle="modal" data-bs-target="#add_horaire" class="btn btn-primary d-flex align-items-center">
+                    <i class="ti ti-circle-plus me-2"></i>Ajout horaire
+                </a>
+            </div>
         </div>
         <!-- /Breadcrumb -->
 
@@ -30,10 +46,12 @@
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                 <h5>Liste des horaires</h5>
                 <div class="d-flex align-items-center gap-2">
-                    <select class="form-select" v-model="filters.site_id" style="max-width: 260px;">
-                        <option value="">Toutes les stations</option>
-                        <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
-                    </select>
+                    <div class="flex-fill" style="width: 260px;">
+                        <select class="form-select" v-model="filters.site_id" ref="stationFilterSelect">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
+                    </div>
                     <button class="btn btn-white border" @click="load">Filtrer</button>
                 </div>
             </div>

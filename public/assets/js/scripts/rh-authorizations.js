@@ -1,12 +1,20 @@
 import { get, postJson } from "../modules/http.js";
 
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
+
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -70,6 +78,7 @@ new Vue({
         async load() {
             this.isLoading = true;
             try {
+                destroyDatatable(this.$refs.table);
                 const { data } = await get("/rh/authorizations?per_page=500");
                 this.authorizations = data?.authorizations?.data ?? [];
                 this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));

@@ -309,15 +309,21 @@ class AdminController extends Controller
 
     public function fetchAgents(Request $request): JsonResponse
     {
-        $perPage = (int) $request->query('per_page', 10);
+        $data = $request->validate([
+            'per_page' => 'nullable|integer|min:1|max:200',
+            'search' => 'nullable|string',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $perPage = (int) ($data['per_page'] ?? 10);
         $perPage = max(min($perPage, 200), 1);
 
-        $search = $request->query('search');
-        $stationId = $request->query('station_id');
+        $search = $data['search'] ?? null;
+        $stationId = $data['station_id'] ?? null;
 
         $agents = Agent::query()
             ->with('station')
-            ->when($stationId, fn ($q) => $q->where('site_id', $stationId))
+            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
                     $sub->where('fullname', 'like', '%' . $search . '%')
@@ -328,18 +334,23 @@ class AdminController extends Controller
             ->paginate($perPage);
 
         $today = Carbon::today()->toDateString();
+        $agentsBase = Agent::query()->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId));
+        $agentIds = $stationId !== null ? $agentsBase->pluck('id')->all() : null;
 
         return response()->json([
             'status' => 'success',
             'agents' => $agents,
             'stats' => [
-                'total' => Agent::count(),
-                'actif' => Agent::query()->where('status', 'actif')->count(),
-                'inactif' => Agent::query()->where('status', '!=', 'actif')->orWhereNull('status')->count(),
+                'total' => (clone $agentsBase)->count(),
+                'actif' => (clone $agentsBase)->where('status', 'actif')->count(),
+                'inactif' => (clone $agentsBase)->where(function ($q) {
+                    $q->where('status', '!=', 'actif')->orWhereNull('status');
+                })->count(),
                 'conges' => Conge::query()
                     ->where('status', 'approved')
                     ->whereDate('date_debut', '<=', $today)
                     ->whereDate('date_fin', '>=', $today)
+                    ->when($agentIds !== null, fn ($q) => $q->whereIn('agent_id', $agentIds))
                     ->count(),
             ],
         ]);

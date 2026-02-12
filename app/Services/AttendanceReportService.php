@@ -20,16 +20,50 @@ class AttendanceReportService
         $start = Carbon::createFromDate($year, $month, 1)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
+        return $this->buildMatrixForRange(
+            start: $start,
+            end: $end,
+            filters: $filters,
+            dayKeyFormat: 'd', // requis par le PDF mensuel
+        );
+    }
+
+    /**
+     * @return array{data: array, days: array<int,string>, agents: Collection<int,Agent>}
+     */
+    public function buildWeeklyMatrix(Carbon $baseDate, array $filters = []): array
+    {
+        $start = $baseDate->copy()->startOfWeek();
+        $end = $baseDate->copy()->endOfWeek();
+
+        return $this->buildMatrixForRange(
+            start: $start,
+            end: $end,
+            filters: $filters,
+            dayKeyFormat: 'Y-m-d',
+        );
+    }
+
+    /**
+     * Construit une matrice de présence sur une période arbitraire.
+     *
+     * @return array{data: array, days: array<int,string>, agents: Collection<int,Agent>}
+     */
+    private function buildMatrixForRange(Carbon $start, Carbon $end, array $filters = [], string $dayKeyFormat = 'd'): array
+    {
         $days = [];
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
-            $days[] = $cursor->format('d');
+            $days[] = $cursor->format($dayKeyFormat);
             $cursor->addDay();
         }
 
         $agentsQuery = Agent::query()
             ->with(['station', 'groupe', 'horaire'])
-            ->when(!empty($filters['station_id']), fn ($q) => $q->where('site_id', $filters['station_id']))
+            ->when(
+                array_key_exists('station_id', $filters) && $filters['station_id'] !== null && $filters['station_id'] !== '',
+                fn ($q) => $q->where('site_id', (int) $filters['station_id'])
+            )
             ->when(!empty($filters['group_id']), fn ($q) => $q->where('groupe_id', $filters['group_id']))
             ->when(!empty($filters['agent_id']), fn ($q) => $q->where('id', $filters['agent_id']))
             ->orderBy('fullname');
@@ -75,7 +109,7 @@ class AttendanceReportService
 
             while ($cursor->lte($end)) {
                 $dateKey = $cursor->format('Y-m-d');
-                $dayKey = $cursor->format('d');
+                $dayKey = $cursor->format($dayKeyFormat);
 
                 /** @var PresenceAgents|null $presence */
                 $presence = optional($presences->get($agent->id . '|' . $dateKey))->first();

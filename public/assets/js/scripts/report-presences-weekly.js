@@ -1,19 +1,27 @@
 import { get } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
+
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
 
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[0, "desc"]],
+        order: [[0, "asc"]],
         info: true,
-        pageLength: 10,
         language: {
             search: " ",
             sLengthMenu: "Lignes par page _MENU_",
@@ -27,48 +35,39 @@ function initOrRefreshDatatable(tableEl) {
     });
 }
 
-function groupByStation(rows, statsByStationId = {}) {
-    const map = new Map();
+function computeSummary(matrix, agentsByKey = {}) {
+    const rows = [];
+    Object.keys(matrix || {}).forEach((agent) => {
+        const days = matrix[agent] || {};
+        const acc = {
+            agent_key: agent,
+            agent: agentsByKey[agent] || { fullname: agent, matricule: "", photo: null },
+            present: 0,
+            retard: 0,
+            absent: 0,
+            conge: 0,
+            autorisation: 0,
+            retard_justifie: 0,
+            absence_justifiee: 0,
+            total_preste: 0,
+        };
 
-    for (const r of rows) {
-        const station =
-            r?.assigned_station ||
-            r?.station_check_in ||
-            r?.station_check_out ||
-            null;
+        Object.keys(days).forEach((d) => {
+            const s = days[d]?.status;
+            if (s === "present") acc.present += 1;
+            else if (s === "retard") acc.retard += 1;
+            else if (s === "absent") acc.absent += 1;
+            else if (s === "conge") acc.conge += 1;
+            else if (s === "autorisation") acc.autorisation += 1;
+            else if (s === "retard_justifie") acc.retard_justifie += 1;
+            else if (s === "absence_justifiee") acc.absence_justifiee += 1;
+        });
 
-        const stationId = station?.id ? String(station.id) : "";
-        const stationName = station?.name || "Sans station";
-        const key = stationId ? `station:${stationId}` : `name:${stationName}`;
-
-        if (!map.has(key)) {
-            map.set(key, {
-                key,
-                station_id: stationId || null,
-                station_name: stationName,
-                stats: { presences: 0, retards: 0, absents: 0 },
-                rows: [],
-            });
-        }
-        map.get(key).rows.push(r);
-    }
-
-    const grouped = Array.from(map.values());
-
-    for (const g of grouped) {
-        if (g.station_id && statsByStationId[g.station_id]) {
-            g.stats = { ...g.stats, ...statsByStationId[g.station_id] };
-        } else {
-            const presences = g.rows.filter((x) => !!x.started_at).length;
-            const retards = g.rows.filter((x) => x.retard === "oui").length;
-            g.stats.presences = presences;
-            g.stats.retards = retards;
-        }
-    }
-
-    return grouped.sort((a, b) =>
-        a.station_name.localeCompare(b.station_name, "fr", { sensitivity: "base" })
-    );
+        // Total presté après justification des absences.
+        acc.total_preste = acc.present + acc.absence_justifiee;
+        rows.push(acc);
+    });
+    return rows;
 }
 
 new Vue({
@@ -79,13 +78,17 @@ new Vue({
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, "0");
         const dd = String(today.getDate()).padStart(2, "0");
+
         return {
             isLoading: false,
-            filters: { date: `${yyyy}-${mm}-${dd}` },
+            sites: [],
+            filters: {
+                date: `${yyyy}-${mm}-${dd}`,
+                station_id: "",
+            },
             range: { from: "", to: "" },
+            matrix: {},
             rows: [],
-            grouped: [],
-            stationStatsById: {},
         };
     },
 
@@ -93,51 +96,83 @@ new Vue({
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
         }
-        this.load();
+        this.init();
     },
 
     methods: {
+        async init() {
+            try {
+                const { data } = await get("/stations/list");
+                this.sites = data?.sites ?? [];
+            } catch (e) {
+                this.sites = [];
+            }
+
+            this.$nextTick(() => {
+                initSelect2ForVue(this.$refs.stationSelect, {
+                    placeholder: "Toutes les stations",
+                    getValue: () => this.filters.station_id,
+                    setValue: (v) => {
+                        this.filters.station_id = v;
+                    },
+                });
+            });
+
+            await this.load();
+        },
+
         async load() {
+            if (this.isLoading) return;
             this.isLoading = true;
             try {
+                const stationId =
+                    (this.$refs.stationSelect && String(this.$refs.stationSelect.value || "")) ||
+                    String(this.filters.station_id || "");
+                this.filters.station_id = stationId;
+
+                destroyDatatable(this.$refs.table);
+
                 const params = new URLSearchParams();
                 if (this.filters.date) params.set("date", this.filters.date);
-                params.set("per_page", "200");
+                if (stationId) params.set("station_id", stationId);
 
                 const { data } = await get(`/reports/weekly/data?${params.toString()}`);
 
                 this.range = { from: data?.from ?? "", to: data?.to ?? "" };
-                const stats = data?.station_stats ?? [];
-                const map = {};
-                for (const s of stats) {
-                    map[String(s.station_id)] = {
-                        presences: Number(s.presences ?? 0),
-                        retards: Number(s.retards ?? 0),
-                        absents: Number(s.absents ?? 0),
-                    };
+                this.matrix = data?.data ?? {};
+                const agentsByKey = data?.agents ?? {};
+                let rows = computeSummary(this.matrix, agentsByKey);
+                if (stationId) {
+                    rows = rows.filter(
+                        (r) => String(r?.agent?.station_id ?? "") === String(stationId)
+                    );
                 }
-                this.stationStatsById = map;
+                this.rows = rows;
 
-                this.rows = data?.presences?.data ?? [];
-                this.grouped = groupByStation(this.rows, this.stationStatsById);
-
-                this.$nextTick(() => {
-                    const tables = this.$refs.tables;
-                    if (Array.isArray(tables)) {
-                        tables.forEach((t) => initOrRefreshDatatable(t));
-                    } else if (tables) {
-                        initOrRefreshDatatable(tables);
-                    }
-                });
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.range = { from: "", to: "" };
+                this.matrix = {};
                 this.rows = [];
-                this.grouped = [];
-                this.stationStatsById = {};
             } finally {
                 this.isLoading = false;
             }
         },
     },
-});
 
+    computed: {
+        exportPdfUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.date) params.set("date", this.filters.date);
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/reports/weekly/export/pdf?${params.toString()}`;
+        },
+
+        exportExcelUrl() {
+            const params = new URLSearchParams();
+            if (this.filters.date) params.set("date", this.filters.date);
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/reports/weekly/export/excel?${params.toString()}`;
+        },
+    },
+});

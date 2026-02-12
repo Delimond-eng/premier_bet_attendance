@@ -29,10 +29,10 @@
                         </a>
                         <ul class="dropdown-menu  dropdown-menu-end p-3">
                             <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a>
+                                <a :href="exportPdfUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a>
                             </li>
                             <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel </a>
+                                <a :href="exportExcelUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel</a>
                             </li>
                         </ul>
                     </div>
@@ -148,37 +148,16 @@
         <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                 <h5>La liste de tous les agents pour tous les stations</h5>
-                <div class="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
-
-                    <div class="dropdown me-3">
-                        <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
-                            Stations
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Finance</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Developer</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Executive</a>
-                            </li>
-                        </ul>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill" style="width: 260px;">
+                        <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
                     </div>
-                    <div class="dropdown me-3">
-                        <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
-                            Statut
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Active</a>
-                            </li>
-                            <li>
-                                <a href="javascript:void(0);" class="dropdown-item rounded-1">Inactive</a>
-                            </li>
-                        </ul>
-                    </div>
+                    <button class="btn btn-white border" @click="load" :disabled="isLoading">
+                        @{{ isLoading ? 'Chargement...' : 'Filtrer' }}
+                    </button>
                 </div>
             </div>
             <div class="card-body">

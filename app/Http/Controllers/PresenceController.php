@@ -5,14 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Agent;
 use App\Models\AgentGroup;
 use App\Models\AgentGroupPlanning;
+use App\Models\AttendanceAuthorization;
+use App\Models\AttendanceJustification;
+use App\Models\Conge;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
 use App\Services\AttendanceReportService;
+use App\Services\AbsenceReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -247,15 +252,20 @@ class PresenceController extends Controller
      */
     public function getPresencesBySiteAndDate(Request $request): JsonResponse
     {
-        $date = $request->query('date') ?? Carbon::today()->toDateString();
-        $stationId = $request->query('station_id');
+        $data = $request->validate([
+            'date' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $date = $data['date'] ?? Carbon::today()->toDateString();
+        $stationId = $data['station_id'] ?? null;
 
         $query = PresenceAgents::query()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
-        if ($stationId) {
-            $query->where('site_id', $stationId);
+        if ($stationId !== null) {
+            $query->where('site_id', (int) $stationId);
         }
 
         return response()->json([
@@ -269,9 +279,13 @@ class PresenceController extends Controller
 
     public function getAllHoraires(Request $request): JsonResponse
     {
-        $siteId = $request->query('site_id');
+        $data = $request->validate([
+            'site_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $siteId = $data['site_id'] ?? null;
         $horaires = PresenceHoraire::query()
-            ->when($siteId, fn ($q) => $q->where('site_id', $siteId))
+            ->when($siteId !== null, fn ($q) => $q->where('site_id', (int) $siteId))
             ->orderBy('site_id')
             ->orderBy('started_at')
             ->get();
@@ -358,15 +372,23 @@ class PresenceController extends Controller
     /**
      * Rapport mensuel (JSON + PDF si export=pdf).
      */
-    public function monthlyReport(Request $request, AttendanceReportService $service): JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function monthlyReport(Request $request, AttendanceReportService $service): \Symfony\Component\HttpFoundation\Response
     {
-        $month = (int) $request->query('month', Carbon::now()->month);
-        $year = (int) $request->query('year', Carbon::now()->year);
+        $data = $request->validate([
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'agent_id' => 'nullable|integer|exists:agents,id',
+            'group_id' => 'nullable|integer|exists:agent_groups,id',
+        ]);
+
+        $month = (int) ($data['month'] ?? Carbon::now()->month);
+        $year = (int) ($data['year'] ?? Carbon::now()->year);
 
         $filters = [
-            'station_id' => $request->query('station_id'),
-            'agent_id' => $request->query('agent_id'),
-            'group_id' => $request->query('group_id'),
+            'station_id' => $data['station_id'] ?? null,
+            'agent_id' => $data['agent_id'] ?? null,
+            'group_id' => $data['group_id'] ?? null,
         ];
 
         $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
@@ -395,6 +417,8 @@ class PresenceController extends Controller
                             'fullname' => $a->fullname,
                             'matricule' => $a->matricule,
                             'photo' => $a->photo,
+                            'station_id' => $a->site_id,
+                            'station_name' => $a->station?->name,
                         ],
                     ];
                 }),
@@ -459,114 +483,92 @@ class PresenceController extends Controller
         ]);
     }
 
-    public function weeklyReport(Request $request): JsonResponse
+    /**
+     * Rapport des absences (journalier / période) avec justificatifs (congé/autorisation/justification).
+     *
+     * L'agent est considéré "absent" s'il n'a pas de pointage started_at sur la date de référence.
+     * Les justificatifs n'annulent pas l'absence, ils sont affichés en colonne.
+     */
+    public function dailyAbsenceReport(Request $request, AbsenceReportService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'date' => 'nullable|date',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'per_page' => 'nullable|integer|min:1|max:2000',
+            'page' => 'nullable|integer|min:1',
+        ]);
+
+        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->startOfDay();
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+
+        $stationId = $data['station_id'] ?? null;
+        $rows = $service->buildAbsenceRows($start, $end, $stationId ? (int) $stationId : null);
+
+        $perPage = (int) ($data['per_page'] ?? 500);
+        $page = (int) ($data['page'] ?? 1);
+        $total = count($rows);
+        $slice = array_slice($rows, max(($page - 1) * $perPage, 0), $perPage);
+        $paginator = new LengthAwarePaginator(
+            $slice,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'absences' => $paginator,
+        ]);
+    }
+
+    public function weeklyReport(Request $request, AttendanceReportService $service): JsonResponse
     {
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer|exists:sites,id',
-            'agent_id' => 'nullable|integer|exists:agents,id',
-            'group_id' => 'nullable|integer|exists:agent_groups,id',
-            'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
         $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
         $start = $baseDate->copy()->startOfWeek();
         $end = $baseDate->copy()->endOfWeek();
 
-        $agentsQuery = Agent::query()
-            ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', $data['station_id']))
-            ->when(!empty($data['agent_id']), fn ($q) => $q->where('id', $data['agent_id']))
-            ->when(!empty($data['group_id']), fn ($q) => $q->where('groupe_id', $data['group_id']));
+        $filters = [
+            'station_id' => isset($data['station_id']) ? (int) $data['station_id'] : null,
+        ];
 
-        $totalAgents = $agentsQuery->count();
-        $agentIds = $agentsQuery->pluck('id')->all();
-
-        $presencesAll = PresenceAgents::query()
-            ->whereIn('agent_id', $agentIds)
-            ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
-            ->get()
-            ->groupBy(fn (PresenceAgents $p) => Carbon::parse($p->date_reference)->toDateString());
-
-        $daily = [];
-        $cursor = $end->copy();
-        while ($cursor->gte($start)) {
-            $d = $cursor->toDateString();
-            $dayPresences = $presencesAll->get($d, collect());
-            $present = (int) $dayPresences->whereNotNull('started_at')->count();
-            $late = (int) $dayPresences->where('retard', 'oui')->count();
-            $absent = max($totalAgents - $present, 0);
-            $daily[] = [
-                'date' => $d,
-                'count' => [
-                    'agents' => $totalAgents,
-                    'presences' => $present,
-                    'retards' => $late,
-                    'absents' => $absent,
-                ],
-            ];
-            $cursor->subDay();
-        }
-
-        $perPage = (int) ($data['per_page'] ?? 200);
-
-        $presencesQuery = PresenceAgents::query()
-            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
-            ->whereIn('agent_id', $agentIds)
-            ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()]);
-
-        $daysCount = max($start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()) + 1, 1);
-
-        $agentsByStation = Agent::query()
-            ->selectRaw('site_id, COUNT(*) as c')
-            ->whereIn('id', $agentIds)
-            ->groupBy('site_id')
-            ->pluck('c', 'site_id');
-
-        $presenceByStation = PresenceAgents::query()
-            ->selectRaw('site_id, SUM(CASE WHEN started_at IS NOT NULL THEN 1 ELSE 0 END) as c')
-            ->whereIn('agent_id', $agentIds)
-            ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('site_id')
-            ->pluck('c', 'site_id');
-
-        $lateByStation = PresenceAgents::query()
-            ->selectRaw('site_id, SUM(CASE WHEN retard = \'oui\' THEN 1 ELSE 0 END) as c')
-            ->whereIn('agent_id', $agentIds)
-            ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('site_id')
-            ->pluck('c', 'site_id');
-
-        $stationStats = Station::query()
-            ->whereIn('id', $agentsByStation->keys()->filter()->all())
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(function (Station $s) use ($agentsByStation, $presenceByStation, $lateByStation, $daysCount) {
-                $agents = (int) ($agentsByStation[$s->id] ?? 0);
-                $presences = (int) ($presenceByStation[$s->id] ?? 0);
-                $retards = (int) ($lateByStation[$s->id] ?? 0);
-                $expected = $agents * $daysCount;
-                return [
-                    'station_id' => $s->id,
-                    'station_name' => $s->name,
-                    'agents' => $agents,
-                    'presences' => $presences,
-                    'retards' => $retards,
-                    'absents' => max($expected - $presences, 0),
-                ];
-            })
-            ->values();
+        $matrix = $service->buildWeeklyMatrix($baseDate, $filters);
 
         return response()->json([
             'status' => 'success',
             'from' => $start->toDateString(),
             'to' => $end->toDateString(),
-            'daily' => $daily,
-            // Détail par agent/station sur la période (pour un rapport cohérent avec les autres vues).
-            'station_stats' => $stationStats,
-            'presences' => $presencesQuery
-                ->orderByDesc('date_reference')
-                ->orderByDesc('started_at')
-                ->paginate($perPage),
+            'data' => $matrix['data'],
+            'agents' => $matrix['agents']
+                ->mapWithKeys(function (Agent $a) {
+                    $key = $a->fullname . ' (' . $a->matricule . ')';
+                    return [
+                        $key => [
+                            'id' => $a->id,
+                            'fullname' => $a->fullname,
+                            'matricule' => $a->matricule,
+                            'photo' => $a->photo,
+                            'station_id' => $a->site_id,
+                            'station_name' => $a->station?->name,
+                        ],
+                    ];
+                }),
         ]);
     }
 

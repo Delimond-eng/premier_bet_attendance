@@ -1,12 +1,20 @@
 import { get } from "../modules/http.js";
 
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
+
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -117,9 +125,11 @@ new Vue({
 
         async load() {
             if (!this.agentId) return;
+            if (this.isLoading) return;
 
             this.isLoading = true;
             try {
+                destroyDatatable(this.$refs.table);
                 const params = new URLSearchParams();
                 params.set("agent_id", this.agentId);
                 params.set("per_page", "500");
@@ -132,7 +142,7 @@ new Vue({
                 this.agent = this.rows.length > 0 ? this.rows[0].agent ?? {} : {};
                 this.recomputeStats();
 
-                this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.rows = [];
                 this.agent = {};
@@ -256,7 +266,8 @@ new Vue({
 
     watch: {
         "filters.status"() {
-            this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
+            destroyDatatable(this.$refs.table);
+            this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
         },
     },
 });

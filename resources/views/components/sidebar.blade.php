@@ -56,7 +56,7 @@
                             </a>
                             <ul>
                                 <li><a class="@active(["dashboard"])" href="{{route("dashboard")}}">Vue globale</a></li>
-                                <li><a class="@active(["presences.live"])" href="{{ route('presences.live') }}">Situation des présences</a></li>
+                                <li><a class="@active(["presences.live"])" href="{{ route('presences.live') }}">Journal de pointage</a></li>
                             </ul>
                         </li>
                     </ul>
@@ -95,29 +95,30 @@
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="{{ route('reports.presences') }}">Présences journalières</a></li>
-                                <li><a href="{{ route('reports.weekly.view') }}">Présences hebdomadaire</a></li>
-                                <li><a href="{{ route('reports.monthly.view') }}">Présences mensuelles</a></li>
+                                <li><a class="@active(["reports.presences"])" href="{{ route('reports.presences') }}">Présences journalières</a></li>
+                                <li><a class="@active(["reports.absences.daily.view"])" href="{{ route('reports.absences.daily.view') }}">Absences journalières</a></li>
+                                <li><a class="@active(["reports.weekly.view"])" href="{{ route('reports.weekly.view') }}">Présences hebdomadaire</a></li>
+                                <li><a class="@active(["reports.monthly.view"])" href="{{ route('reports.monthly.view') }}">Présences mensuelles</a></li>
                             </ul>
                         </li>
 
                         <li class="submenu">
-                            <a href="javascript:void(0);">
+                            <a href="javascript:void(0);" class="@active(["rh.*"])">
                                 <i class="ti ti-user-screen"></i><span>Ressources humaines</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
+                                <li><a class="@active(["rh.timesheet.view"])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
                                 <li class="submenu">
-                                    <a href="javascript:void(0);">Congés & attribution<span class="menu-arrow"></span></a>
+                                    <a href="javascript:void(0);" class="@active(["rh.conges.view", "rh.attributions.view" ])">Congés & attribution<span class="menu-arrow"></span></a>
                                     <ul>
-                                        <li><a href="{{ route('rh.conges.view') }}">Congés</a></li>
-                                        <li><a href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
+                                        <li><a class="@active(["rh.conges.view"])" href="{{ route('rh.conges.view') }}">Congés</a></li>
+                                        <li><a class="@active(["rh.attributions.view"])" href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
                                     </ul>
                                 </li>
-                                <li><a href="{{ route('rh.authorizations.view') }}">Autorisation spéciale</a></li>
-                                <li><a href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
-                                <li><a href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
+                                <li><a class="@active(["rh.authorizations.view"])" href="{{ route('rh.authorizations.view') }}">Autorisation spéciale</a></li>
+                                <li><a class="@active(["rh.justifications.retard.view"])"  href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
+                                <li><a class="@active(["rh.justifications.absence.view"])" href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
                             </ul>
                         </li>
                     </ul>
@@ -132,8 +133,8 @@
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="{{route("admin.users")}}" class="@active(["admin.users"])">Utilisateurs</a></li>
-                                <li><a href="{{route("admin.roles")}}" class="@active(["admin.roles"])">Roles & Permissions</a></li>
+                                <li><a class="@active(["admin.users"])" href="{{route("admin.users")}}" class="@active(["admin.users"])">Utilisateurs</a></li>
+                                <li><a class="@active(["admin.roles"])" href="{{route("admin.roles")}}" class="@active(["admin.roles"])">Roles & Permissions</a></li>
                                 <li><a href="#">Journal d'accès</a></li>
                             </ul>
                         </li>
@@ -144,4 +145,3 @@
         </div>
     </div>
 </div>
-

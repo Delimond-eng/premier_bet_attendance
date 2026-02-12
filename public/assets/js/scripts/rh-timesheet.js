@@ -1,12 +1,21 @@
 import { get } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
+
+function destroyDatatable(tableEl) {
+    const $ = window.$;
+    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
+
+    if ($.fn.DataTable.isDataTable(tableEl)) {
+        const dt = $(tableEl).DataTable();
+        dt.destroy();
+    }
+}
 
 function initOrRefreshDatatable(tableEl) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        $(tableEl).DataTable().destroy();
-    }
+    destroyDatatable(tableEl);
 
     $(tableEl).DataTable({
         bFilter: true,
@@ -82,6 +91,15 @@ new Vue({
         async init() {
             const { data } = await get("/stations/list");
             this.sites = data?.sites ?? [];
+            this.$nextTick(() => {
+                initSelect2ForVue(this.$refs.stationSelect, {
+                    placeholder: "Toutes les stations",
+                    getValue: () => this.filters.station_id,
+                    setValue: (v) => {
+                        this.filters.station_id = v;
+                    },
+                });
+            });
             await this.load();
         },
 
@@ -94,13 +112,20 @@ new Vue({
         },
 
         async load() {
+            if (this.isLoading) return;
             this.isLoading = true;
             try {
+                const stationId =
+                    (this.$refs.stationSelect && String(this.$refs.stationSelect.value || "")) ||
+                    String(this.filters.station_id || "");
+                this.filters.station_id = stationId;
+
+                destroyDatatable(this.$refs.table);
+
                 const params = new URLSearchParams();
                 params.set("month", String(this.filters.month));
                 params.set("year", String(this.filters.year));
-                if (this.filters.station_id)
-                    params.set("station_id", this.filters.station_id);
+                if (stationId) params.set("station_id", stationId);
 
                 const { data } = await get(`/rh/timesheet/monthly?${params.toString()}`);
                 const stations = data?.stations ?? [];
@@ -114,12 +139,30 @@ new Vue({
                     };
                 });
 
-                this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.rows = [];
             } finally {
                 this.isLoading = false;
             }
+        },
+    },
+
+    computed: {
+        exportPdfUrl() {
+            const params = new URLSearchParams();
+            params.set("month", String(this.filters.month));
+            params.set("year", String(this.filters.year));
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/rh/timesheet/export/pdf?${params.toString()}`;
+        },
+
+        exportExcelUrl() {
+            const params = new URLSearchParams();
+            params.set("month", String(this.filters.month));
+            params.set("year", String(this.filters.year));
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            return `/rh/timesheet/export/excel?${params.toString()}`;
         },
     },
 });
