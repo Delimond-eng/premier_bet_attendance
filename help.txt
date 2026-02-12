@@ -1,0 +1,54 @@
+// Run & deploy laravel project into local network
+
+php artisan serve --host=0.0.0.0 --port=8000
+
+
+La theorie c'est quand on sait tout mais rien ne fonctionne, 
+et la pratique c'est quand tout fonctionne et que personne ne sait pourquoi ?
+
+
+public function handle()
+{
+    $date = Carbon::yesterday()->toDateString(); // on vérifie les absences du jour précédent
+    // Récupérer tous les agents ayant un planning actif ce jour-là (non repos)
+    $plannedAgents = DB::table('agent_group_plannings as agp')
+        ->join('agent_group_assignments as aga', function ($join) use ($date) {
+            $join->on('agp.agent_group_id', '=', 'aga.agent_group_id')
+                ->where('aga.start_date', '<=', $date)
+                ->where(function ($q) use ($date) {
+                    $q->whereNull('aga.end_date')->orWhere('aga.end_date', '>=', $date);
+                });
+        })
+        ->join('agents as a', 'aga.agent_id', '=', 'a.id')
+        ->where('agp.date', $date)
+        ->where('agp.is_rest_day', false)
+        ->select('a.id', 'a.matricule', 'a.fullname')
+        ->get();
+
+    foreach ($plannedAgents as $agent) {
+        $presence = PresenceAgents::where('agent_id', $agent->id)
+            ->whereDate('date_reference', $date)
+            ->first();
+
+        if (!$presence) {
+            // Agent absent : pas de pointage ce jour
+            $this->notifierAbsence($agent, $date, 'Absence totale (pas de pointage)');
+        } else if ($presence && !$presence->ended_at) {
+            // Agent est entré mais pas sorti (optionnel selon tes règles)
+            $this->notifierAbsence($agent, $date, 'Pointage sortie manquant');
+        }
+    }
+}
+
+private function notifierAbsence($agent, $date, $raison)
+{
+    // Par exemple, envoyer un email ou notification
+    Log::info("Agent absent détecté : {$agent->matricule} - {$agent->fullname} le $date : $raison");
+    // Ou envoi d'email, notification, etc.
+    // Exemple simplifié :
+    Mail::to('manager@example.com')->send(new AbsenceNotificationMail($agent, $date, $raison));
+}
+
+-4.3054146,15.3009364
+
+

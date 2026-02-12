@@ -1,0 +1,23 @@
+DB_NAME : ucorodmy_salama
+USER_NAME : ucorodmy_salama_uuid
+PASSWORD : salama@2025
+
+
+#MAIL_MAILER=smtp
+#MAIL_HOST=mail.salama-drc.com
+#MAIL_PORT=587
+#MAIL_USERNAME=tech@salama-drc.com
+#MAIL_PASSWORD=Salama@2025.
+#MAIL_ENCRYPTION=tsl
+#MAIL_FROM_ADDRESS=tech@salama-drc.com
+#MAIL_FROM_NAME="SALAMA PLATEFORME"
+
+
+# MAIL_MAILER=smtp  
+# MAIL_HOST=smtp.gmail.com  
+# MAIL_PORT=587  
+# MAIL_USERNAME=mamba.salama.s@gmail.com  
+# MAIL_PASSWORD=xvpbgztsusrqseuf  
+# MAIL_ENCRYPTION=tls  
+# MAIL_FROM_ADDRESS=mamba.salama.s@gmail.com  
+#MAIL_FROM_NAME="SALAMA PLATEFORME"
