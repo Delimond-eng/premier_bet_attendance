@@ -1,7 +1,7 @@
 @extends("layouts.app")
 
 @section("content")
-    <div class="content">
+    <div class="content" id="App" v-cloak>
 
         <!-- Breadcrumb -->
         <div class="d-flex align-items-center justify-content-between flex-wrap mb-3">
@@ -20,10 +20,18 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-3 mb-2">
+                <div style="min-width: 150px;">
+                    <select class="form-select" v-model="range.mode" @change="applyMode">
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">Cette semaine</option>
+                        <option value="month">Ce mois</option>
+                        <option value="custom">Personnalisé</option>
+                    </select>
+                </div>
                 <div class="input-icon position-relative">
-							<span class="input-icon-addon">
-								<i class="ti ti-calendar text-gray-9"></i>
-							</span>
+                    <span class="input-icon-addon">
+                        <i class="ti ti-calendar text-gray-9"></i>
+                    </span>
                     <input type="text" class="form-control date-range bookingrange" placeholder="dd/mm/yyyy - dd/mm/yyyy">
                 </div>
             </div>
@@ -44,19 +52,19 @@
                         <div class="row">
                             <div class="col-4">
                                 <div class="text-center">
-                                    <h3 class="main-title mb-1">1054</h3>
+                                    <h3 class="main-title mb-1">@{{ counts.presences }}</h3>
                                     <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-primary me-1"></span>Présents</p>
                                 </div>
                             </div>
                             <div class="col-4">
                                 <div class="text-center">
-                                    <h3 class="main-title mb-1">568</h3>
+                                    <h3 class="main-title mb-1">@{{ counts.retards }}</h3>
                                     <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-secondary me-1"></span>Retards</p>
                                 </div>
                             </div>
                             <div class="col-4">
                                 <div class="text-center">
-                                    <h3 class="main-title mb-1">80</h3>
+                                    <h3 class="main-title mb-1">@{{ counts.absents }}</h3>
                                     <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-light me-1"></span>Absents</p>
                                 </div>
                             </div>
@@ -98,15 +106,15 @@
                                 <div>
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-900 fs-7 me-1"></i>Malades</p>
-                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">45</span>
+                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.maladies }}</span>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-800 fs-7 me-1"></i>Congés</p>
-                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">68</span>
+                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.conges }}</span>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-700 fs-7 me-1"></i>Autres</p>
-                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">12</span>
+                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.autres }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -157,7 +165,7 @@
                                         </div>
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h3 class="main-title mb-1">1,848</h3>
+                                                <h3 class="main-title mb-1">@{{ counts.agents }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
                                             <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+18%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
@@ -179,7 +187,7 @@
                                         </div>
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h3 class="main-title mb-1">1,248</h3>
+                                                <h3 class="main-title mb-1">@{{ counts.presences }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
                                             <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+22%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
@@ -196,12 +204,12 @@
                                                 <i class="ti ti-clock-exclamation text-white fs-24"></i>
                                             </div>
                                             <div class="ms-2">
-                                                <p class="fw-semibold text-truncate mb-0">Arrivés en retard aujourd'hui</p>
+                                                <p class="fw-semibold text-truncate mb-0">Arrivés en retard</p>
                                             </div>
                                         </div>
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h3 class="main-title mb-1">12</h3>
+                                                <h3 class="main-title mb-1">@{{ counts.retards }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
                                             <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">-16%<span class="bg-danger btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-down-right fs-20"></i></span></div>
@@ -223,7 +231,7 @@
                                         </div>
                                         <div class="d-flex align-items-center justify-content-between">
                                             <div>
-                                                <h3 class="main-title mb-1">20</h3>
+                                                <h3 class="main-title mb-1">@{{ counts.absents }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
                                             <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+16%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
@@ -275,13 +283,13 @@
                         <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
                             <div class="d-flex align-items-center flex-wrap gap-3">
                                 <div class="d-flex align-items-center pe-3 border-end">
-                                    <h3 class="mb-0">82<span class="ms-2 fw-normal fs-14 text-default">Arrivée à l’heure</span></h3>
+                                    <h3 class="mb-0">@{{ Math.max((counts.presences || 0) - (counts.retards || 0), 0) }}<span class="ms-2 fw-normal fs-14 text-default">Arrivée à l’heure</span></h3>
                                 </div>
                                 <div class="d-flex align-items-center pe-3 border-end">
-                                    <h3 class="mb-0">11<span class="ms-2 fw-normal fs-14 text-default">Retard</span></h3>
+                                    <h3 class="mb-0">@{{ counts.retards }}<span class="ms-2 fw-normal fs-14 text-default">Retard</span></h3>
                                 </div>
                                 <div class="d-flex align-items-center">
-                                    <h3 class="mb-0">6<span class="ms-2 fw-normal fs-14 text-default">Absent</span></h3>
+                                    <h3 class="mb-0">@{{ counts.absents }}<span class="ms-2 fw-normal fs-14 text-default">Absent</span></h3>
                                 </div>
                             </div>
                             <div class="d-flex align-items-center gap-3">
@@ -291,7 +299,9 @@
                             </div>
                         </div>
                         <div class="d-sm-flex align-items-center flex-sm-row flex-column">
-                            <div id="attendance-chart" class="w-100"></div>
+                            <div id="attendance-chart" class="w-100">
+                                <canvas id="attendance-chart-js" height="180"></canvas>
+                            </div>
                             <div class="flex-shrink-0">
                                 <div class="border p-3 rounded text-center mb-3">
                                     <p class="mb-1">Nombre d’heures travaillées</p>
@@ -316,26 +326,31 @@
                 <div class="card flex-fill">
                     <div class="card-body">
                         <div class="border rounded border-start border-start-primary d-flex align-items-center justify-content-between p-2 gap-2 flex-wrap mb-3">
-                            <h2 class="card-title mb-0">(5) Derniers arrivées en temps réel</h2>
+                            <h2 class="card-title mb-0">(@{{ latestCheckins.length }}) Derniers arrivées en temps réel</h2>
 
                         </div>
-                        @for($i=0; $i<5; $i++)
-                            <div class="p-2 bg-light rounded border-bottom d-flex align-items-center justify-content-between mb-2">
+                        <div v-if="isLoading" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
+                            <div class="text-muted">Chargement...</div>
+                        </div>
+                        <div v-else-if="latestCheckins.length === 0" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
+                            <div class="text-muted">Aucun pointage trouvé.</div>
+                        </div>
+                        <div v-for="item in latestCheckins.slice(0, 5)" :key="item.id" class="p-2 bg-light rounded border-bottom d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
                                     <a href="javascript:void(0);" class="avatar flex-shrink-0">
                                         <img src="https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg" class="rounded-circle" alt="user">
                                     </a>
                                     <div class="ms-2">
-                                        <p class="fs-14 fw-medium text-truncate mb-1"><a href="#">Jessica Brown</a></p>
-                                        <p class="fs-13">Customer Support</p>
+                                        <p class="fs-14 fw-medium text-truncate mb-1"><a href="#">@{{ item.agent?.fullname ?? 'Agent' }}</a></p>
+                                        <p class="fs-13">@{{ item.station_check_in?.name ?? item.assigned_station?.name ?? 'Station' }}</p>
                                     </div>
                                 </div>
                                 <div>
-                                    <p class="fs-13 text-dark mb-1">10:15 AM</p>
-                                    <span class="badge badge-danger-transparent rounded-pill">+45 Min</span>
+                                    <p class="fs-13 text-dark mb-1">@{{ item.started_at ?? '--:--' }}</p>
+                                    <span class="badge badge-danger-transparent rounded-pill" v-if="item.retard === 'oui'">Retard</span>
+                                    <span class="badge badge-success-transparent rounded-pill" v-else>À l'heure</span>
                                 </div>
                             </div>
-                        @endfor
 
 
                     </div> <!-- end card body -->
@@ -347,3 +362,7 @@
 
     </div>
 @endsection
+
+@push("scripts")
+    <script type="module" src="{{ asset("assets/js/scripts/dashboard.js") }}"></script>
+@endpush

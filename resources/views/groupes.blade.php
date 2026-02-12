@@ -1,9 +1,7 @@
 @extends("layouts.app")
 
-
 @section("content")
-
-    <div class="content">
+    <div class="content" id="App" v-cloak>
 
         <!-- Breadcrumb -->
         <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
@@ -24,22 +22,22 @@
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
                 <div class="mb-2">
-                    <a href="#" data-bs-toggle="modal" data-bs-target="#add_horaire" class="btn btn-primary d-flex align-items-center"><i class="ti ti-circle-plus me-2"></i>Ajout groupe</a>
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#add_group" class="btn btn-primary d-flex align-items-center">
+                        <i class="ti ti-circle-plus me-2"></i>Ajout groupe
+                    </a>
                 </div>
 
             </div>
         </div>
         <!-- /Breadcrumb -->
 
-        <!-- Leads List -->
         <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                 <h5>Liste des groupes des agents</h5>
-
             </div>
-            <div class="card-body p-0">
-                <div class="custom-datatable-filter table-responsive">
-                    <table class="table datatable">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table" ref="table">
                         <thead class="thead-light">
                         <tr>
                             <th class="no-sort">
@@ -49,80 +47,89 @@
                             </th>
                             <th>Designation</th>
                             <th>Horaire</th>
-                            <th>Temps</th>
+                            <th>Statut</th>
                             <th></th>
                         </tr>
                         </thead>
                         <tbody>
-                        <tr>
+                        <tr v-for="g in groups" :key="g.id">
                             <td>
                                 <div class="form-check form-check-md">
                                     <input class="form-check-input" type="checkbox">
                                 </div>
                             </td>
-                            <td><h6 class="fs-14 fw-medium">Matinale</h6></td>
+                            <td><h6 class="fs-14 fw-medium">@{{ g.libelle }}</h6></td>
                             <td>
-                                <div>
-                                    <h6 class="fs-14 fw-medium">Matinale</h6>
-                                    <small>De 07:30 à 16:30</small>
+                                <div v-if="g.horaire">
+                                    <h6 class="fs-14 fw-medium mb-0">@{{ g.horaire.libelle }}</h6>
+                                    <small>De @{{ g.horaire.started_at }} à @{{ g.horaire.ended_at }}</small>
                                 </div>
+                                <div v-else>--</div>
                             </td>
                             <td>
-                                <div class=" d-flex align-items-center">
-                                    <div class="progress me-2" role="progressbar" aria-label="Basic example" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="height: 5px; min-width: 80px;">
-                                        <div class="progress-bar bg-info" style="width: 60%"></div>
-                                    </div>
-                                    <span class="fs-14 fw-normal">Matinale</span>
-                                </div>
+                                <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs" v-if="g.status === 'actif'">
+                                    <i class="ti ti-point-filled me-1"></i>Actif
+                                </span>
+                                <span class="badge badge-soft-danger d-inline-flex align-items-center badge-xs" v-else>
+                                    <i class="ti ti-point-filled me-1"></i>Inactif
+                                </span>
                             </td>
                             <td>
                                 <div class="action-icon d-inline-flex">
-                                    <a href="#" class="me-2 text-info"><i class="ti ti-edit"></i></a>
-                                    <a href="#" class="text-danger"><i class="ti ti-trash"></i></a>
+                                    <a href="javascript:void(0);" class="me-2 text-info" @click="edit(g)"><i class="ti ti-edit"></i></a>
+                                    <a href="javascript:void(0);" class="text-danger" @click="remove(g)"><i class="ti ti-trash"></i></a>
                                 </div>
                             </td>
                         </tr>
-
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-        <!-- /Leads List -->
 
-
-        <div class="modal fade" id="add_horaire" aria-modal="true" role="dialog">
+        <div class="modal fade" id="add_group" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h4 class="modal-title">Création groupe agent</h4>
-                        <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                        <h4 class="modal-title">@{{ form.id ? 'Modification groupe agent' : 'Création groupe agent' }}</h4>
+                        <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close" @click="reset">
                             <i class="ti ti-x"></i>
                         </button>
                     </div>
-                    <form>
+                    <form @submit.prevent="save">
                         <div class="modal-body pb-0">
                             <div class="row">
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Désignation<span class="text-danger"> *</span></label>
-                                        <input type="text" class="form-control" placeholder="ex: Matinale">
+                                        <input type="text" class="form-control" v-model="form.libelle" placeholder="ex: Matinale">
                                     </div>
                                 </div>
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Horaire<span class="text-danger"> *</span></label>
-                                        <select>
-                                            <option value="">Sélectionner horaire</option>
+                                        <select class="form-select" v-model="form.horaire_id">
+                                            <option value="" hidden>--Sélectionner horaire--</option>
+                                            <option v-for="h in horaires" :key="h.id" :value="h.id">@{{ h.libelle }} (@{{ h.started_at }}-@{{ h.ended_at }})</option>
                                         </select>
                                     </div>
                                 </div>
-
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label class="form-label">Statut</label>
+                                        <select class="form-select" v-model="form.status">
+                                            <option value="actif">Actif</option>
+                                            <option value="inactif">Inactif</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Annuler</button>
-                            <button type="submit" class="btn btn-primary">Enregistrer</button>
+                            <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal" @click="reset">Annuler</button>
+                            <button type="submit" class="btn btn-primary" :disabled="isLoading">
+                                @{{ isLoading ? "Enregistrement..." : "Enregistrer" }}
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -130,5 +137,9 @@
         </div>
 
     </div>
-
 @endsection
+
+@push("scripts")
+    <script type="module" src="{{ asset("assets/js/scripts/groupes.js") }}"></script>
+@endpush
+

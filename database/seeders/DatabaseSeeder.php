@@ -8,6 +8,7 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\PermissionRegistrar;
+use Database\Seeders\DemoDataSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -97,6 +98,9 @@ class DatabaseSeeder extends Seeder
         );
 
         $adminUser->syncRoles([$roleAdmin]);
+
+        // 6) Données de démonstration (stations, agents, plannings, présences, RH)
+        $this->call(DemoDataSeeder::class);
 
         $this->command?->info('✅ Seeder terminé : Permissions générées depuis config(actions), rôles créés, admin créé.');
     }

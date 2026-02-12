@@ -56,9 +56,9 @@
                             <tbody>
 
                             <!-- SECTION SITE -->
-                            <tr class="table-primary bg-info-subtle">
+                            <tr class="table-primary">
                                 <td colspan="8" class="text-uppercase fw-bold fs-5 text-start">
-                                    <h5 class="text-info">STATION PARIS</h5>
+                                    <h5>STATION PARIS</h5>
                                 </td>
                             </tr>
 
@@ -92,9 +92,9 @@
                             </tr>
 
                             <!-- AUTRE SECTION -->
-                            <tr class="table-primary bg-info-subtle">
+                            <tr class="table-primary">
                                 <td colspan="8" class="text-uppercase fw-bold fs-5 text-start">
-                                    <h5 class="text-info">STATION GAMBIE</h5>
+                                    <h5>STATION GAMBIE</h5>
                                 </td>
                             </tr>
 
@@ -123,3 +123,4 @@
     </div>
 
 @endsection
+

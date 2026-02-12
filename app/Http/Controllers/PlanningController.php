@@ -80,21 +80,70 @@ class PlanningController extends Controller
      */
     public function getStationWeeklyPlanning(Request $request): JsonResponse
     {
-        $stationId = $request->query('station_id');
-        $startOfWeek = Carbon::now()->startOfWeek();
-        $endOfWeek = Carbon::now()->endOfWeek();
+        $data = $request->validate([
+            'station_id' => 'required|integer|exists:sites,id',
+            'date' => 'nullable|date',
+        ]);
 
-        $planning = AgentGroupPlanning::with(['agent', 'horaire'])
-            ->whereHas('agent', function($q) use ($stationId) {
-                $q->where('site_id', $stationId);
-            })
-            ->whereBetween('date', [$startOfWeek, $endOfWeek])
-            ->get()
-            ->groupBy('date');
+        $base = !empty($data['date']) ? Carbon::parse($data['date']) : Carbon::now();
+        $startOfWeek = $base->copy()->startOfWeek();
+        $endOfWeek = $base->copy()->endOfWeek();
+
+        $plannings = AgentGroupPlanning::query()
+            ->with(['agent', 'horaire'])
+            ->whereHas('agent', fn ($q) => $q->where('site_id', $data['station_id']))
+            ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
+            ->get();
+
+        $agents = $plannings->pluck('agent')->filter()->unique('id')->values();
+
+        $days = [];
+        $cursor = $startOfWeek->copy();
+        while ($cursor->lte($endOfWeek)) {
+            $days[] = [
+                'date' => $cursor->toDateString(),
+                'label' => $cursor->translatedFormat('D'),
+            ];
+            $cursor->addDay();
+        }
+
+        $matrix = [];
+        foreach ($agents as $agent) {
+            $row = [
+                'agent' => $agent,
+                'days' => [],
+            ];
+
+            foreach ($days as $day) {
+                $entry = $plannings
+                    ->first(fn ($p) => (int) $p->agent_id === (int) $agent->id && $p->date === $day['date']);
+
+                if (!$entry) {
+                    $row['days'][$day['date']] = ['status' => 'unknown', 'label' => '--'];
+                    continue;
+                }
+
+                if ($entry->is_rest_day) {
+                    $row['days'][$day['date']] = ['status' => 'off', 'label' => 'OFF'];
+                    continue;
+                }
+
+                $label = $entry->horaire
+                    ? ($entry->horaire->started_at . ' - ' . $entry->horaire->ended_at)
+                    : '--';
+
+                $row['days'][$day['date']] = ['status' => 'work', 'label' => $label];
+            }
+
+            $matrix[] = $row;
+        }
 
         return response()->json([
-            "status" => "success",
-            "data" => $planning
+            'status' => 'success',
+            'from' => $startOfWeek->toDateString(),
+            'to' => $endOfWeek->toDateString(),
+            'days' => $days,
+            'data' => $matrix,
         ]);
     }
 }

@@ -6,10 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * Class PresenceAgents
- * Gère les enregistrements de pointage des agents.
- */
 class PresenceAgents extends Model
 {
     use HasFactory;
@@ -18,50 +14,57 @@ class PresenceAgents extends Model
 
     protected $fillable = [
         'agent_id',
-        'site_id', // ID de la station d'affectation
-        'gps_site_id', // ID de la station où le pointage a été physiquement fait
+        'site_id', // Station d'affectation au moment de la présence
+        'gps_site_id', // Legacy (ancienne station effective)
+        'station_check_in_id',
+        'station_check_out_id',
         'horaire_id',
         'started_at',
         'ended_at',
         'duree',
         'retard',
-        'photos_debut',
-        'photos_fin',
-        'status_photo_debut',
-        'status_photo_fin',
+        'photos_debut', // Legacy (plus utilisé)
+        'photos_fin', // Legacy (plus utilisé)
         'commentaires',
         'status',
-        'date_reference'
+        'date_reference',
     ];
 
     protected $casts = [
         'created_at' => 'date:d/m/Y',
         'started_at' => 'datetime:H:i',
         'ended_at' => 'datetime:H:i',
-        'date_reference' => 'date'
+        'date_reference' => 'date:d/ M/Y',
     ];
 
-    /**
-     * Agent ayant effectué le pointage.
-     */
-    public function agent() : BelongsTo
+    public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
     }
 
-    /**
-     * Horaire de travail associé.
-     */
-    public function horaire() : BelongsTo
+    public function horaire(): BelongsTo
     {
         return $this->belongsTo(PresenceHoraire::class, 'horaire_id');
     }
 
-    /**
-     * Station de pointage effective.
-     */
-    public function station() : BelongsTo
+    public function stationCheckIn(): BelongsTo
+    {
+        return $this->belongsTo(Station::class, 'station_check_in_id');
+    }
+
+    public function stationCheckOut(): BelongsTo
+    {
+        return $this->belongsTo(Station::class, 'station_check_out_id');
+    }
+
+    public function assignedStation(): BelongsTo
+    {
+        return $this->belongsTo(Station::class, 'site_id');
+    }
+
+    public function station(): BelongsTo
     {
         return $this->belongsTo(Station::class, 'gps_site_id');
     }
 }
+

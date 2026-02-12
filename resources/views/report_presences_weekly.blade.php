@@ -1,0 +1,109 @@
+@extends("layouts.app")
+
+@section("content")
+    <div class="content" id="App" v-cloak>
+        <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
+            <div class="my-auto mb-2">
+                <h2 class="mb-1">Rapport des présences (hebdomadaire)</h2>
+                <nav>
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item">
+                            <a href="/"><i class="ti ti-smart-home"></i></a>
+                        </li>
+                        <li class="breadcrumb-item">Rapports</li>
+                        <li class="breadcrumb-item active" aria-current="page">Hebdomadaire</li>
+                    </ol>
+                </nav>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <input type="date" class="form-control mb-2" v-model="filters.date" style="max-width: 180px;">
+                <button class="btn btn-primary mb-2" @click="load">Charger</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <h5>Liste des pointages (semaine @{{ range.from }} → @{{ range.to }})</h5>
+                <span class="text-muted" v-if="isLoading">Chargement...</span>
+            </div>
+            <div class="card-body">
+                <div v-if="grouped.length === 0" class="text-muted">Aucune donnée.</div>
+
+                <div v-for="g in grouped" :key="g.key" class="border-bottom mb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h2 class="card-title d-flex align-items-center gap-2 mb-0">
+                            <i class="ti ti-home-bolt text-primary fs-16"></i>@{{ g.station_name }}
+                        </h2>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            <div class="active-user-item">
+                                <div class="avatar avatar-md bg-success rounded"> <i class="ti ti-clock-check fs-16"></i> </div>
+                                <p class="fs-12 mb-0">Présence <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.presences }}</span></p>
+                            </div>
+
+                            <div class="active-user-item">
+                                <div class="avatar avatar-md bg-warning rounded"> <i class="ti ti-clock-exclamation fs-16"></i> </div>
+                                <p class="fs-12 mb-0">Retard <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.retards }}</span></p>
+                            </div>
+
+                            <div class="active-user-item">
+                                <div class="avatar avatar-md bg-danger rounded"> <i class="ti ti-clock-x fs-16"></i> </div>
+                                <p class="fs-12 mb-0">Absence <span class="fs-14 fw-semibold text-dark ms-1">@{{ g.stats.absents }}</span></p>
+                            </div>
+                            <span class="text-muted fs-12">@{{ g.rows.length }} ligne(s)</span>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table" ref="tables">
+                            <thead class="thead-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Agent</th>
+                                <th>Affectation</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
+                                <th>Heure entrée</th>
+                                <th>Heure sortie</th>
+                                <th>Retard</th>
+                                <th>Durée</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="row in g.rows" :key="row.id">
+                                <td>@{{ row.date_reference }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <span class="avatar avatar-sm me-2">
+                                            <img :src="row.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
+                                        </span>
+                                        <div>
+                                            <h6 class="mb-0">@{{ row.agent?.fullname ?? '-' }}</h6>
+                                            <small class="text-muted">@{{ row.agent?.matricule ?? '' }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>@{{ row.assigned_station?.name ?? '-' }}</td>
+                                <td>@{{ row.station_check_in?.name ?? '-' }}</td>
+                                <td>@{{ row.station_check_out?.name ?? '-' }}</td>
+                                <td>@{{ row.started_at ?? '--:--' }}</td>
+                                <td>@{{ row.ended_at ?? '--:--' }}</td>
+                                <td>
+                                    <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
+                                    <span class="badge badge-soft-success" v-else>Non</span>
+                                </td>
+                                <td>@{{ row.duree ?? '--' }}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
+
+@push("scripts")
+    <script type="module" src="{{ asset("assets/js/scripts/report-presences-weekly.js") }}"></script>
+@endpush
+

@@ -30,7 +30,11 @@ class PresenceHoraire extends Model
      * @var array
      */
     protected $fillable = [
-        "libelle","started_at","ended_at", "tolerence", "site_id"
+        "libelle",
+        "started_at",
+        "ended_at",
+        "tolerence_minutes",
+        "site_id",
     ];
 
 

@@ -51,14 +51,21 @@
                     <td>{{ current($joursData)['horaire'] }}</td>
                     @foreach($week as $jour)
                         @php
-                            $arr = $joursData[$jour]['arrivee'];
-                            $dep = $joursData[$jour]['depart'];
-                            $class = $arr === '--:--' && $dep === '--:--' ? 'absent' :
-                                     ($arr !== '--:--' && $dep !== '--:--' ? 'present' : 'partial');
+                            $cell = $joursData[$jour] ?? null;
+                            $arr = $cell['arrivee'] ?? '--:--';
+                            $dep = $cell['depart'] ?? '--:--';
+                            $status = $cell['status'] ?? null;
+
+                            if ($status === 'present') {
+                                $class = 'present';
+                            } elseif ($status === 'absent') {
+                                $class = 'absent';
+                            } else {
+                                $class = 'partial';
+                            }
                         @endphp
                         <td class="{{ $class }}">
-                             {{ $arr }} /
-                             {{ $dep }}
+                            {{ $arr }}@if($dep !== '') / {{ $dep }}@endif
                         </td>
                     @endforeach
                 </tr>

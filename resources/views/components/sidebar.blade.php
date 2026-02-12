@@ -20,7 +20,6 @@
             <h6 class="fs-12 fw-normal mb-1">{{Auth::user()->name}}</h6>
             <p class="fs-10">{{Auth::user()->role}}</p>
         </div>
-
     </div>
     <div class="sidebar-header p-3 pb-0 pt-2">
         <div class="text-center rounded bg-light p-2 mb-4 sidebar-profile d-flex align-items-center">
@@ -33,13 +32,13 @@
             </div>
         </div>
         <div class="input-group input-group-flat d-inline-flex mb-4">
-					<span class="input-icon-addon">
-						<i class="ti ti-search"></i>
-					</span>
+            <span class="input-icon-addon">
+                <i class="ti ti-search"></i>
+            </span>
             <input type="text" class="form-control" placeholder="Recherche...">
             <span class="input-group-text">
-						<kbd>CTRL + / </kbd>
-					</span>
+                <kbd>CTRL + / </kbd>
+            </span>
         </div>
     </div>
     <div class="sidebar-inner slimscroll">
@@ -49,7 +48,7 @@
                 <li>
                     <ul>
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["dashboard"])">
+                            <a href="javascript:void(0);" class="@active(["dashboard","presences.live"])">
                                 <i class="ti ti-smart-home"></i>
                                 <span>Tableau de bord</span>
                                 <span class="badge badge-danger fs-10 fw-medium text-white p-1">admin</span>
@@ -57,11 +56,12 @@
                             </a>
                             <ul>
                                 <li><a class="@active(["dashboard"])" href="{{route("dashboard")}}">Vue globale</a></li>
-                                <li><a href="">Situation des présences</a></li>
+                                <li><a class="@active(["presences.live"])" href="{{ route('presences.live') }}">Situation des présences</a></li>
                             </ul>
                         </li>
                     </ul>
                 </li>
+
                 <li class="menu-title"><span>RH</span></li>
                 <li>
                     <ul>
@@ -77,24 +77,27 @@
                             </ul>
                         </li>
 
-                        <li class="@active(["agents.view"])">
-                            <a href="{{route("agents.view")}}">
-                                <i class="ti ti-user-cog"></i><span>Gestion agents</span>
-                            </a>
-                        </li>
                         <li class="@active(["stations.view"])">
                             <a href="{{route("stations.view")}}">
                                 <i class="ti ti-location-cog"></i><span>Gestion stations</span>
                             </a>
                         </li>
+
+                        <li class="@active(["agents.view","agents.view.attendances"])">
+                            <a href="{{route("agents.view")}}">
+                                <i class="ti ti-user-cog"></i><span>Gestion agents</span>
+                            </a>
+                        </li>
+
                         <li class="submenu">
-                            <a href="javascript:void(0);">
+                            <a href="javascript:void(0);" class="@active(["reports.*"])">
                                 <i class="ti ti-report"></i><span>Rapports</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="#">Présences journalières</a></li>
-                                <li><a href="#">Présences mensuelles</a></li>
+                                <li><a href="{{ route('reports.presences') }}">Présences journalières</a></li>
+                                <li><a href="{{ route('reports.weekly.view') }}">Présences hebdomadaire</a></li>
+                                <li><a href="{{ route('reports.monthly.view') }}">Présences mensuelles</a></li>
                             </ul>
                         </li>
 
@@ -104,23 +107,22 @@
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a href="#">Pointage mensuel</a></li>
+                                <li><a href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
                                 <li class="submenu">
-                                    <a href="javascript:void(0);">Congés & attribution<span
-                                            class="menu-arrow"></span></a>
+                                    <a href="javascript:void(0);">Congés & attribution<span class="menu-arrow"></span></a>
                                     <ul>
-                                        <li><a href="#">Congés</a></li>
-                                        <li><a href="#">Attribution agent</a></li>
+                                        <li><a href="{{ route('rh.conges.view') }}">Congés</a></li>
+                                        <li><a href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
                                     </ul>
                                 </li>
-                                <li><a href="#">Attribution congé</a></li>
-                                <li><a href="#">Justification retard</a></li>
-                                <li><a href="#">Justification absence</a></li>
+                                <li><a href="{{ route('rh.authorizations.view') }}">Autorisation spéciale</a></li>
+                                <li><a href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
+                                <li><a href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
                             </ul>
                         </li>
-
                     </ul>
                 </li>
+
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
@@ -135,7 +137,6 @@
                                 <li><a href="#">Journal d'accès</a></li>
                             </ul>
                         </li>
-
                     </ul>
                 </li>
 
@@ -143,3 +144,4 @@
         </div>
     </div>
 </div>
+

@@ -1,368 +1,311 @@
-import { get, post, postJson, objectToFormData } from "../modules/http.js";
+import { get } from "../modules/http.js";
+
 new Vue({
     el: "#App",
 
     data() {
         return {
-            dashboardData: null,
-            currentPage: 1,
-            allSales: [],
-            searchClient: "",
-            searchDate: "",
-            searchStatus: "",
-            isDataLoading: false,
-            selectedSalePayments: [],
-            selectedClient: null,
-            currentDetailsType: "",
-            currentDetailsData: null,
-
-            // Paiement
-            paymentForm: {
-                sale_id: null,
-                phone_number: "",
-                amount: "",
-                default_amount: "",
-                remaining_amount: 0,
-                total_amount: 0,
-                type: "", // 'initial' ou 'generate'
+            isLoading: false,
+            error: null,
+            counts: {
+                sites: 0,
+                agents: 0,
+                presences: 0,
+                retards: 0,
+                absents: 0,
             },
-            generatedPaymentUrl: "",
+            authorizations: {
+                maladies: 0,
+                conges: 0,
+                autres: 0,
+            },
+            charts: {
+                labels: [],
+                dates: [],
+                series: {
+                    present: [],
+                    late: [],
+                    absent: [],
+                },
+            },
+            latestCheckins: [],
+            _apexStatusChart: null,
+            _apexLeaveChart: null,
+            _chartJsTrend: null,
+            range: {
+                from: null,
+                to: null,
+                mode: "week",
+            },
         };
     },
 
     mounted() {
-        this.loadDashboardData();
+        if (document.getElementById("global-loader")) {
+            document.getElementById("global-loader").style.display = "none";
+        }
+
+        this.initRangePicker();
+        this.applyMode();
+        this.refresh();
     },
 
     methods: {
-        loadDashboardData(page = 1) {
-            this.isDataLoading = true;
-            let url = `/api.dashboard?page=${page}`;
-            if (this.searchClient) url += `&agent_search=${this.searchClient}`;
-            if (this.searchDate) url += `&agent_date=${this.searchDate}`;
-            if (this.searchStatus) url += `&agent_status=${this.searchStatus}`;
-            get(url)
-                .then(({ data }) => {
-                    this.dashboardData = data;
-                    this.currentPage = page;
-                    if (data.agent_stats) {
-                        this.allSales = data.agent_stats.sales;
-                    }
-                    this.renderChart();
-                    this.isDataLoading = false;
-                })
-                .catch((err) => {
-                    console.error("Erreur chargement dashboard:", err);
-                    this.isDataLoading = false;
-                });
-        },
+        applyMode() {
+            const m = window.moment;
+            const now = m ? m() : null;
 
-        renderChart() {
-            if (!this.dashboardData || !$("#phone-by-agent").length) return;
-
-            const chartData = this.dashboardData.chart_data;
-
-            var sBar = {
-                chart: {
-                    height: 220,
-                    type: "bar",
-                    padding: {
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                    },
-                    toolbar: {
-                        show: false,
-                    },
-                },
-                colors: ["#FF6F28"],
-                grid: {
-                    borderColor: "#E5E7EB",
-                    strokeDashArray: 5,
-                    padding: {
-                        top: -20,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                    },
-                },
-                plotOptions: {
-                    bar: {
-                        borderRadius: 5,
-                        horizontal: true,
-                        barHeight: "35%",
-                        endingShape: "rounded",
-                    },
-                },
-                dataLabels: {
-                    enabled: false,
-                },
-                series: [
-                    {
-                        data: chartData.data,
-                        name: "Téléphones",
-                    },
-                ],
-                xaxis: {
-                    categories: chartData.categories,
-                    labels: {
-                        style: {
-                            colors: "#111827",
-                            fontSize: "13px",
-                        },
-                    },
-                },
-            };
-
-            // Détruire le chart existant si présent
-            if (this.chart) {
-                this.chart.destroy();
+            if (this.range.mode === "today") {
+                const d = m ? now.format("YYYY-MM-DD") : new Date().toISOString().slice(0, 10);
+                this.range.from = d;
+                this.range.to = d;
             }
 
-            this.chart = new ApexCharts(
-                document.querySelector("#phone-by-agent"),
-                sBar,
-            );
-
-            this.chart.render();
-        },
-
-        nextPage() {
-            if (
-                this.dashboardData &&
-                this.currentPage < this.dashboardData.phones_by_agent.last_page
-            ) {
-                this.loadDashboardData(this.currentPage + 1);
-            }
-        },
-
-        prevPage() {
-            if (this.currentPage > 1) {
-                this.loadDashboardData(this.currentPage - 1);
-            }
-        },
-
-        filterSales() {
-            this.loadDashboardData(1);
-        },
-
-        saleStatus(status) {
-            const statuses = {
-                active: "Actif",
-                completed: "Terminé",
-                defaulted: "Annulé",
-            };
-            return statuses[status] || status;
-        },
-
-        viewClientDetails(client) {
-            this.currentDetailsType = "client";
-            this.currentDetailsData = client;
-            $("#client_details_modal").modal("show");
-        },
-
-        viewSaleDetails(sale) {
-            // Implémenter la vue des détails vente
-            alert("Détails vente: " + sale.id);
-        },
-
-        cancelSale(sale) {
-            if (confirm("Annuler cette vente ?")) {
-                // Implémenter l'annulation
-                alert("Vente annulée");
-            }
-        },
-
-        activatePhone(phone, sale) {
-            Swal.fire({
-                title: "Activer le téléphone ?",
-                text: "Cela enverra les commandes MDM pour bloquer le téléphone jusqu'au prochain paiement.",
-                icon: "question",
-                showCancelButton: true,
-                confirmButtonColor: "#28a745",
-                cancelButtonColor: "#6c757d",
-                confirmButtonText: "Oui, activer",
-                cancelButtonText: "Annuler",
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    postJson(`/phones/${phone.id}/activate`, {
-                        sale_id: sale.id,
-                    })
-                        .then(({ data, status }) => {
-                            if (data.status === "success") {
-                                Swal.fire({
-                                    icon: "success",
-                                    title: "Succès",
-                                    text: "Téléphone activé et commandes MDM envoyées.",
-                                });
-                                this.loadDashboardData(this.currentPage); // Recharger la liste
-                            } else {
-                                Swal.fire({
-                                    title: "Erreur",
-                                    text:
-                                        data.message ||
-                                        "Une erreur est survenue",
-                                });
-                            }
-                        })
-                        .catch((error) => {
-                            console.error(
-                                "Erreur activation téléphone:",
-                                error,
-                            );
-                            Swal.fire({
-                                title: "Erreur",
-                                text: "Impossible d'activer le téléphone",
-                            });
-                        });
+            if (this.range.mode === "week") {
+                if (m) {
+                    this.range.from = now.clone().startOf("week").format("YYYY-MM-DD");
+                    this.range.to = now.clone().endOf("week").format("YYYY-MM-DD");
                 }
-            });
+            }
+
+            if (this.range.mode === "month") {
+                if (m) {
+                    this.range.from = now.clone().startOf("month").format("YYYY-MM-DD");
+                    this.range.to = now.clone().endOf("month").format("YYYY-MM-DD");
+                }
+            }
+
+            // mode custom => se base sur le daterangepicker
+            this.refresh();
         },
 
-        viewPaymentHistory(sale) {
-            this.selectedSalePayments = sale.payments || [];
-            $("#paymentHistoryModal").modal("show");
-        },
-
-        /* ================= PAIEMENT ================= */
-        openPayModal(sale, type) {
-            this.paymentForm.sale_id = sale.id;
-            this.paymentForm.phone_number = sale.client
-                ? sale.client.main_phone
-                : "";
-            this.paymentForm.type = type;
-            this.paymentForm.total_amount = sale.sale_price;
-
-            // Logique de montant par défaut
-            const defaultAmt =
-                type === "initial"
-                    ? sale.down_payment
-                    : sale.installment_amount;
-
-            this.paymentForm.default_amount = defaultAmt;
-            this.paymentForm.amount = defaultAmt;
-            this.paymentForm.remaining_amount = sale.remaining_amount;
-            this.generatedPaymentUrl = "";
-            $("#pay_modal").modal("show");
-        },
-
-        processPayment() {
-            if (!this.paymentForm.phone_number) {
-                Swal.fire(
-                    "Erreur",
-                    "Veuillez renseigner le numéro de téléphone.",
-                    "error",
-                );
+        initRangePicker() {
+            const input = window.$?.(".bookingrange");
+            if (!input || !input.length || !window.$?.fn?.daterangepicker || !window.moment) {
                 return;
             }
 
-            const endpoint =
-                this.paymentForm.type === "initial"
-                    ? "/api/payments.initial"
-                    : "/api/payments.generateURL";
+            const end = window.moment();
+            const start = window.moment().subtract(6, "days");
 
-            const params = {
-                sale_id: this.paymentForm.sale_id,
-                amount: this.paymentForm.amount,
-            };
+            this.range.from = start.format("YYYY-MM-DD");
+            this.range.to = end.format("YYYY-MM-DD");
 
-            if (this.paymentForm.type === "initial") {
-                params.phone_number = this.paymentForm.phone_number;
-            } else {
-                params.phone = this.paymentForm.phone_number;
+            input.daterangepicker(
+                {
+                    startDate: start,
+                    endDate: end,
+                    locale: {
+                        format: "DD/MM/YYYY",
+                        applyLabel: "Appliquer",
+                        cancelLabel: "Annuler",
+                    },
+                },
+                (startDate, endDate) => {
+                    this.range.mode = "custom";
+                    this.range.from = startDate.format("YYYY-MM-DD");
+                    this.range.to = endDate.format("YYYY-MM-DD");
+                    this.refresh();
+                }
+            );
+        },
+
+        async refresh() {
+            this.isLoading = true;
+            this.error = null;
+
+            const params = new URLSearchParams();
+            if (this.range.from) params.set("from", this.range.from);
+            if (this.range.to) params.set("to", this.range.to);
+
+            try {
+                const { data } = await get(`/dashboard/stats?${params.toString()}`);
+
+                if (data?.errors) {
+                    this.error = data.errors;
+                    this.isLoading = false;
+                    return;
+                }
+
+                this.counts = { ...this.counts, ...(data?.count ?? {}) };
+                this.charts = { ...this.charts, ...(data?.charts ?? {}) };
+                this.authorizations = { ...this.authorizations, ...(data?.authorizations ?? {}) };
+                this.latestCheckins = data?.latest_checkins ?? [];
+
+                this.renderStatusApex();
+                this.renderLeaveApex();
+                this.renderTrendChartJs();
+            } catch (e) {
+                this.error = ["Erreur lors du chargement des statistiques."];
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        renderStatusApex() {
+            if (!window.ApexCharts) return;
+
+            const el = document.querySelector("#status-chart");
+            if (!el) return;
+
+            if (this._apexStatusChart) {
+                try {
+                    this._apexStatusChart.destroy();
+                } catch (_) {}
+                this._apexStatusChart = null;
             }
 
-            Swal.fire({
-                title: "Traitement en cours...",
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
+            el.innerHTML = "";
+
+            const options = {
+                series: [
+                    { name: "Présents", data: [this.counts.presences || 0] },
+                    { name: "Retards", data: [this.counts.retards || 0] },
+                    { name: "Absents", data: [this.counts.absents || 0] },
+                ],
+                chart: {
+                    type: "bar",
+                    height: 60,
+                    stacked: true,
+                    stackType: "100%",
+                    toolbar: { show: false },
+                    sparkline: { enabled: true },
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                        barHeight: "100%",
+                    },
+                },
+                colors: ["#03C95A", "#FFC107", "#E70D0D"],
+                dataLabels: { enabled: false },
+                xaxis: { categories: ["Total"] },
+                tooltip: { enabled: true },
+                legend: { show: false },
+            };
+
+            this._apexStatusChart = new ApexCharts(el, options);
+            this._apexStatusChart.render();
+        },
+
+        renderLeaveApex() {
+            if (!window.ApexCharts) return;
+
+            const el = document.querySelector("#leave-chart");
+            if (!el) return;
+
+            if (this._apexLeaveChart) {
+                try {
+                    this._apexLeaveChart.destroy();
+                } catch (_) {}
+                this._apexLeaveChart = null;
+            }
+
+            el.innerHTML = "";
+
+            const options = {
+                series: [
+                    this.authorizations.maladies || 0,
+                    this.authorizations.conges || 0,
+                    this.authorizations.autres || 0,
+                ],
+                chart: {
+                    type: "donut",
+                    height: 160,
+                    toolbar: { show: false },
+                },
+                labels: ["Malades", "Congés", "Autres"],
+                colors: ["#0DCAF0", "#6F42C1", "#ADB5BD"],
+                legend: { show: false },
+                dataLabels: { enabled: false },
+            };
+
+            this._apexLeaveChart = new ApexCharts(el, options);
+            this._apexLeaveChart.render();
+        },
+
+        renderTrendChartJs() {
+            if (!window.Chart) return;
+
+            const container = document.getElementById("attendance-chart");
+            if (!container) return;
+
+            if (this._chartJsTrend) {
+                this._chartJsTrend.destroy();
+                this._chartJsTrend = null;
+            }
+
+            // Le template peut déjà avoir rendu un ApexChart sur ce conteneur.
+            // On remplace le contenu pour garantir la présence du canvas.
+            container.innerHTML = '<canvas id="attendance-chart-js" height="180"></canvas>';
+
+            const canvas = document.getElementById("attendance-chart-js");
+            if (!canvas) return;
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            const rawLabels = this.charts?.labels ?? [];
+            const dates = this.charts?.dates ?? [];
+            let labels = rawLabels;
+
+            if (this.range.mode === "week" && dates.length > 0 && dates.length <= 7 && window.moment) {
+                window.moment.locale("fr");
+                labels = dates.map((d) => {
+                    const txt = window.moment(d).format("ddd");
+                    return txt.charAt(0).toUpperCase() + txt.slice(1);
+                });
+            }
+
+            const series = this.charts?.series ?? {};
+
+            this._chartJsTrend = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Présents",
+                            data: series.present ?? [],
+                            borderColor: "#03C95A",
+                            backgroundColor: "rgba(3, 201, 90, 0.15)",
+                            tension: 0.35,
+                            fill: true,
+                        },
+                        {
+                            label: "Retards",
+                            data: series.late ?? [],
+                            borderColor: "#FFC107",
+                            backgroundColor: "rgba(255, 193, 7, 0.12)",
+                            tension: 0.35,
+                            fill: true,
+                        },
+                        {
+                            label: "Absents",
+                            data: series.absent ?? [],
+                            borderColor: "#E70D0D",
+                            backgroundColor: "rgba(231, 13, 13, 0.08)",
+                            tension: 0.35,
+                            fill: true,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: "bottom" },
+                        tooltip: { enabled: true },
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 },
+                        },
+                    },
                 },
             });
-
-            postJson(endpoint, params)
-                .then(({ data }) => {
-                    Swal.close();
-                    if (data.status === "success") {
-                        if (this.paymentForm.type === "initial") {
-                            Swal.fire(
-                                "Succès",
-                                "Demande de paiement lancée. Veuillez confirmer sur le téléphone.",
-                                "success",
-                            );
-                            $("#pay_modal").modal("hide");
-                            this.loadDashboardData(this.currentPage);
-                        } else {
-                            this.generatedPaymentUrl = data.url;
-                        }
-                    } else {
-                        let errorMsg = "Une erreur est survenue.";
-                        if (data.errors) {
-                            errorMsg = Array.isArray(data.errors)
-                                ? data.errors.join(", ")
-                                : data.errors;
-                        }
-                        Swal.fire("Erreur", errorMsg, "error");
-                    }
-                })
-                .catch((err) => {
-                    Swal.close();
-                    console.error(err);
-                    Swal.fire(
-                        "Erreur",
-                        "Une erreur est survenue lors de la communication avec le serveur.",
-                        "error",
-                    );
-                });
-        },
-
-        copyPaymentUrl() {
-            const el = this.$refs.paymentUrlInput;
-            el.select();
-            document.execCommand("copy");
-            Swal.fire({
-                toast: true,
-                position: "top-end",
-                icon: "success",
-                title: "Lien copié !",
-                showConfirmButton: false,
-                timer: 1500,
-            });
-        },
-
-        sharePaymentUrl() {
-            if (navigator.share) {
-                navigator
-                    .share({
-                        title: "Lien de paiement",
-                        text: "Voici votre lien pour effectuer le paiement de votre téléphone.",
-                        url: this.generatedPaymentUrl,
-                    })
-                    .catch(console.error);
-            } else {
-                const text = encodeURIComponent(
-                    "Voici votre lien pour effectuer le paiement de votre téléphone : " +
-                        this.generatedPaymentUrl,
-                );
-                window.open(
-                    `https://wa.me/${this.paymentForm.phone_number}?text=${text}`,
-                    "_blank",
-                );
-            }
-        },
-    },
-
-    computed: {
-        saleFrequency() {
-            return (status) => {
-                const statuses = {
-                    weekly: "Hebdomadaire",
-                    monthly: "Mensuelle",
-                    daily: "Journalière",
-                };
-                return statuses[status] || status;
-            };
         },
     },
 });
+

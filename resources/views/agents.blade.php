@@ -2,7 +2,7 @@
 
 
 @section("content")
-    <div class="content">
+    <div class="content" id="App" v-cloak>
 
         <!-- Breadcrumb -->
         <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
@@ -58,7 +58,7 @@
                             </div>
                             <div class="ms-2 overflow-hidden">
                                 <p class="fs-12 fw-medium mb-1 text-truncate">Total agents</p>
-                                <h4>1007</h4>
+                                <h4>@{{ stats.total }}</h4>
                             </div>
                         </div>
                         <div>
@@ -82,7 +82,7 @@
                             </div>
                             <div class="ms-2 overflow-hidden">
                                 <p class="fs-12 fw-medium mb-1 text-truncate">Actif</p>
-                                <h4>1007</h4>
+                                <h4>@{{ stats.actif }}</h4>
                             </div>
                         </div>
                         <div>
@@ -106,7 +106,7 @@
                             </div>
                             <div class="ms-2 overflow-hidden">
                                 <p class="fs-12 fw-medium mb-1 text-truncate">InActif</p>
-                                <h4>1007</h4>
+                                <h4>@{{ stats.inactif }}</h4>
                             </div>
                         </div>
                         <div>
@@ -130,7 +130,7 @@
                             </div>
                             <div class="ms-2 overflow-hidden">
                                 <p class="fs-12 fw-medium mb-1 text-truncate">Congés</p>
-                                <h4>67</h4>
+                                <h4>@{{ stats.conges }}</h4>
                             </div>
                         </div>
                         <div>
@@ -181,9 +181,9 @@
                     </div>
                 </div>
             </div>
-            <div class="card-body p-0">
-                <div class="custom-datatable-filter table-responsive">
-                    <table class="table datatable">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table" ref="table">
                         <thead class="thead-light">
                         <tr>
                             <th class="no-sort">
@@ -202,46 +202,48 @@
                         </tr>
                         </thead>
                         <tbody>
-                            @for($i=0;  $i < 10; $i++)
-                                <tr>
+                                <tr v-for="data in agents" :key="data.id">
                                     <td>
                                         <div class="form-check form-check-md">
                                             <input class="form-check-input" type="checkbox">
                                         </div>
                                     </td>
-                                    <td><a href="#">Emp-001</a></td>
+                                    <td><a href="#">@{{ data.matricule }}</a></td>
                                     <td>
                                         <div class="d-flex align-items-center">
-                                            <a href="#" class="avatar avatar-md" data-bs-toggle="modal" data-bs-target="#view_details"><img
-                                                    src="#" class="img-fluid rounded-circle" alt="img"></a>
+                                            <a href="#" class="avatar avatar-md" data-bs-toggle="modal" data-bs-target="#view_details">
+                                                <img :src="data.photo ?? 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="img-fluid rounded-circle" alt="img">
+                                            </a>
                                             <div class="ms-2">
-                                                <p class="text-dark mb-0"><a href="#">Anthony Lewis</a></p>
-                                                <span class="fs-12">Finance</span>
+                                                <p class="text-dark mb-0"><a href="#">@{{ data.fullname }}</a></p>
+                                                <span class="fs-12">@{{ data.station?.name ?? '--' }}</span>
                                             </div>
                                         </div>
                                     </td>
-                                    <td>(123) 4567 890</td>
+                                    <td>--</td>
                                     <td>
-                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">Developer</a>
+                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">--</a>
                                     </td>
                                     <td>
-                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">Direction Gen.</a>
+                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">@{{ data.station?.name ?? '--' }}</a>
                                     </td>
-                                    <td>12 Sep 2024</td>
+                                    <td>@{{ data.created_at }}</td>
                                     <td>
-                                        <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs">
-                                            <i class="ti ti-point-filled me-1"></i>Active
+                                        <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs" v-if="data.status === 'actif'">
+                                            <i class="ti ti-point-filled me-1"></i>Actif
+                                        </span>
+                                        <span class="badge badge-soft-danger d-inline-flex align-items-center badge-xs" v-else>
+                                            <i class="ti ti-point-filled me-1"></i>Inactif
                                         </span>
                                     </td>
                                     <td>
                                         <div class="action-icon d-inline-flex">
                                             <a href="#" class="me-2 text-info" data-bs-toggle="modal" data-bs-target="#edit_employee"><i class="ti ti-edit"></i></a>
                                             <a href="#" class="me-2 text-danger" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
-                                            <a class="text-primary" href="{{route("agents.view.attendances")}}"><i class="ti ti-calendar-time"></i></a>
+                                            <a class="text-primary" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time"></i></a>
                                         </div>
                                     </td>
                                 </tr>
-                            @endfor
                         </tbody>
                     </table>
                 </div>
@@ -260,7 +262,7 @@
                             <i class="ti ti-x"></i>
                         </button>
                     </div>
-                    <form action="">
+                    <form @submit.prevent="saveAgent">
                         <div class="modal-body pb-0 ">
                             <div class="row">
                                 <div class="col-md-12">
@@ -276,7 +278,7 @@
                                             <div class="profile-uploader d-flex align-items-center">
                                                 <div class="drag-upload-btn btn btn-sm btn-info me-2">
                                                     Charger
-                                                    <input type="file" class="form-control image-sign" multiple="">
+                                                    <input type="file" class="form-control image-sign" @change="onPhotoChange">
                                                 </div>
                                                 <a href="javascript:void(0);" class="btn btn-light btn-sm">Annuler</a>
                                             </div>
@@ -287,19 +289,22 @@
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label class="form-label">Matricule <span class="text-danger"> *</span></label>
-                                        <input type="text" class="form-control" placeholder="ex:Emp_0001">
+                                        <input type="text" class="form-control" placeholder="ex:Emp_0001" v-model="createForm.matricule" required>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label class="form-label">Nom<span class="text-danger"> *</span></label>
-                                        <input type="text" class="form-control">
+                                        <label class="form-label">Nom complet<span class="text-danger"> *</span></label>
+                                        <input type="text" class="form-control" v-model="createForm.fullname" required>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label class="form-label">Prénom <span class="text-danger"> *</span></label>
-                                        <input type="email" class="form-control">
+                                        <label class="form-label">Statut</label>
+                                        <select class="form-select" v-model="createForm.status">
+                                            <option value="actif">Actif</option>
+                                            <option value="inactif">Inactif</option>
+                                        </select>
                                     </div>
                                 </div>
 
@@ -328,8 +333,9 @@
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label class="form-label">Station <span class="text-danger"> *</span></label>
-                                        <select class="form-select">
+                                        <select class="form-select" v-model="createForm.site_id" required>
                                             <option value="">Sélectionner station</option>
+                                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                                         </select>
                                     </div>
                                 </div>
@@ -346,7 +352,9 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-outline-light border me-2" data-bs-dismiss="modal">Annuler</button>
-                            <button type="submit" class="btn btn-primary">Enregistrer </button>
+                            <button type="submit" class="btn btn-primary" :disabled="isSaving">
+                                @{{ isSaving ? 'Enregistrement...' : 'Enregistrer' }}
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -354,3 +362,10 @@
         </div>
     </div>
 @endsection
+
+@push("scripts")
+    <script>
+        window.__SITES__ = @json($sites);
+    </script>
+    <script type="module" src="{{ asset("assets/js/scripts/agents.js") }}"></script>
+@endpush
