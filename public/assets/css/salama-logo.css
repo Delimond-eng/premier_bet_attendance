@@ -1,0 +1,81 @@
+.salama-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+
+.salama-logo__icon {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ff6527 0%, #ff3d7f 55%, #7c3aed 110%);
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.salama-logo__icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.salama-logo__h {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0b1220;
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.18);
+}
+
+.salama-logo__wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.salama-logo__name {
+  font-weight: 900;
+  letter-spacing: 0.7px;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.salama-logo__sub {
+  display: block;
+  margin-top: 2px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Mini sidebar */
+.salama-logo--small .salama-logo__wordmark {
+  display: none;
+}
+
+.salama-logo--small .salama-logo__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+/* Dark theme tweaks */
+[data-theme="dark"] .salama-logo__name {
+  color: #ffffff;
+}

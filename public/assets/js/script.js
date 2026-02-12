@@ -12,6 +12,41 @@ Template Name: Smarthr - Bootstrap Admin Template
 	var $pageWrapper = $('.page-wrapper');
 	feather.replace();
 
+	// Render Salama sidebar logo mark (attendance icon + H badge) via JS.
+	function renderSalamaLogo() {
+		try {
+			var nodes = document.querySelectorAll(".salama-logo__icon");
+			if (!nodes || !nodes.length) return;
+
+			nodes.forEach(function (el) {
+				if (el.getAttribute("data-rendered") === "1") return;
+				el.setAttribute("data-rendered", "1");
+
+				// "Attendance" icon: clock + check (simple, crisp at small sizes).
+				var svg =
+					'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+					'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+					'<path d="M12 8v5l3 2" />' +
+					'<path d="M21 12a9 9 0 1 1-3.4-7.1" />' +
+					'<path d="M16.5 12.5l2 2l4-4" />' +
+					"</svg>";
+
+				// Preserve the H badge child if present.
+				var h = el.querySelector(".salama-logo__h");
+				el.innerHTML = svg;
+				if (h) el.appendChild(h);
+			});
+		} catch (e) {
+			// no-op
+		}
+	}
+
+	// Ensure it runs on initial load and after theme/layout toggles.
+	renderSalamaLogo();
+	$(document).on("click", "#toggle_btn", function () {
+		setTimeout(renderSalamaLogo, 0);
+	});
+
 	// Page Content Height Resize
 	$(window).resize(function () {
 		if ($('.page-wrapper').length > 0) {

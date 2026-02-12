@@ -2,13 +2,33 @@
     <!-- Logo -->
     <div class="sidebar-logo">
         <a href="/" class="logo logo-normal">
-            <img src="{{asset("assets/img/logo-white.svg")}}" alt="Logo">
+            <span class="salama-logo salama-logo--normal" aria-label="SALAMA ATTENDANCE">
+                <span class="salama-logo__icon" aria-hidden="true">
+                    <span class="salama-logo__h">H</span>
+                </span>
+                <span class="salama-logo__wordmark">
+                    <span class="salama-logo__name">SALAMA</span>
+                    <span class="salama-logo__sub">ATTENDANCE</span>
+                </span>
+            </span>
         </a>
         <a href="/" class="logo-small">
-            <img src="{{asset("assets/img/logo-white.svg")}}" alt="Logo">
+            <span class="salama-logo salama-logo--small" aria-label="SALAMA ATTENDANCE">
+                <span class="salama-logo__icon" aria-hidden="true">
+                    <span class="salama-logo__h">H</span>
+                </span>
+            </span>
         </a>
         <a href="/" class="dark-logo">
-            <img src="{{asset("assets/img/logo-white.svg")}}" alt="Logo">
+            <span class="salama-logo salama-logo--normal" aria-label="SALAMA ATTENDANCE">
+                <span class="salama-logo__icon" aria-hidden="true">
+                    <span class="salama-logo__h">H</span>
+                </span>
+                <span class="salama-logo__wordmark">
+                    <span class="salama-logo__name">SALAMA</span>
+                    <span class="salama-logo__sub">ATTENDANCE</span>
+                </span>
+            </span>
         </a>
     </div>
     <!-- /Logo -->
