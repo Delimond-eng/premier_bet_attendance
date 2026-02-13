@@ -28,6 +28,11 @@ new Vue({
                     absent: [],
                 },
             },
+            weeklyKpis: {
+                worked_hours: 0,
+                missed_punches: 0,
+                weekly_average: 0,
+            },
             latestCheckins: [],
             _apexStatusChart: null,
             _apexLeaveChart: null,
@@ -130,6 +135,7 @@ new Vue({
                 this.counts = { ...this.counts, ...(data?.count ?? {}) };
                 this.charts = { ...this.charts, ...(data?.charts ?? {}) };
                 this.authorizations = { ...this.authorizations, ...(data?.authorizations ?? {}) };
+                this.weeklyKpis = { ...this.weeklyKpis, ...(data?.weekly_kpis ?? {}) };
                 this.latestCheckins = data?.latest_checkins ?? [];
 
                 this.renderStatusApex();
@@ -308,4 +314,3 @@ new Vue({
         },
     },
 });
-

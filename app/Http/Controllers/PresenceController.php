@@ -735,4 +735,41 @@ class PresenceController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Scan d'un QR code station et retour des donnÃ©es station.
+     */
+    public function scanStation(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'station_id' => 'required|integer|exists:sites,id',
+        ]);
+
+        $station = Station::query()->find((int) $data['station_id']);
+        if (!$station) {
+            return response()->json(['errors' => ['Station introuvable.']], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'station' => [
+                'id' => $station->id,
+                'name' => $station->name,
+                'code' => $station->code,
+                'latlng' => $station->latlng,
+                'adresse' => $station->adresse,
+                'presence' => $station->presence,
+                'status' => $station->status,
+            ],
+        ]);
+    }
+
+    /**
+     * API pointage agent.
+     * Le matricule est considÃ©rÃ© comme identifiant unique (voir createPresenceAgent).
+     */
+    public function punchAgent(Request $request): JsonResponse
+    {
+        return $this->createPresenceAgent($request);
+    }
 }

@@ -84,6 +84,35 @@ Template Name: Smarthr - Bootstrap Admin Template
 		$(this).parent().parent().hide();
 	});
 
+	// Logout confirmation
+	$(document).on("click", ".js-logout", function (e) {
+		var $btn = $(this);
+		var form = $btn.closest("form");
+		if (!form || !form.length) return;
+
+		// Always prevent default; submit only after confirmation.
+		e.preventDefault();
+
+		if (!window.Swal) {
+			form.trigger("submit");
+			return;
+		}
+
+		window.Swal.fire({
+			title: "Confirmer la deconnexion",
+			text: "Voulez-vous vraiment vous deconnecter ?",
+			icon: "warning",
+			showCancelButton: true,
+			confirmButtonText: "Oui, deconnexion",
+			cancelButtonText: "Annuler",
+			reverseButtons: true,
+		}).then(function (result) {
+			if (result && result.isConfirmed) {
+				form.trigger("submit");
+			}
+		});
+	});
+
 	// Stick Sidebar
 
 	if ($(window).width() > 767) {

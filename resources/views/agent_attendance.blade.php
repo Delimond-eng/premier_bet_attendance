@@ -38,7 +38,7 @@
                                 <span class="progress-bar border-success"></span>
                             </span>
                             <div class="avatar avatar-xxl avatar-rounded">
-                                <img :src="agent.photo || '{{ asset("assets/img/profiles/avatar-27.jpg") }}'" alt="Img">
+                                <img :src="agent.photo || '{{ asset("assets/img/avatar.jpg") }}'" alt="Img">
                             </div>
                         </div>
                         <div class="text-center">

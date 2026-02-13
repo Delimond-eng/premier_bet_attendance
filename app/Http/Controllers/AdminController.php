@@ -154,6 +154,39 @@ class AdminController extends Controller
 
         $absentAgents = max(($totalAgents * $daysCount) - $presentAgents, 0);
 
+        $workedMinutes = 0;
+        $driver = DB::connection()->getDriverName();
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $workedMinutes = (int) PresenceAgents::query()
+                ->whereBetween('date_reference', [$fromDate, $toDate])
+                ->whereNotNull('started_at')
+                ->whereNotNull('ended_at')
+                ->selectRaw('COALESCE(SUM(TIMESTAMPDIFF(MINUTE, started_at, ended_at)), 0) as m')
+                ->value('m');
+        } else {
+            $rows = PresenceAgents::query()
+                ->whereBetween('date_reference', [$fromDate, $toDate])
+                ->whereNotNull('started_at')
+                ->whereNotNull('ended_at')
+                ->get(['started_at', 'ended_at']);
+
+            foreach ($rows as $r) {
+                try {
+                    $start = Carbon::parse($r->getRawOriginal('started_at'));
+                    $end = Carbon::parse($r->getRawOriginal('ended_at'));
+                    $diff = $start->diffInMinutes($end, false);
+                    if ($diff > 0) {
+                        $workedMinutes += $diff;
+                    }
+                } catch (\Throwable $_) {
+                }
+            }
+        }
+
+        $workedHours = round($workedMinutes / 60, 1);
+        $expectedAgentDays = max($totalAgents * $daysCount, 1);
+        $weeklyAverage = round(($presentAgents / $expectedAgentDays) * 100, 1);
+
         $aggregate = PresenceAgents::query()
             ->selectRaw('DATE(date_reference) as d')
             ->selectRaw('SUM(CASE WHEN started_at IS NOT NULL THEN 1 ELSE 0 END) as present_count')
@@ -236,6 +269,11 @@ class AdminController extends Controller
                     'late' => $seriesLate,
                     'absent' => $seriesAbsent,
                 ],
+            ],
+            'weekly_kpis' => [
+                'worked_hours' => $workedHours,
+                'missed_punches' => (int) $absentAgents,
+                'weekly_average' => $weeklyAverage,
             ],
             'latest_checkins' => $latest,
         ]);

@@ -64,7 +64,7 @@
                         <div>
                             <span class="badge badge-soft-purple badge-sm fw-normal">
                                 <i class="ti ti-arrow-wave-right-down"></i>
-                                +19.01%
+
                             </span>
                         </div>
                     </div>
@@ -88,7 +88,6 @@
                         <div>
                             <span class="badge badge-soft-primary badge-sm fw-normal">
                                 <i class="ti ti-arrow-wave-right-down"></i>
-                                +19.01%
                             </span>
                         </div>
                     </div>
@@ -112,7 +111,7 @@
                         <div>
                             <span class="badge badge-soft-dark badge-sm fw-normal">
                                 <i class="ti ti-arrow-wave-right-down"></i>
-                                +19.01%
+
                             </span>
                         </div>
                     </div>
@@ -136,7 +135,6 @@
                         <div>
                             <span class="badge badge-soft-secondary badge-sm fw-normal">
                                 <i class="ti ti-arrow-wave-right-down"></i>
-                                +19.01%
                             </span>
                         </div>
                     </div>
@@ -191,7 +189,8 @@
                                     <td>
                                         <div class="d-flex align-items-center">
                                             <a href="#" class="avatar avatar-md" data-bs-toggle="modal" data-bs-target="#view_details">
-                                                <img :src="data.photo ?? 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="img-fluid rounded-circle" alt="img">
+                                                <img v-if="data.photo" :src="data.photo" class="img-fluid rounded-circle" alt="user">
+                                                <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="img-fluid rounded-circle" alt="user">
                                             </a>
                                             <div class="ms-2">
                                                 <p class="text-dark mb-0"><a href="#">@{{ data.fullname }}</a></p>
@@ -216,10 +215,12 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="action-icon d-inline-flex">
-                                            <a href="#" class="me-2 text-info" data-bs-toggle="modal" data-bs-target="#edit_employee"><i class="ti ti-edit"></i></a>
-                                            <a href="#" class="me-2 text-danger" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
-                                            <a class="text-primary" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time"></i></a>
+                                        <div class="d-inline-flex">
+                                            <div class="action-icon d-inline-flex me-2">
+                                                <a href="#" class="me-2 text-info" data-bs-toggle="modal" data-bs-target="#edit_employee"><i class="ti ti-edit"></i></a>
+                                                <a href="#" class="me-2 text-danger" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
+                                            </div>
+                                            <a class="btn btn-xs btn-info" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time me-1"></i> Infos</a>
                                         </div>
                                     </td>
                                 </tr>

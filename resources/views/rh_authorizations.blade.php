@@ -46,7 +46,8 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="avatar avatar-sm me-2">
-                                        <img :src="a.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
+                                        <img v-if="a.agent?.photo" :src="a.agent?.photo" class="rounded-circle" alt="img">
+                                        <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="img">
                                     </span>
                                     <div>
                                         <h6 class="mb-0">@{{ a.agent?.fullname ?? '-' }}</h6>

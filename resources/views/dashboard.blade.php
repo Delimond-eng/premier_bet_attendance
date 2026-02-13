@@ -168,7 +168,7 @@
                                                 <h3 class="main-title mb-1">@{{ counts.agents }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
-                                            <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+18%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
+
                                         </div>
                                     </div> <!-- end card -->
                                 </div> <!-- end card body -->
@@ -190,7 +190,6 @@
                                                 <h3 class="main-title mb-1">@{{ counts.presences }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
-                                            <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+22%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
                                         </div>
                                     </div> <!-- end card -->
                                 </div> <!-- end card body -->
@@ -212,7 +211,6 @@
                                                 <h3 class="main-title mb-1">@{{ counts.retards }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
-                                            <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">-16%<span class="bg-danger btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-down-right fs-20"></i></span></div>
                                         </div>
                                     </div> <!-- end card -->
                                 </div> <!-- end card body -->
@@ -234,7 +232,6 @@
                                                 <h3 class="main-title mb-1">@{{ counts.absents }}</h3>
                                                 <p class="fs-13 mb-0">Toutes les stations</p>
                                             </div>
-                                            <div class="d-inline-flex align-items-center bg-light border rounded-pill text-dark p-1 ps-2">+16%<span class="bg-success btn-icon btn-sm rounded-circle d-flex align-items-center justify-content-center ms-1"><i class="ti ti-arrow-up-right fs-20"></i></span></div>
                                         </div>
                                     </div> <!-- end card -->
                                 </div> <!-- end card body -->
@@ -305,15 +302,15 @@
                             <div class="flex-shrink-0">
                                 <div class="border p-3 rounded text-center mb-3">
                                     <p class="mb-1">Nombre d’heures travaillées</p>
-                                    <h3 class="main-title mb-0">8.4 hrs</h3>
+                                    <h3 class="main-title mb-0">@{{ weeklyKpis.worked_hours }} h</h3>
                                 </div>
                                 <div class="border p-3 rounded text-center mb-3">
                                     <p class="mb-1">Pointages manqués</p>
-                                    <h3 class="main-title mb-0">12</h3>
+                                    <h3 class="main-title mb-0">@{{ weeklyKpis.missed_punches }}</h3>
                                 </div>
                                 <div class="border p-3 rounded text-center mb-3">
                                     <p class="mb-1">Moyenne hebdomadaire</p>
-                                    <h3 class="main-title mb-0">97.2%</h3>
+                                    <h3 class="main-title mb-0">@{{ weeklyKpis.weekly_average }}%</h3>
                                 </div>
                             </div>
                         </div>
@@ -338,7 +335,8 @@
                         <div v-for="item in latestCheckins.slice(0, 5)" :key="item.id" class="p-2 bg-light rounded border-bottom d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
                                     <a href="javascript:void(0);" class="avatar flex-shrink-0">
-                                        <img src="https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg" class="rounded-circle" alt="user">
+                                        <img v-if="item.agent.photo" :src="item.agent?.photo" class="rounded-circle" alt="user">
+                                        <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="user">
                                     </a>
                                     <div class="ms-2">
                                         <p class="fs-14 fw-medium text-truncate mb-1"><a href="#">@{{ item.agent?.fullname ?? 'Agent' }}</a></p>

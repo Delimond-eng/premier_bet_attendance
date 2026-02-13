@@ -8,8 +8,7 @@
 	<meta name="author" content="SALAMA GROUP LTD">
 	<title>SALAMA ATTENDANCE | Web Admin</title>
 
-    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/logo-4.svg') }}">
-
+    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/icon.jpg') }}">
 
 
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
