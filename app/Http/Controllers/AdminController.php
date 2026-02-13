@@ -440,8 +440,40 @@ class AdminController extends Controller
         return response()->json(['status' => 'error', 'errors' => ['Endpoint legacy non implémenté.']], 501);
     }
 
-    public function enrollAgent(Request $request): JsonResponse
-    {
-        return response()->json(['status' => 'error', 'errors' => ['Endpoint legacy non implémenté.']], 501);
+    /**
+     * Enroll agent with photo
+     * @return JsonResponse
+     */
+    public function enrollAgent(Request $request) : JsonResponse{
+        try {
+            $data = $request->validate([
+                "matricule"=>"required|string|exists:agents,matricule",
+            ]);
+            $agent = Agent::where("matricule", $data["matricule"])->first();
+            if ($request->hasFile('photo') && isset($agent)) {
+                $file = $request->file('photo');
+                $filename = uniqid('agent_') . '.' . $file->getClientOriginalExtension();
+                $destination = public_path('uploads/agents');
+                $file->move($destination, $filename);
+                // Générer un lien complet sans utiliser storage
+                $data['photo'] = url('uploads/agents/' . $filename);
+            }
+
+            $agent->update([
+                "photo"=>$data["photo"]
+            ]);
+
+            return response()->json([
+                "status"=>"success",
+                "result"=>$agent
+            ]);
+        }
+        catch (\Illuminate\Validation\ValidationException $e) {
+            $errors = $e->validator->errors()->all();
+            return response()->json(['errors' => $errors ]);
+        }
+        catch (\Illuminate\Database\QueryException $e){
+            return response()->json(['errors' => $e->getMessage() ]);
+        }
     }
 }
