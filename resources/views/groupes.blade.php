@@ -64,7 +64,7 @@
                                     <h6 class="fs-14 fw-medium mb-0">@{{ g.horaire.libelle }}</h6>
                                     <small>De @{{ g.horaire.started_at }} à @{{ g.horaire.ended_at }}</small>
                                 </div>
-                                <div v-else>--</div>
+                                <div v-else>--Permutable--</div>
                             </td>
                             <td>
                                 <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs" v-if="g.status === 'actif'">

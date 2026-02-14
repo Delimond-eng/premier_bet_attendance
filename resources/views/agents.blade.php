@@ -3,7 +3,6 @@
 
 @section("content")
     <div class="content" id="App" v-cloak>
-
         <!-- Breadcrumb -->
         <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
             <div class="my-auto mb-2">
@@ -39,7 +38,7 @@
                 </div>
 
                 <div class="mb-2">
-                    <a href="#" data-bs-toggle="modal" data-bs-target="#add_employee" class="btn btn-primary d-flex align-items-center"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a>
+                    <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="resetCreateForm(); openEmployeeModal()"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a>
                 </div>
 
             </div>
@@ -198,9 +197,9 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>--</td>
+                                    <td>@{{ data.phone ?? '--' }}</td>
                                     <td>
-                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">--</a>
+                                        <a href="javascript:void(0);" class="dropdown-item rounded-1">@{{ data.fonction ?? '--' }}</a>
                                     </td>
                                     <td>
                                         <a href="javascript:void(0);" class="dropdown-item rounded-1">@{{ data.station?.name ?? '--' }}</a>
@@ -215,10 +214,10 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="d-inline-flex">
-                                            <div class="action-icon d-inline-flex me-2">
-                                                <a href="#" class="me-2 text-info" data-bs-toggle="modal" data-bs-target="#edit_employee"><i class="ti ti-edit"></i></a>
-                                                <a href="#" class="me-2 text-danger" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
+                                            <div class="d-inline-flex">
+                                                <div class="action-icon d-inline-flex me-2">
+                                                <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a>
+                                                <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a>
                                             </div>
                                             <a class="btn btn-xs btn-info" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time me-1"></i> Infos</a>
                                         </div>
@@ -236,7 +235,7 @@
                 <div class="modal-content">
                     <div class="modal-header">
                         <div class="d-flex align-items-center">
-                            <h4 class="modal-title me-2">Création agent</h4><span></span>
+                            <h4 class="modal-title me-2">@{{ createForm.id ? 'Modification agent' : 'Création agent' }}</h4><span></span>
                         </div>
                         <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
                             <i class="ti ti-x"></i>
@@ -248,7 +247,9 @@
                                 <div class="col-md-12">
                                     <div class="d-flex align-items-center flex-wrap row-gap-3 border-1 border-light-subtle bg-light-200 w-100 rounded p-3 mb-4">
                                         <div class="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                                            <i class="ti ti-photo text-gray-2 fs-16"></i>
+                                            <img v-if="createForm.photo_preview_url" :src="createForm.photo_preview_url" class="img-fluid rounded-circle" alt="photo">
+                                            <img v-else-if="createForm.existing_photo_url" :src="createForm.existing_photo_url" class="img-fluid rounded-circle" alt="photo">
+                                            <i v-else class="ti ti-photo text-gray-2 fs-16"></i>
                                         </div>
                                         <div class="profile-upload">
                                             <div class="mb-2">
@@ -260,7 +261,7 @@
                                                     Charger
                                                     <input type="file" class="form-control image-sign" @change="onPhotoChange">
                                                 </div>
-                                                <a href="javascript:void(0);" class="btn btn-light btn-sm">Annuler</a>
+                                                <a href="javascript:void(0);" class="btn btn-light btn-sm" @click="clearPhoto">Annuler</a>
                                             </div>
 
                                         </div>
@@ -276,6 +277,12 @@
                                     <div class="mb-3">
                                         <label class="form-label">Nom complet<span class="text-danger"> *</span></label>
                                         <input type="text" class="form-control" v-model="createForm.fullname" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Fonction</label>
+                                        <input type="text" class="form-control" v-model="createForm.fonction" placeholder="ex: Caissiere / Superviseur">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -322,8 +329,9 @@
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label class="form-label">Groupe horaire<span class="text-danger"> *</span></label>
-                                        <select class="form-select">
-                                            <option value="">Sélectionner groupe</option>
+                                        <select class="form-select" v-model="createForm.groupe_id" required>
+                                            <option value="">Selectionner groupe</option>
+                                            <option v-for="g in groups" :key="g.id" :value="g.id">@{{ g.libelle }}</option>
                                         </select>
                                     </div>
                                 </div>

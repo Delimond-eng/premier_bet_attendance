@@ -1,6 +1,11 @@
 import { get } from "../modules/http.js";
 import { initSelect2ForVue } from "../modules/select2.js";
 
+function getQueryParam(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+}
+
 function destroyDatatable(tableEl) {
     const $ = window.$;
     if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
@@ -45,13 +50,16 @@ new Vue({
         const mm = String(today.getMonth() + 1).padStart(2, "0");
         const dd = String(today.getDate()).padStart(2, "0");
 
+        const qDate = getQueryParam("date");
+        const qStation = getQueryParam("station_id");
+
         return {
             isLoading: false,
             sites: [],
             presences: [],
             filters: {
-                date: `${yyyy}-${mm}-${dd}`,
-                station_id: "",
+                date: qDate || `${yyyy}-${mm}-${dd}`,
+                station_id: qStation || "",
             },
         };
     },

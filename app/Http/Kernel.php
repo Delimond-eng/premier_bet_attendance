@@ -83,7 +83,6 @@ class Kernel extends HttpKernel
 
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('schedules:verify')->everyFiveMinutes();
-        $schedule->command('backup:send')->everyFiveMinutes();
+
     }
 }

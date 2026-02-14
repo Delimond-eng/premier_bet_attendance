@@ -48,26 +48,134 @@ new Vue({
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
             },
+            codeManuallyEdited: false,
             form: {
                 id: "",
                 name: "",
                 code: "",
                 adresse: "",
-                latlng: "",
-                phone: "",
-                presence: "",
             },
         };
+    },
+
+    watch: {
+        "form.name": function () {
+            this.ensureAutoCode();
+        },
     },
 
     mounted() {
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
         }
+
+        if (this.$refs.table) {
+            this.$refs.table.addEventListener("click", this.onTableClick, true);
+        }
         this.load();
     },
 
+    beforeDestroy() {
+        if (this.$refs.table) {
+            this.$refs.table.removeEventListener("click", this.onTableClick, true);
+        }
+    },
+
     methods: {
+        normalizeName(name) {
+            const s = String(name || "").trim();
+            if (!s) return "";
+            return s
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-zA-Z0-9 ]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        },
+
+        buildCodeFromName(name) {
+            const normalized = this.normalizeName(name);
+            if (!normalized) return "";
+
+            const parts = normalized.split(" ").filter(Boolean);
+            let prefix = "";
+            if (parts.length >= 2) {
+                prefix = (parts[0][0] + parts[1][0]).toUpperCase();
+            } else {
+                prefix = parts[0].slice(0, 2).toUpperCase();
+            }
+
+            const rand = String(Math.floor(Math.random() * 9000) + 1000);
+            return `${prefix}${rand}`;
+        },
+
+        ensureAutoCode() {
+            if (this.form.id) return; // do not change code on edit
+            if (this.codeManuallyEdited) return;
+            if (String(this.form.code || "").trim() !== "") return;
+            const code = this.buildCodeFromName(this.form.name);
+            if (code) this.form.code = code;
+        },
+
+        regenerateCode() {
+            if (this.form.id) return;
+            this.codeManuallyEdited = false;
+            this.form.code = "";
+            this.ensureAutoCode();
+        },
+
+        onCodeInput() {
+            // If user edits code, stop auto generation.
+            this.codeManuallyEdited = true;
+        },
+
+        getStationModal() {
+            const el = document.getElementById("add_station");
+            if (!el) return null;
+
+            if (window.bootstrap && window.bootstrap.Modal) {
+                return window.bootstrap.Modal.getOrCreateInstance(el);
+            }
+
+            // Fallback for older bootstrap builds (if any)
+            if (window.$ && window.$.fn && window.$.fn.modal) {
+                return {
+                    show: () => window.$(el).modal("show"),
+                    hide: () => window.$(el).modal("hide"),
+                };
+            }
+
+            return null;
+        },
+
+        openModal() {
+            const modal = this.getStationModal();
+            if (modal) modal.show();
+        },
+
+        closeModal() {
+            const modal = this.getStationModal();
+            if (modal) modal.hide();
+        },
+
+        onTableClick(e) {
+            const target = e?.target;
+            if (!target || typeof target.closest !== "function") return;
+
+            const actionEl = target.closest("[data-action]");
+            if (!actionEl) return;
+
+            const action = actionEl.dataset.action;
+            const id = actionEl.dataset.id;
+            if (!action || !id) return;
+
+            const site = this.sites.find((s) => String(s.id) === String(id));
+            if (!site) return;
+
+            if (action === "edit") this.edit(site);
+            else if (action === "remove") this.remove(site);
+        },
+
         async load() {
             this.isLoading = true;
             try {
@@ -90,11 +198,9 @@ new Vue({
                 name: site.name ?? "",
                 code: site.code ?? "",
                 adresse: site.adresse ?? "",
-                latlng: site.latlng ?? "",
-                phone: site.phone ?? "",
-                presence: site.presence ?? "",
             };
-            window.$("#add_station").modal("show");
+            this.codeManuallyEdited = true;
+            this.openModal();
         },
 
         reset() {
@@ -103,18 +209,17 @@ new Vue({
                 name: "",
                 code: "",
                 adresse: "",
-                latlng: "",
-                phone: "",
-                presence: "",
             };
+            this.codeManuallyEdited = false;
         },
 
         async save() {
             this.isLoading = true;
             try {
+                this.ensureAutoCode();
                 const { data } = await postJson("/stations/store", this.form);
                 if (data?.errors) return;
-                window.$("#add_station").modal("hide");
+                this.closeModal();
                 this.reset();
                 await this.load();
             } finally {

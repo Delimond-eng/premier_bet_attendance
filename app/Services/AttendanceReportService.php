@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
@@ -12,6 +13,22 @@ use Illuminate\Database\Eloquent\Collection;
 
 class AttendanceReportService
 {
+    /**
+     * @return array{data: array, days: array<int,string>, agents: Collection<int,Agent>}
+     */
+    public function buildDailyMatrix(Carbon $date, array $filters = []): array
+    {
+        $start = $date->copy()->startOfDay();
+        $end = $start->copy()->startOfDay();
+
+        return $this->buildMatrixForRange(
+            start: $start,
+            end: $end,
+            filters: $filters,
+            dayKeyFormat: 'Y-m-d',
+        );
+    }
+
     /**
      * @return array{data: array, days: array<int,string>, agents: Collection<int,Agent>}
      */
@@ -33,8 +50,9 @@ class AttendanceReportService
      */
     public function buildWeeklyMatrix(Carbon $baseDate, array $filters = []): array
     {
-        $start = $baseDate->copy()->startOfWeek();
-        $end = $baseDate->copy()->endOfWeek();
+        // Align with planning rotations: week starts on Monday.
+        $start = $baseDate->copy()->startOfWeek(Carbon::MONDAY);
+        $end = $start->copy()->addDays(6);
 
         return $this->buildMatrixForRange(
             start: $start,
@@ -51,6 +69,8 @@ class AttendanceReportService
      */
     private function buildMatrixForRange(Carbon $start, Carbon $end, array $filters = [], string $dayKeyFormat = 'd'): array
     {
+        $today = Carbon::now('Africa/Kinshasa')->startOfDay();
+
         $days = [];
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
@@ -71,6 +91,12 @@ class AttendanceReportService
         /** @var Collection<int,Agent> $agents */
         $agents = $agentsQuery->get();
         $agentIds = $agents->pluck('id')->all();
+
+        $plannings = AgentGroupPlanning::query()
+            ->whereIn('agent_id', $agentIds)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->get(['agent_id', 'date', 'is_rest_day', 'horaire_id'])
+            ->groupBy(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->format('Y-m-d'));
 
         $presences = PresenceAgents::query()
             ->with(['horaire'])
@@ -111,12 +137,36 @@ class AttendanceReportService
                 $dateKey = $cursor->format('Y-m-d');
                 $dayKey = $cursor->format($dayKeyFormat);
 
+                // Ne pas compter les jours futurs comme "absent" (rapport mensuel/hebdo).
+                if ($cursor->copy()->startOfDay()->gt($today)) {
+                    $row[$dayKey] = [
+                        'status' => 'future',
+                        'arrivee' => '--:--',
+                        'depart' => '--:--',
+                        'horaire' => '--',
+                    ];
+                    $cursor->addDay();
+                    continue;
+                }
+
                 /** @var PresenceAgents|null $presence */
                 $presence = optional($presences->get($agent->id . '|' . $dateKey))->first();
                 /** @var AttendanceAuthorization|null $auth */
                 $auth = optional($authorizations->get($agent->id . '|' . $dateKey))->first();
                 /** @var AttendanceJustification|null $justif */
                 $justif = optional($justifications->get($agent->id . '|' . $dateKey))->first();
+
+                $planning = optional($plannings->get($agent->id . '|' . $dateKey))->first();
+                if ($planning && $planning->is_rest_day) {
+                    $row[$dayKey] = [
+                        'status' => 'off',
+                        'arrivee' => 'OFF',
+                        'depart' => '',
+                        'horaire' => 'OFF',
+                    ];
+                    $cursor->addDay();
+                    continue;
+                }
 
                 $congeForDay = null;
                 if ($conges->has($agent->id)) {

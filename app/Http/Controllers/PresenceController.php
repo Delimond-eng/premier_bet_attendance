@@ -58,6 +58,19 @@ class PresenceController extends Controller
         $horaire = $this->getHoraireForAgent($agent, $now);
         $dateReference = $horaire ? $this->getDateReference($now, $horaire) : $now->copy()->startOfDay();
 
+        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in.
+        if ($data['key'] === 'check-in') {
+            $isOffDay = AgentGroupPlanning::query()
+                ->where('agent_id', $agent->id)
+                ->whereDate('date', $dateReference->toDateString())
+                ->where('is_rest_day', true)
+                ->exists();
+
+            if ($isOffDay) {
+                return response()->json(['errors' => ['Jour OFF: pointage non autorise.']], 422);
+            }
+        }
+
         try {
             return DB::transaction(function () use ($data, $agent, $assignedStationId, $stationId, $horaire, $dateReference, $now) {
                 if ($data['key'] === 'check-in') {
@@ -201,6 +214,32 @@ class PresenceController extends Controller
     private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire
     {
         $date = $now->toDateString();
+        $yesterday = $now->copy()->subDay()->toDateString();
+
+        // Night shifts: between 00:00 and the shift end time, the "reference day" is yesterday.
+        // So we first check yesterday's planning if it points to an overnight horaire.
+        $planningYesterday = AgentGroupPlanning::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date', $yesterday)
+            ->where('is_rest_day', false)
+            ->first();
+
+        if ($planningYesterday?->horaire_id) {
+            $h = PresenceHoraire::find($planningYesterday->horaire_id);
+            if ($h) {
+                try {
+                    $heureDebut = Carbon::createFromTimeString($h->started_at);
+                    $heureFin = Carbon::createFromTimeString($h->ended_at);
+                    if ($heureFin->lt($heureDebut)) {
+                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at);
+                        if ($now->lt($limiteFin)) {
+                            return $h;
+                        }
+                    }
+                } catch (\Throwable $_) {
+                }
+            }
+        }
 
         $planning = AgentGroupPlanning::query()
             ->where('agent_id', $agent->id)
@@ -343,33 +382,49 @@ class PresenceController extends Controller
         return response()->json(['status' => 'success', 'groups' => $groups]);
     }
 
-    public function countDashboard(Request $request): JsonResponse
+    public function countDashboard(Request $request, AttendanceReportService $service): JsonResponse
     {
         $date = $request->query('date') ? Carbon::parse($request->query('date')) : Carbon::today();
         $stationId = $request->query('station_id');
 
-        $totalAgents = Agent::query()
-            ->when($stationId, fn ($q) => $q->where('site_id', $stationId))
-            ->count();
+        $filters = [
+            'station_id' => $stationId ? (int) $stationId : null,
+        ];
 
-        $presentAgents = PresenceAgents::query()
-            ->whereDate('date_reference', $date->toDateString())
-            ->when($stationId, fn ($q) => $q->where('site_id', $stationId))
-            ->whereNotNull('started_at')
-            ->count();
+        $matrix = $service->buildDailyMatrix($date, $filters);
+        $key = $date->toDateString();
 
-        $lateAgents = PresenceAgents::query()
-            ->whereDate('date_reference', $date->toDateString())
-            ->when($stationId, fn ($q) => $q->where('site_id', $stationId))
-            ->where('retard', 'oui')
-            ->count();
+        $totalAgents = $matrix['agents']->count();
+        $expectedAgents = 0;
+        $presentAgents = 0;
+        $lateAgents = 0;
+        $absentAgents = 0;
 
-        $absentAgents = max($totalAgents - $presentAgents, 0);
+        foreach (($matrix['data'] ?? []) as $row) {
+            $cell = $row[$key] ?? null;
+            $status = is_array($cell) ? ($cell['status'] ?? null) : null;
+
+            if ($status === 'off' || $status === 'future') {
+                continue;
+            }
+
+            $expectedAgents += 1;
+            if (in_array($status, ['present', 'retard', 'retard_justifie'], true)) {
+                $presentAgents += 1;
+            }
+            if (in_array($status, ['retard', 'retard_justifie'], true)) {
+                $lateAgents += 1;
+            }
+            if ($status === 'absent') {
+                $absentAgents += 1;
+            }
+        }
 
         return response()->json([
             'status' => 'success',
             'count' => [
                 'agents' => $totalAgents,
+                'agents_expected' => $expectedAgents,
                 'presences' => $presentAgents,
                 'retards' => $lateAgents,
                 'absents' => $absentAgents,
@@ -444,7 +499,7 @@ class PresenceController extends Controller
         ], 501);
     }
 
-    public function dailyReport(Request $request): JsonResponse
+    public function dailyReport(Request $request, AttendanceReportService $service): JsonResponse
     {
         $data = $request->validate([
             'date' => 'nullable|date',
@@ -464,14 +519,57 @@ class PresenceController extends Controller
         $totalAgents = $agentsQuery->count();
         $agentIds = $agentsQuery->pluck('id')->all();
 
+        $filters = [
+            'station_id' => $data['station_id'] ?? null,
+            'agent_id' => $data['agent_id'] ?? null,
+            'group_id' => $data['group_id'] ?? null,
+        ];
+        $dailyMatrix = $service->buildDailyMatrix(Carbon::parse($date), $filters);
+
+        $expectedAgents = 0;
+        $present = 0;
+        $late = 0;
+        $absent = 0;
+        $conges = 0;
+        $authorizations = 0;
+        $absenceJustifiee = 0;
+        $off = 0;
+
+        foreach (($dailyMatrix['data'] ?? []) as $agentKey => $row) {
+            $cell = $row[$date] ?? null;
+            $status = is_array($cell) ? ($cell['status'] ?? null) : null;
+
+            if ($status === 'off' || $status === 'future') {
+                $off += 1;
+                continue;
+            }
+
+            $expectedAgents += 1;
+
+            if (in_array($status, ['present', 'retard', 'retard_justifie'], true)) {
+                $present += 1;
+            }
+            if (in_array($status, ['retard', 'retard_justifie'], true)) {
+                $late += 1;
+            }
+            if ($status === 'absent') {
+                $absent += 1;
+            }
+            if ($status === 'conge') {
+                $conges += 1;
+            }
+            if ($status === 'autorisation') {
+                $authorizations += 1;
+            }
+            if ($status === 'absence_justifiee') {
+                $absenceJustifiee += 1;
+            }
+        }
+
         $presencesQuery = PresenceAgents::query()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date)
             ->whereIn('agent_id', $agentIds);
-
-        $present = (clone $presencesQuery)->whereNotNull('started_at')->count();
-        $late = (clone $presencesQuery)->where('retard', 'oui')->count();
-        $absent = max($totalAgents - $present, 0);
 
         $perPage = (int) ($data['per_page'] ?? 25);
 
@@ -480,9 +578,14 @@ class PresenceController extends Controller
             'date' => $date,
             'count' => [
                 'agents' => $totalAgents,
+                'agents_expected' => $expectedAgents,
                 'presences' => $present,
                 'retards' => $late,
                 'absents' => $absent,
+                'off' => $off,
+                'conges' => $conges,
+                'authorizations' => $authorizations,
+                'absence_justifiee' => $absenceJustifiee,
             ],
             'presences' => $presencesQuery
                 ->orderByDesc('date_reference')
@@ -549,8 +652,8 @@ class PresenceController extends Controller
         ]);
 
         $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = $baseDate->copy()->startOfWeek();
-        $end = $baseDate->copy()->endOfWeek();
+        $start = $baseDate->copy()->startOfWeek(Carbon::MONDAY);
+        $end = $start->copy()->addDays(6);
 
         $filters = [
             'station_id' => isset($data['station_id']) ? (int) $data['station_id'] : null,
@@ -699,7 +802,13 @@ class PresenceController extends Controller
             ->whereNotNull('started_at')
             ->exists();
 
-        $todayStatus = $isOnLeave ? 'conge' : ($hasPresenceToday ? 'present' : 'absent');
+        $isOffDay = AgentGroupPlanning::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date', $dateReferenceString)
+            ->where('is_rest_day', true)
+            ->exists();
+
+        $todayStatus = $isOffDay ? 'off' : ($isOnLeave ? 'conge' : ($hasPresenceToday ? 'present' : 'absent'));
 
         $expectedStart = $horaire ? (string) $horaire->getRawOriginal('started_at') : null;
         $expectedEnd = $horaire ? (string) $horaire->getRawOriginal('ended_at') : null;

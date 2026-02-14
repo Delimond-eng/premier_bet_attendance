@@ -73,7 +73,7 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="avatar avatar-sm me-2">
-                                        <img :src="r.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
+                                        <img :src="r.agent?.photo || '{{asset("assets/img/avatar.jpg")}}'" class="rounded-circle" alt="img">
                                     </span>
                                     <div>
                                         <h6 class="mb-0">@{{ r.agent?.fullname ?? '-' }}</h6>

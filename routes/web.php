@@ -75,6 +75,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/groups', [PresenceController::class, 'getAllGroups'])->name('groups.data');
         Route::post('/group/store', [PresenceController::class, 'createGroup'])->name('group.store');
         Route::get('/planning/week', [PlanningController::class, 'getStationWeeklyPlanning'])->name('planning.week');
+        Route::post('/planning/import-week', [PlanningController::class, 'importWeeklyPlanning'])->name('planning.import_week');
 
         // RH - Congés / Autorisations / Justifications
         Route::get('/timesheet.view', fn () => view('rh_timesheet'))->name('timesheet.view');

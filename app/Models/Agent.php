@@ -21,6 +21,7 @@ class Agent extends Model
         "photo",
         "matricule",
         "fullname",
+        "fonction",
         "password",
         "role",
         "agency_id",

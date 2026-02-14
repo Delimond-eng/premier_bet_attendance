@@ -4,334 +4,242 @@ namespace Database\Seeders;
 
 use App\Models\Agent;
 use App\Models\AgentGroup;
-use App\Models\AgentGroupPlanning;
-use App\Models\AgentHistory;
-use App\Models\AttendanceAuthorization;
-use App\Models\AttendanceJustification;
-use App\Models\Conge;
-use App\Models\CongeType;
-use App\Models\PresenceAgents;
+use App\Models\AgentGroupAssignment;
+use App\Models\GroupPlanningCycle;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
-use App\Models\User;
 use Carbon\Carbon;
-use Faker\Factory as FakerFactory;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
-        $faker = FakerFactory::create('fr_FR');
-        $now = Carbon::now()->setTimezone('Africa/Kinshasa');
-        $approverId = User::query()->orderBy('id')->value('id');
-
-        // 1) Stations
-        $stationsSeed = [
-            ['code' => 'DEMO-GOM', 'name' => 'Station Gombe', 'adresse' => 'Gombe, Avenue du Fleuve', 'latlng' => '-4.320,15.310'],
-            ['code' => 'DEMO-LIM', 'name' => 'Station Limete', 'adresse' => 'Limete, Industriel', 'latlng' => '-4.342,15.343'],
-            ['code' => 'DEMO-NGD', 'name' => 'Station Ngaliema', 'adresse' => 'Ngaliema, Cité Verte', 'latlng' => '-4.372,15.258'],
-            ['code' => 'DEMO-KSM', 'name' => 'Station Kasavubu', 'adresse' => 'Kasavubu, Marché Central', 'latlng' => '-4.327,15.307'],
-            ['code' => 'DEMO-MTN', 'name' => 'Station Matete', 'adresse' => 'Matete, Route de l’Aéroport', 'latlng' => '-4.402,15.355'],
-            ['code' => 'DEMO-NDJ', 'name' => 'Station Ndjili', 'adresse' => 'Ndjili, Boulevard Lumumba', 'latlng' => '-4.389,15.394'],
-        ];
-
-        $stations = collect($stationsSeed)->map(function ($s) use ($faker) {
-            return Station::updateOrCreate(
-                ['code' => $s['code']],
-                [
-                    'name' => $s['name'],
-                    'adresse' => $s['adresse'],
-                    'latlng' => $s['latlng'],
-                    'phone' => $faker->phoneNumber(),
-                    'presence' => random_int(5, 18),
-                    'status' => 'actif',
-                ]
-            );
-        });
-
-        // 2) Horaires (2 par station)
-        $horairesByStation = [];
-        foreach ($stations as $station) {
-            $day = PresenceHoraire::updateOrCreate(
-                ['site_id' => $station->id, 'libelle' => 'Shift Jour'],
-                [
-                    'started_at' => '07:00',
-                    'ended_at' => '18:00',
-                    'tolerence_minutes' => 15,
-                    'site_id' => $station->id,
-                ]
-            );
-
-            $night = PresenceHoraire::updateOrCreate(
-                ['site_id' => $station->id, 'libelle' => 'Shift Nuit'],
-                [
-                    'started_at' => '19:00',
-                    'ended_at' => '06:00',
-                    'tolerence_minutes' => 15,
-                    'site_id' => $station->id,
-                ]
-            );
-
-            $horairesByStation[$station->id] = [$day, $night];
+        $csvPath = base_path('Agents_Perspective.csv');
+        if (!is_file($csvPath)) {
+            $this->command?->warn("Agents_Perspective.csv introuvable: {$csvPath}");
+            return;
         }
 
-        // 3) Groupes d'agents
-        $defaultHoraire = $horairesByStation[$stations->first()->id][0] ?? null;
+        $rows = $this->readCsv($csvPath);
+        if (count($rows) < 2) {
+            $this->command?->warn("Agents_Perspective.csv est vide ou sans lignes exploitables.");
+            return;
+        }
 
-        $groupsSeed = ['Equipe A', 'Equipe B', 'Equipe C'];
-        $groups = collect($groupsSeed)->map(function ($name) use ($defaultHoraire) {
-            return AgentGroup::updateOrCreate(
-                ['libelle' => $name],
-                [
-                    'horaire_id' => $defaultHoraire?->id,
-                    'cycle_days' => 7,
-                    'status' => 'actif',
-                ]
-            );
-        });
+        $header = array_map(fn ($v) => strtoupper(trim((string) $v)), $rows[0]);
+        $colAgent = $this->findColumnIndex($header, ['AGENT', 'NOM', 'FULLNAME']);
+        $colMatricule = $this->findColumnIndex($header, ['MATRICULE', 'MAT']);
 
-        // 4) Agents
-        $targetAgents = 60;
-        $existingAgents = Agent::count();
-        $toCreate = max($targetAgents - $existingAgents, 0);
+        // Expected day columns, but we only need them to extract unique horaires.
+        $dayCols = [];
+        foreach (['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI', 'DIMANCHE'] as $day) {
+            $idx = $this->findColumnIndex($header, [$day]);
+            if ($idx !== null) {
+                $dayCols[] = $idx;
+            }
+        }
 
-        for ($i = 1; $i <= $toCreate; $i++) {
-            $station = $stations->random();
-            $group = $groups->random();
-            $stationHoraires = $horairesByStation[$station->id] ?? [];
+        if ($colMatricule === null) {
+            $this->command?->warn("CSV invalide: colonne MATRICULE introuvable.");
+            return;
+        }
 
-            $horaire = $faker->boolean(70)
-                ? ($stationHoraires[0] ?? null)
-                : ($stationHoraires[1] ?? null);
+        if (count($dayCols) !== 7) {
+            $this->command?->warn("CSV invalide: colonnes LUNDI..DIMANCHE introuvables ou incompletes.");
+            return;
+        }
 
-            $matricule = 'AGT-' . str_pad((string) (1000 + $existingAgents + $i), 4, '0', STR_PAD_LEFT);
+        $tz = 'Africa/Kinshasa';
+        $now = Carbon::now($tz)->startOfDay();
 
-            Agent::create([
+        Schema::disableForeignKeyConstraints();
+        try {
+            $this->truncateOrDelete('agent_group_plannings');
+            $this->truncateOrDelete('agent_group_assignments');
+            $this->truncateOrDelete('group_planning_cycles');
+            $this->truncateOrDelete('agents');
+            $this->truncateOrDelete('agent_groups');
+            $this->truncateOrDelete('presence_horaires');
+            $this->truncateOrDelete('sites');
+        } finally {
+            Schema::enableForeignKeyConstraints();
+        }
+
+        $station = Station::create([
+            'name' => 'ITIMBIRI',
+            'code' => 'ITIMBIRI',
+            'adresse' => 'Direction General (ITIMBIRI)',
+            'latlng' => null,
+            'phone' => null,
+            'presence' => 1,
+            'status' => 'actif',
+        ]);
+
+        $flexGroup = AgentGroup::create([
+            'libelle' => 'SHIFT FLEXIBLE',
+            'horaire_id' => null,
+            'cycle_days' => 7,
+            'status' => 'actif',
+        ]);
+
+        // 1) Create unique horaires from CSV time ranges.
+        $ranges = $this->extractTimeRanges($rows, $dayCols);
+        foreach ($ranges as $key => [$start, $end]) {
+            PresenceHoraire::create([
+                'libelle' => "Horaire {$start}-{$end}",
+                'started_at' => $start,
+                'ended_at' => $end,
+                'tolerence_minutes' => 15,
+                'site_id' => $station->id,
+            ]);
+        }
+
+        // 2) Create agents and assign them to station + flexible group.
+        $createdAgents = 0;
+        foreach (array_slice($rows, 1) as $row) {
+            $matricule = trim((string) ($row[$colMatricule] ?? ''));
+            if ($matricule === '') {
+                continue;
+            }
+
+            $fullname = $colAgent !== null ? trim((string) ($row[$colAgent] ?? '')) : '';
+            if ($fullname === '') {
+                $fullname = $matricule;
+            }
+
+            $agent = Agent::create([
                 'matricule' => $matricule,
-                'fullname' => $faker->lastName() . ' ' . $faker->firstName(),
+                'fullname' => $fullname,
                 'password' => Hash::make('salama123'),
                 'role' => 'agent',
                 'site_id' => $station->id,
-                'groupe_id' => $group->id,
-                'horaire_id' => $horaire?->id,
+                'groupe_id' => $flexGroup->id,
+                'horaire_id' => null,
                 'status' => 'actif',
             ]);
-        }
 
-        $agents = Agent::query()->with(['station', 'groupe', 'horaire'])->get();
-
-        // 5) Historique d'affectation (quelques mutations)
-        foreach ($agents->random(min(8, $agents->count())) as $agent) {
-            $from = $stations->where('id', '!=', $agent->site_id)->random();
-            $date = $now->copy()->subDays(random_int(10, 60));
-            AgentHistory::updateOrCreate([
+            AgentGroupAssignment::create([
                 'agent_id' => $agent->id,
-                'date' => $date,
-                'status' => 'mutation',
-            ], [
-                'site_id' => $agent->site_id,
-                'site_provenance_id' => $from->id,
+                'agent_group_id' => $flexGroup->id,
+                'start_date' => $now->toDateString(),
+                'end_date' => null,
             ]);
+
+            $createdAgents += 1;
         }
 
-        // 6) Plannings du mois courant (pour semaine + matrice mensuelle)
-        $startMonth = $now->copy()->startOfMonth();
-        $endMonth = $now->copy()->endOfMonth();
+        // Keep these empty: the planning will be imported via CSV/Excel.
+        GroupPlanningCycle::where('agent_group_id', $flexGroup->id)->delete();
 
-        foreach ($agents as $agent) {
-            $cursor = $startMonth->copy();
-            while ($cursor->lte($endMonth)) {
-                $isRest = $cursor->isSunday();
+        $this->command?->info("✅ Seeder ITIMBIRI OK: 1 station, " . count($ranges) . " horaires, {$createdAgents} agents, groupe SHIFT FLEXIBLE.");
+    }
 
-                $stationId = $agent->site_id;
-                $stationHoraires = $horairesByStation[$stationId] ?? [];
-                $horaire = $isRest ? null : ($cursor->isWeekend() ? ($stationHoraires[1] ?? ($stationHoraires[0] ?? null)) : ($stationHoraires[0] ?? null));
+    private function truncateOrDelete(string $table): void
+    {
+        try {
+            DB::table($table)->truncate();
+        } catch (\Throwable $_) {
+            DB::table($table)->delete();
+        }
+    }
 
-                AgentGroupPlanning::updateOrCreate(
-                    ['agent_id' => $agent->id, 'date' => $cursor->toDateString()],
-                    [
-                        'agent_group_id' => $agent->groupe_id,
-                        'horaire_id' => $horaire?->id,
-                        'is_rest_day' => $isRest,
-                    ]
-                );
+    /**
+     * @return array<int, array<int, string|null>>
+     */
+    private function readCsv(string $path): array
+    {
+        $firstLine = '';
+        try {
+            $fh = fopen($path, 'rb');
+            if (is_resource($fh)) {
+                $firstLine = (string) fgets($fh);
+                fclose($fh);
+            }
+        } catch (\Throwable $_) {
+        }
 
-                $cursor->addDay();
+        $delimiter = $this->sniffDelimiter($firstLine);
+        $file = new \SplFileObject($path, 'r');
+        $file->setFlags(\SplFileObject::READ_CSV | \SplFileObject::SKIP_EMPTY | \SplFileObject::DROP_NEW_LINE);
+        $file->setCsvControl($delimiter);
+
+        $rows = [];
+        foreach ($file as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            // Normalize to simple array of strings.
+            $rows[] = array_map(fn ($v) => $v === null ? null : (string) $v, $row);
+        }
+
+        // Remove trailing empty line produced by SplFileObject sometimes.
+        while (!empty($rows) && count(array_filter($rows[count($rows) - 1], fn ($v) => trim((string) $v) !== '')) === 0) {
+            array_pop($rows);
+        }
+
+        return $rows;
+    }
+
+    private function sniffDelimiter(string $line): string
+    {
+        $candidates = [',', ';', "\t", '|'];
+        $best = ',';
+        $bestCount = -1;
+        foreach ($candidates as $cand) {
+            $count = substr_count($line, $cand);
+            if ($count > $bestCount) {
+                $bestCount = $count;
+                $best = $cand;
             }
         }
+        return $best;
+    }
 
-        // 7) Présences (14 derniers jours)
-        $daysBack = 14;
-        $start = $now->copy()->subDays($daysBack)->startOfDay();
-        $end = $now->copy()->startOfDay();
-
-        $cursor = $start->copy();
-        while ($cursor->lte($end)) {
-            foreach ($agents as $agent) {
-                // 80% présent (création presence), 20% absent (pas de ligne)
-                if ($faker->boolean(20)) {
-                    continue;
+    /**
+     * @param array<int, string> $header
+     * @param array<int, string> $needles
+     */
+    private function findColumnIndex(array $header, array $needles): ?int
+    {
+        $needles = array_map(fn ($s) => strtoupper(trim((string) $s)), $needles);
+        foreach ($header as $i => $h) {
+            $v = strtoupper(trim((string) $h));
+            foreach ($needles as $n) {
+                if ($v === $n) {
+                    return (int) $i;
                 }
-
-                $planning = AgentGroupPlanning::query()
-                    ->where('agent_id', $agent->id)
-                    ->whereDate('date', $cursor->toDateString())
-                    ->first();
-
-                if ($planning && $planning->is_rest_day) {
-                    continue;
-                }
-
-                $horaire = null;
-                if ($planning?->horaire_id) {
-                    $horaire = PresenceHoraire::find($planning->horaire_id);
-                } elseif ($agent->horaire_id) {
-                    $horaire = PresenceHoraire::find($agent->horaire_id);
-                }
-
-                $assignedStationId = $agent->site_id;
-                $checkStationId = $faker->boolean(85) ? $assignedStationId : $stations->random()->id;
-
-                $startedAt = $cursor->copy()->setTime(7, 0);
-                $endedAt = null;
-                $retard = 'non';
-
-                if ($horaire) {
-                    $rawStart = $horaire->getRawOriginal('started_at') ?? (string) $horaire->started_at;
-                    $rawEnd = $horaire->getRawOriginal('ended_at') ?? (string) $horaire->ended_at;
-
-                    // Les casts Laravel peuvent transformer TIME en datetime => on force un format heure uniquement.
-                    $startTime = Carbon::parse($rawStart)->format('H:i:s');
-                    $endTime = Carbon::parse($rawEnd)->format('H:i:s');
-
-                    $shiftStart = Carbon::parse($cursor->toDateString(), 'Africa/Kinshasa')->setTimeFromTimeString($startTime);
-                    $shiftEnd = Carbon::parse($cursor->toDateString(), 'Africa/Kinshasa')->setTimeFromTimeString($endTime);
-                    if ($shiftEnd->lt($shiftStart)) {
-                        $shiftEnd->addDay();
-                    }
-
-                    $retardChance = $faker->boolean(20);
-                    if ($retardChance) {
-                        $retard = 'oui';
-                        $startedAt = $shiftStart->copy()->addMinutes(random_int(20, 90));
-                    } else {
-                        $startedAt = $shiftStart->copy()->addMinutes(random_int(-5, 10));
-                    }
-
-                    if ($faker->boolean(85)) {
-                        $endedAt = $shiftEnd->copy()->addMinutes(random_int(-10, 30));
-                    }
-                } else {
-                    $startedAt = $cursor->copy()->setTime(7, 0)->addMinutes(random_int(0, 45));
-                    if ($faker->boolean(80)) {
-                        $endedAt = $startedAt->copy()->addHours(random_int(8, 12))->addMinutes(random_int(0, 30));
-                    }
-                }
-
-                $duree = null;
-                $stationOut = null;
-                if ($endedAt) {
-                    $mins = $startedAt->diffInMinutes($endedAt);
-                    $duree = intdiv($mins, 60) . 'h ' . ($mins % 60) . 'min';
-                    $stationOut = $faker->boolean(90) ? $checkStationId : $stations->random()->id;
-                }
-
-                PresenceAgents::updateOrCreate(
-                    ['agent_id' => $agent->id, 'date_reference' => $cursor->toDateString()],
-                    [
-                        'site_id' => $assignedStationId,
-                        'gps_site_id' => $checkStationId,
-                        'station_check_in_id' => $checkStationId,
-                        'station_check_out_id' => $stationOut,
-                        'horaire_id' => $horaire?->id,
-                        'started_at' => $startedAt,
-                        'ended_at' => $endedAt,
-                        'duree' => $duree,
-                        'retard' => $retard,
-                        'status' => $endedAt ? 'depart' : 'arrive',
-                    ]
-                );
             }
-            $cursor->addDay();
         }
+        return null;
+    }
 
-        // 8) Congés approuvés (dans le mois courant)
-        $congeTypes = collect([
-            ['libelle' => 'Annuel', 'description' => 'Congé annuel', 'status' => 'actif'],
-            ['libelle' => 'Maladie', 'description' => 'Congé maladie', 'status' => 'actif'],
-            ['libelle' => 'Exceptionnel', 'description' => 'Congé exceptionnel', 'status' => 'actif'],
-        ])->map(function ($t) {
-            return CongeType::updateOrCreate(
-                ['libelle' => $t['libelle']],
-                ['description' => $t['description'], 'status' => $t['status']]
-            );
-        });
-
-        foreach ($agents->random(min(6, $agents->count())) as $agent) {
-            $from = $now->copy()->subDays(random_int(3, 10))->toDateString();
-            $to = Carbon::parse($from)->addDays(random_int(1, 4))->toDateString();
-            $type = $congeTypes->random();
-
-            Conge::updateOrCreate([
-                'agent_id' => $agent->id,
-                'date_debut' => $from,
-                'date_fin' => $to,
-            ], [
-                'conge_type_id' => $type->id,
-                'type' => $type->libelle,
-                'motif' => 'Congé annuel (démo)',
-                'status' => 'approved',
-                'approved_by' => $approverId,
-            ]);
+    /**
+     * @param array<int, array<int, string|null>> $rows
+     * @param array<int, int> $dayCols
+     * @return array<string, array{0:string,1:string}>
+     */
+    private function extractTimeRanges(array $rows, array $dayCols): array
+    {
+        $ranges = [];
+        foreach (array_slice($rows, 1) as $row) {
+            foreach ($dayCols as $idx) {
+                $cell = trim((string) ($row[$idx] ?? ''));
+                if ($cell === '' || strtoupper($cell) === 'OFF') {
+                    continue;
+                }
+                if (preg_match('/^(\\d{1,2})\\s*:\\s*(\\d{2})\\s*-\\s*(\\d{1,2})\\s*:\\s*(\\d{2})$/', $cell, $m)) {
+                    $start = sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+                    $end = sprintf('%02d:%02d', (int) $m[3], (int) $m[4]);
+                    $ranges[$start . '-' . $end] = [$start, $end];
+                }
+            }
         }
-
-        // 9) Autorisations approuvées (quelques jours)
-        foreach ($agents->random(min(10, $agents->count())) as $agent) {
-            $dateRef = $now->copy()->subDays(random_int(0, 10))->toDateString();
-            $type = $faker->randomElement(['maladie', 'deuil', 'retard', 'absence']);
-            AttendanceAuthorization::updateOrCreate([
-                'agent_id' => $agent->id,
-                'date_reference' => $dateRef,
-                'type' => $type,
-            ], [
-                'minutes' => random_int(15, 120),
-                'reason' => 'Autorisation spéciale (démo)',
-                'status' => 'approved',
-                'approved_by' => $approverId,
-            ]);
-        }
-
-        // 10) Justifications (retard & absence) approuvées
-        $latePresences = PresenceAgents::query()->where('retard', 'oui')->limit(10)->get();
-        foreach ($latePresences as $p) {
-            AttendanceJustification::firstOrCreate([
-                'agent_id' => $p->agent_id,
-                'date_reference' => $p->date_reference,
-                'kind' => 'retard',
-            ], [
-                'presence_agent_id' => $p->id,
-                'justification' => 'Justification retard (démo)',
-                'status' => 'approved',
-                'approved_by' => $approverId,
-            ]);
-        }
-
-        foreach ($agents->random(min(8, $agents->count())) as $agent) {
-            $dateRef = $now->copy()->subDays(random_int(0, 10))->toDateString();
-            AttendanceJustification::updateOrCreate([
-                'agent_id' => $agent->id,
-                'date_reference' => $dateRef,
-                'kind' => 'absence',
-            ], [
-                'presence_agent_id' => null,
-                'justification' => 'Justification absence (démo)',
-                'status' => 'approved',
-                'approved_by' => $approverId,
-            ]);
-        }
-
-        $this->command?->info('✅ Données de démonstration insérées (stations, horaires, groupes, agents, plannings, présences, RH).');
+        ksort($ranges);
+        return $ranges;
     }
 }
+

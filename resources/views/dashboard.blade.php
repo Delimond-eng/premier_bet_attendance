@@ -46,7 +46,7 @@
                     <div class="card-body">
                         <div class="border rounded border-start border-start-primary d-flex align-items-center justify-content-between p-2 gap-2 flex-wrap mb-3">
                             <h2 class="card-title mb-0">Status Présences Agent</h2>
-                            <a href="#" class="btn btn-md btn-light">Voir détails</a>
+                            <a :href="detailsUrl" class="btn btn-md btn-light" @click.prevent="goDetails">Voir détails</a>
                         </div>
                         <div id="status-chart" class="mb-3"></div>
                         <div class="row">
@@ -74,7 +74,7 @@
                 <div class="card flex-fill">
                     <div class="card-body pb-sm-2">
                         <div class="border rounded border-start border-start-primary d-flex align-items-center justify-content-between p-2 gap-2 flex-wrap mb-3">
-                            <h2 class="card-title mb-0">Autorisation spéciale</h2>
+                            <h2 class="card-title mb-0">Congés & Autorisations</h2>
                             <div class="dropdown">
                                 <a href="javascript:void(0);" class="border btn btn-white btn-md d-inline-flex align-items-center" data-bs-toggle="dropdown">
                                     <i class="ti ti-calendar-due me-1 fs-14"></i>Mensuelle
@@ -105,16 +105,12 @@
                             <div class="col-sm-7">
                                 <div>
                                     <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-900 fs-7 me-1"></i>Malades</p>
-                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.maladies }}</span>
+                                        <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-900 fs-7 me-1"></i>Autorisations spéciales (approuvées)</p>
+                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.speciales }}</span>
                                     </div>
                                     <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-800 fs-7 me-1"></i>Congés</p>
+                                        <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-800 fs-7 me-1"></i>Cong&eacute;s (jours approuvés)</p>
                                         <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.conges }}</span>
-                                    </div>
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <p class="d-inline-flex align-items-center text-dark mb-0"><i class="ti ti-circle-filled text-primary-700 fs-7 me-1"></i>Autres</p>
-                                        <span class="badge fw-normal bg-light text-dark border rounded-pill fs-13">@{{ authorizations.autres }}</span>
                                     </div>
                                 </div>
                             </div>

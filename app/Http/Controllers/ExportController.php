@@ -759,7 +759,7 @@ class ExportController extends Controller
                 $s = $cell['status'] ?? null;
                 if ($s === 'present') $acc['present'] += 1;
                 else if ($s === 'retard' || $s === 'retard_justifie') $acc['retard'] += 1;
-                else if ($s === 'absent' || $s === 'absence_justifiee') $acc['absent'] += 1;
+                else if ($s === 'absent') $acc['absent'] += 1;
                 else if ($s === 'conge') $acc['conge'] += 1;
                 else if ($s === 'autorisation') $acc['autorisation'] += 1;
             }

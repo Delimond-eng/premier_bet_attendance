@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\AgentHistory;
+use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
+use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
@@ -16,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class AdminController extends Controller
@@ -26,12 +29,27 @@ class AdminController extends Controller
             $data = $request->validate([
                 'id' => 'nullable|integer',
                 'name' => 'required|string',
-                'code' => 'required|string|unique:sites,code,' . ($request->id ?? 'NULL'),
-                'latlng' => 'nullable|string',
+                'code' => 'nullable|string|unique:sites,code,' . ($request->id ?? 'NULL'),
                 'adresse' => 'required|string',
-                'phone' => 'nullable|string',
-                'presence' => 'nullable|integer',
             ]);
+
+            // Phone/GPS removed from the UI. Keep columns null to avoid stale values.
+            $data['latlng'] = null;
+            $data['phone'] = null;
+
+            $incomingCode = strtoupper(trim((string) ($data['code'] ?? '')));
+            $data['code'] = $incomingCode !== '' ? $incomingCode : null;
+
+            if (!empty($data['id'])) {
+                $existing = Station::find((int) $data['id']);
+                if ($existing && !$data['code']) {
+                    $data['code'] = $existing->code;
+                }
+            }
+
+            if (!$data['code']) {
+                $data['code'] = $this->generateUniqueStationCode($data['name']);
+            }
 
             $station = Station::updateOrCreate(['id' => $request->id], $data);
 
@@ -44,6 +62,30 @@ class AdminController extends Controller
             Log::error('createAgencieSite failed', ['error' => $e->getMessage()]);
             return response()->json(['errors' => [$e->getMessage()]], 500);
         }
+    }
+
+    private function generateUniqueStationCode(string $name): string
+    {
+        $base = strtoupper(Str::of($name)->ascii()->replaceMatches('/[^A-Za-z0-9 ]+/', ' ')->trim()->toString());
+        $parts = array_values(array_filter(preg_split('/\\s+/', $base) ?: []));
+        $prefix = 'ST';
+        if (count($parts) >= 2) {
+            $prefix = substr($parts[0], 0, 1) . substr($parts[1], 0, 1);
+        } elseif (count($parts) === 1) {
+            $prefix = substr($parts[0], 0, 2);
+        }
+        $prefix = strtoupper($prefix ?: 'ST');
+
+        for ($i = 0; $i < 25; $i += 1) {
+            $code = $prefix . random_int(1000, 9999);
+            $exists = Station::query()->where('code', $code)->exists();
+            if (!$exists) {
+                return $code;
+            }
+        }
+
+        // Very unlikely fallback.
+        return 'ST' . random_int(100000, 999999);
     }
 
     private function createDefaultSchedules(int $stationId): void
@@ -87,7 +129,9 @@ class AdminController extends Controller
                 'id' => 'nullable|integer',
                 'matricule' => 'required|string|unique:agents,matricule,' . ($request->id ?? 'NULL'),
                 'fullname' => 'required|string',
+                'fonction' => 'nullable|string',
                 'site_id' => 'required|integer|exists:sites,id',
+                'groupe_id' => 'nullable|integer|exists:agent_groups,id',
                 'status' => 'nullable|string',
                 'photo' => 'nullable|image|max:2048',
             ]);
@@ -134,6 +178,13 @@ class AdminController extends Controller
         $to = $request->query('to') ? Carbon::parse($request->query('to'))->endOfDay() : $date->copy()->endOfDay();
 
         $fromDate = $from->toDateString();
+        $today = Carbon::now('Africa/Kinshasa')->startOfDay();
+
+        // Ne jamais inclure les jours futurs dans les KPIs du dashboard.
+        if ($to->copy()->startOfDay()->gt($today)) {
+            $to = $today->copy()->endOfDay();
+        }
+
         $toDate = $to->toDateString();
         $toCursor = $to->copy()->startOfDay();
         $daysCount = max($from->copy()->startOfDay()->diffInDays($toCursor) + 1, 1);
@@ -141,18 +192,117 @@ class AdminController extends Controller
         $totalStations = Station::count();
         $totalAgents = Agent::count();
 
-        $presentAgents = PresenceAgents::query()
+        // Dashboard: stats en "agent-jours" sur la période.
+        // Règles:
+        // - Un jour OFF (planning) n'est ni présent ni absent.
+        // - Un agent sans pointage n'est absent que si le jour est "attendu" (non OFF)
+        //   et qu'il n'a ni congé approuvé, ni autorisation approuvée, ni justification d'absence approuvée.
+        $offByDay = AgentGroupPlanning::query()
+            ->whereBetween('date', [$fromDate, $toDate])
+            ->where('is_rest_day', true)
+            ->get(['agent_id', 'date'])
+            ->groupBy(fn ($p) => Carbon::parse($p->date)->toDateString());
+
+        $presencesByDay = PresenceAgents::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
             ->whereNotNull('started_at')
-            ->count();
+            ->get(['agent_id', 'date_reference', 'retard', 'started_at', 'ended_at'])
+            ->groupBy(fn (PresenceAgents $p) => Carbon::parse($p->date_reference)->toDateString());
 
-        $lateAgents = PresenceAgents::query()
+        $authByDay = AttendanceAuthorization::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
-            ->whereNotNull('started_at')
-            ->where('retard', 'oui')
-            ->count();
+            ->where('status', 'approved')
+            ->get(['agent_id', 'date_reference', 'type'])
+            ->groupBy(fn (AttendanceAuthorization $a) => Carbon::parse($a->date_reference)->toDateString());
 
-        $absentAgents = max(($totalAgents * $daysCount) - $presentAgents, 0);
+        $absenceJustifByDay = AttendanceJustification::query()
+            ->whereBetween('date_reference', [$fromDate, $toDate])
+            ->where('status', 'approved')
+            ->where('kind', 'absence')
+            ->get(['agent_id', 'date_reference'])
+            ->groupBy(fn (AttendanceJustification $j) => Carbon::parse($j->date_reference)->toDateString());
+
+        $conges = Conge::query()
+            ->where('status', 'approved')
+            ->whereDate('date_debut', '<=', $toDate)
+            ->whereDate('date_fin', '>=', $fromDate)
+            ->get(['agent_id', 'date_debut', 'date_fin']);
+
+        $labels = [];
+        $dates = [];
+        $seriesPresent = [];
+        $seriesLate = [];
+        $seriesAbsent = [];
+
+        $presentAgents = 0;
+        $lateAgents = 0;
+        $absentAgents = 0;
+        $expectedAgentDays = 0; // total "agent-jours" attendus (hors OFF)
+
+        $cursor = $from->copy()->startOfDay();
+        while ($cursor->lte($toCursor)) {
+            $d = $cursor->toDateString();
+
+            $offIds = array_values(array_unique(($offByDay[$d] ?? collect())->pluck('agent_id')->all()));
+            $offLookup = array_fill_keys($offIds, true);
+
+            $presentIds = array_values(array_unique(($presencesByDay[$d] ?? collect())->pluck('agent_id')->all()));
+            $presentLookup = array_fill_keys($presentIds, true);
+
+            $lateIds = array_values(array_unique(($presencesByDay[$d] ?? collect())
+                ->filter(fn ($p) => ($p->retard ?? null) === 'oui')
+                ->pluck('agent_id')
+                ->all()));
+            $lateLookup = array_fill_keys($lateIds, true);
+
+            $justifiedLookup = [];
+
+            foreach (($authByDay[$d] ?? collect()) as $a) {
+                $justifiedLookup[(int) $a->agent_id] = true;
+            }
+
+            foreach (($absenceJustifByDay[$d] ?? collect()) as $j) {
+                $justifiedLookup[(int) $j->agent_id] = true;
+            }
+
+            foreach ($conges as $c) {
+                try {
+                    $fromC = Carbon::parse($c->date_debut)->startOfDay();
+                    $toC = Carbon::parse($c->date_fin)->endOfDay();
+                    if ($cursor->betweenIncluded($fromC, $toC)) {
+                        $justifiedLookup[(int) $c->agent_id] = true;
+                    }
+                } catch (\Throwable $_) {
+                }
+            }
+
+            // OFF / présent => non compté comme justification.
+            foreach ($offLookup as $aid => $_) {
+                unset($justifiedLookup[$aid]);
+            }
+            foreach ($presentLookup as $aid => $_) {
+                unset($justifiedLookup[$aid]);
+            }
+
+            $expectedForDay = max($totalAgents - count($offLookup), 0);
+            $presentForDay = count($presentLookup);
+            $lateForDay = count($lateLookup);
+            $justifiedForDay = count($justifiedLookup);
+            $absentForDay = max($expectedForDay - $presentForDay - $justifiedForDay, 0);
+
+            $expectedAgentDays += $expectedForDay;
+            $presentAgents += $presentForDay;
+            $lateAgents += $lateForDay;
+            $absentAgents += $absentForDay;
+
+            $dates[] = $d;
+            $labels[] = $cursor->format('d/m');
+            $seriesPresent[] = $presentForDay;
+            $seriesLate[] = $lateForDay;
+            $seriesAbsent[] = $absentForDay;
+
+            $cursor->addDay();
+        }
 
         $workedMinutes = 0;
         $driver = DB::connection()->getDriverName();
@@ -184,38 +334,8 @@ class AdminController extends Controller
         }
 
         $workedHours = round($workedMinutes / 60, 1);
-        $expectedAgentDays = max($totalAgents * $daysCount, 1);
-        $weeklyAverage = round(($presentAgents / $expectedAgentDays) * 100, 1);
-
-        $aggregate = PresenceAgents::query()
-            ->selectRaw('DATE(date_reference) as d')
-            ->selectRaw('SUM(CASE WHEN started_at IS NOT NULL THEN 1 ELSE 0 END) as present_count')
-            ->selectRaw("SUM(CASE WHEN retard = 'oui' THEN 1 ELSE 0 END) as late_count")
-            ->whereBetween('date_reference', [$fromDate, $toDate])
-            ->groupBy('d')
-            ->orderBy('d')
-            ->get()
-            ->keyBy('d');
-
-        $labels = [];
-        $dates = [];
-        $seriesPresent = [];
-        $seriesLate = [];
-        $seriesAbsent = [];
-
-        $cursor = $from->copy();
-        while ($cursor->lte($toCursor)) {
-            $d = $cursor->toDateString();
-            $dates[] = $d;
-            $labels[] = $cursor->format('d/m');
-            $p = (int) ($aggregate[$d]->present_count ?? 0);
-            $l = (int) ($aggregate[$d]->late_count ?? 0);
-            $a = max($totalAgents - $p, 0);
-            $seriesPresent[] = $p;
-            $seriesLate[] = $l;
-            $seriesAbsent[] = $a;
-            $cursor->addDay();
-        }
+        $expectedAgentDaysForAvg = max((int) $expectedAgentDays, 1);
+        $weeklyAverage = round(($presentAgents / $expectedAgentDaysForAvg) * 100, 1);
 
         $latest = PresenceAgents::query()
             ->with(['agent', 'stationCheckIn', 'assignedStation'])
@@ -225,22 +345,33 @@ class AdminController extends Controller
             ->limit(10)
             ->get();
 
-        $authMaladie = AttendanceAuthorization::query()
+        // Congés sur la période en "agent-jours" (aligné avec les autorisations qui sont au jour).
+        $authConges = 0;
+        foreach ($conges as $c) {
+            try {
+                $startC = Carbon::parse($c->date_debut)->startOfDay();
+                $endC = Carbon::parse($c->date_fin)->endOfDay();
+                $startOverlap = $startC->greaterThan($from) ? $startC : $from;
+                $endOverlap = $endC->lessThan($to) ? $endC : $to;
+                if ($startOverlap->lte($endOverlap)) {
+                    $authConges += $startOverlap->copy()->startOfDay()->diffInDays($endOverlap->copy()->startOfDay()) + 1;
+                }
+            } catch (\Throwable $_) {
+            }
+        }
+
+        // Autorisations spéciales sur la période (au jour), sans dépendre d'un libellé exact.
+        // On exclut "retard/absence" qui sont des cas opérationnels distincts.
+        $authSpeciales = AttendanceAuthorization::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
             ->where('status', 'approved')
-            ->where('type', 'maladie')
+            ->whereNotIn('type', ['retard', 'absence'])
             ->count();
 
-        $authConges = Conge::query()
-            ->where('status', 'approved')
-            ->whereDate('date_debut', '<=', $toDate)
-            ->whereDate('date_fin', '>=', $fromDate)
-            ->count();
-
-        $authAutres = AttendanceAuthorization::query()
+        $missedPunches = PresenceAgents::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
-            ->where('status', 'approved')
-            ->whereIn('type', ['deuil', 'autre'])
+            ->whereNotNull('started_at')
+            ->whereNull('ended_at')
             ->count();
 
         return response()->json([
@@ -253,9 +384,8 @@ class AdminController extends Controller
                 'absents' => $absentAgents,
             ],
             'authorizations' => [
-                'maladies' => $authMaladie,
                 'conges' => $authConges,
-                'autres' => $authAutres,
+                'speciales' => $authSpeciales,
             ],
             'charts' => [
                 'range' => [
@@ -272,7 +402,7 @@ class AdminController extends Controller
             ],
             'weekly_kpis' => [
                 'worked_hours' => $workedHours,
-                'missed_punches' => (int) $absentAgents,
+                'missed_punches' => (int) $missedPunches,
                 'weekly_average' => $weeklyAverage,
             ],
             'latest_checkins' => $latest,
@@ -457,11 +587,13 @@ class AdminController extends Controller
                 $file->move($destination, $filename);
                 // Générer un lien complet sans utiliser storage
                 $data['photo'] = url('uploads/agents/' . $filename);
+
+                $agent->update([
+                    "photo"=>$data["photo"]
+                ]);
             }
 
-            $agent->update([
-                "photo"=>$data["photo"]
-            ]);
+            
 
             return response()->json([
                 "status"=>"success",

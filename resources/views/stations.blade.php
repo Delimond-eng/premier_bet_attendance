@@ -84,8 +84,8 @@
                                     </td>
                                     <td>
                                         <div class="action-icon d-inline-flex">
-                                            <a href="javascript:void(0);" class="me-2 text-info" @click="edit(s)"><i class="ti ti-edit"></i></a>
-                                            <a href="javascript:void(0);" class="me-2 text-danger" @click="remove(s)"><i class="ti ti-trash"></i></a>
+                                            <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="s.id"><i class="ti ti-edit"></i></a>
+                                            <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="s.id"><i class="ti ti-trash"></i></a>
                                         </div>
                                     </td>
                                 </tr>
@@ -119,7 +119,13 @@
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Code<span class="text-danger"> *</span></label>
-                                        <input type="text" class="form-control" v-model="form.code" placeholder="ex: DG001">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" v-model="form.code" @input="onCodeInput" placeholder="ex: DG001">
+                                            <button class="btn btn-outline-secondary" type="button" @click="regenerateCode" :disabled="!!form.id || !form.name">
+                                                Regenerer
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Code genere automatiquement a partir du nom (modifiable).</small>
                                     </div>
                                 </div>
 
@@ -127,27 +133,6 @@
                                     <div class="mb-3">
                                         <label class="form-label">Adresse<span class="text-danger"> *</span></label>
                                         <input type="text" class="form-control" v-model="form.adresse" placeholder="Adresse...">
-                                    </div>
-                                </div>
-
-                                <div class="col-md-12">
-                                    <div class="mb-3">
-                                        <label class="form-label">Coordonnées GPS (lat,lng)<span class="text-danger"> (facultatif)</span></label>
-                                        <input type="text" class="form-control" v-model="form.latlng" placeholder="-4.321,15.312">
-                                    </div>
-                                </div>
-
-                                <div class="col-md-12">
-                                    <div class="mb-3">
-                                        <label class="form-label">Téléphone<span class="text-danger"> (facultatif)</span></label>
-                                        <input type="text" class="form-control" v-model="form.phone" placeholder="+243...">
-                                    </div>
-                                </div>
-
-                                <div class="col-md-12">
-                                    <div class="mb-3">
-                                        <label class="form-label">Nombre d'agents attendus<span class="text-danger"> (facultatif)</span></label>
-                                        <input type="number" class="form-control" v-model="form.presence" placeholder="0">
                                     </div>
                                 </div>
 
@@ -169,4 +154,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/stations.js") }}"></script>
 @endpush
-

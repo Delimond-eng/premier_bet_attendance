@@ -168,7 +168,7 @@
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <span class="avatar avatar-sm me-2">
-                                            <img :src="row.agent?.photo || 'https://smarthr.co.in/demo/html/template/assets/img/users/user-26.jpg'" class="rounded-circle" alt="img">
+                                            <img :src="row.agent?.photo || '{{asset("assets/img/avatar.jpg")}}'" class="rounded-circle" alt="img">
                                         </span>
                                         <div>
                                             <h6 class="mb-0">@{{ row.agent?.fullname ?? '-' }}</h6>

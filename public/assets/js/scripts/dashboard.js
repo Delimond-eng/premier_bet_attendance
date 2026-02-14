@@ -15,9 +15,8 @@ new Vue({
                 absents: 0,
             },
             authorizations: {
-                maladies: 0,
                 conges: 0,
-                autres: 0,
+                speciales: 0,
             },
             charts: {
                 labels: [],
@@ -56,6 +55,12 @@ new Vue({
     },
 
     methods: {
+        goDetails() {
+            const url = this.detailsUrl;
+            if (!url) return;
+            window.location.href = url;
+        },
+
         applyMode() {
             const m = window.moment;
             const now = m ? m() : null;
@@ -68,8 +73,9 @@ new Vue({
 
             if (this.range.mode === "week") {
                 if (m) {
-                    this.range.from = now.clone().startOf("week").format("YYYY-MM-DD");
-                    this.range.to = now.clone().endOf("week").format("YYYY-MM-DD");
+                    // Align with planning rotations: week starts on Monday (ISO week).
+                    this.range.from = now.clone().startOf("isoWeek").format("YYYY-MM-DD");
+                    this.range.to = now.clone().endOf("isoWeek").format("YYYY-MM-DD");
                 }
             }
 
@@ -211,17 +217,16 @@ new Vue({
 
             const options = {
                 series: [
-                    this.authorizations.maladies || 0,
                     this.authorizations.conges || 0,
-                    this.authorizations.autres || 0,
+                    this.authorizations.speciales || 0,
                 ],
                 chart: {
                     type: "donut",
                     height: 75,
                     toolbar: { show: false },
                 },
-                labels: ["Malades", "Congés", "Autres"],
-                colors: ["#0DCAF0", "#6F42C1", "#ADB5BD"],
+                labels: ["Congés (jours)", "Autorisations spéciales"],
+                colors: ["#6F42C1", "#0DCAF0"],
                 legend: { show: false },
                 dataLabels: { enabled: false },
             };
@@ -311,6 +316,38 @@ new Vue({
                     },
                 },
             });
+        },
+    },
+
+    computed: {
+        detailsUrl() {
+            const mode = this.range?.mode || "week";
+            const from = this.range?.from || null;
+
+            if (mode === "today") {
+                const params = new URLSearchParams();
+                if (from) params.set("date", String(from));
+                return `/presences/live?${params.toString()}`;
+            }
+
+            if (mode === "week") {
+                const params = new URLSearchParams();
+                if (from) params.set("date", String(from));
+                return `/reports/weekly?${params.toString()}`;
+            }
+
+            if (mode === "month") {
+                const base = from ? new Date(String(from) + "T00:00:00") : new Date();
+                const params = new URLSearchParams();
+                params.set("month", String(base.getMonth() + 1));
+                params.set("year", String(base.getFullYear()));
+                return `/reports/monthly/view?${params.toString()}`;
+            }
+
+            // custom => redirige vers le journalier (date de début)
+            const params = new URLSearchParams();
+            if (from) params.set("date", String(from));
+            return `/presences/live?${params.toString()}`;
         },
     },
 });

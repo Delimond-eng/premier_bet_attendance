@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
@@ -16,6 +17,8 @@ class AbsenceReportService
      */
     public function buildAbsenceRows(Carbon $start, Carbon $end, ?int $stationId = null): array
     {
+        $today = Carbon::now('Africa/Kinshasa')->startOfDay();
+
         $start = $start->copy()->startOfDay();
         $end = $end->copy()->startOfDay();
         if ($start->gt($end)) {
@@ -29,6 +32,14 @@ class AbsenceReportService
             ->get();
 
         $agentIds = $agents->pluck('id')->all();
+
+        $offKeys = AgentGroupPlanning::query()
+            ->whereIn('agent_id', $agentIds)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->where('is_rest_day', true)
+            ->get(['agent_id', 'date'])
+            ->map(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->toDateString())
+            ->flip();
 
         $presentKeys = PresenceAgents::query()
             ->whereIn('agent_id', $agentIds)
@@ -63,9 +74,15 @@ class AbsenceReportService
         $rows = [];
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
+            if ($cursor->copy()->startOfDay()->gt($today)) {
+                break; // on ne reporte pas les dates futures
+            }
             $d = $cursor->toDateString();
             foreach ($agents as $agent) {
                 $k = $agent->id . '|' . $d;
+                if (isset($offKeys[$k])) {
+                    continue;
+                }
                 if (isset($presentKeys[$k])) {
                     continue;
                 }
@@ -135,4 +152,3 @@ class AbsenceReportService
         return $rows;
     }
 }
-
