@@ -21,25 +21,29 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
-                <div class="me-2 mb-2">
-                    <div class="dropdown">
-                        <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
-                            <i class="ti ti-file-export me-1"></i>Exporter
-                        </a>
-                        <ul class="dropdown-menu  dropdown-menu-end p-3">
-                            <li>
-                                <a :href="exportPdfUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a>
-                            </li>
-                            <li>
-                                <a :href="exportExcelUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel</a>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
+                @can('agents.export')
+                    <div class="me-2 mb-2"> 
+                        <div class="dropdown"> 
+                            <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown"> 
+                                <i class="ti ti-file-export me-1"></i>Exporter 
+                            </a> 
+                            <ul class="dropdown-menu  dropdown-menu-end p-3"> 
+                                <li> 
+                                    <a :href="exportPdfUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a> 
+                                </li> 
+                                <li> 
+                                    <a :href="exportExcelUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel</a> 
+                                </li> 
+                            </ul> 
+                        </div> 
+                    </div> 
+                @endcan
 
-                <div class="mb-2">
-                    <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="resetCreateForm(); openEmployeeModal()"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a>
-                </div>
+                @can('agents.create')
+                    <div class="mb-2"> 
+                        <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="resetCreateForm(); openEmployeeModal()"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a> 
+                    </div> 
+                @endcan
 
             </div>
         </div>
@@ -213,16 +217,24 @@
                                             <i class="ti ti-point-filled me-1"></i>Inactif
                                         </span>
                                     </td>
-                                    <td>
-                                            <div class="d-inline-flex">
-                                                <div class="action-icon d-inline-flex me-2">
-                                                <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a>
-                                                <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a>
-                                            </div>
-                                            <a class="btn btn-xs btn-info" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time me-1"></i> Infos</a>
-                                        </div>
-                                    </td>
-                                </tr>
+                                    <td> 
+                                        <div class="d-inline-flex"> 
+                                            @canany(['agents.update','agents.delete'])
+                                                <div class="action-icon d-inline-flex me-2"> 
+                                                    @can('agents.update')
+                                                        <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a> 
+                                                    @endcan
+                                                    @can('agents.delete')
+                                                        <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a> 
+                                                    @endcan
+                                                </div> 
+                                            @endcanany
+                                            @can('agents.view')
+                                                <a class="btn btn-xs btn-info" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time me-1"></i> Infos</a> 
+                                            @endcan
+                                        </div> 
+                                    </td> 
+                                </tr> 
                         </tbody>
                     </table>
                 </div>

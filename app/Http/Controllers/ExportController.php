@@ -716,11 +716,18 @@ class ExportController extends Controller
             foreach (($days ?? []) as $d => $cell) {
                 $s = $cell['status'] ?? null;
                 if ($s === 'present') $acc['present'] += 1;
-                else if ($s === 'retard') $acc['retard'] += 1;
+                else if ($s === 'retard') {
+                    $acc['present'] += 1; // retard = présence
+                    $acc['retard'] += 1;
+                }
                 else if ($s === 'absent') $acc['absent'] += 1;
                 else if ($s === 'conge') $acc['conge'] += 1;
                 else if ($s === 'autorisation') $acc['autorisation'] += 1;
-                else if ($s === 'retard_justifie') $acc['retard_justifie'] += 1;
+                else if ($s === 'retard_justifie') {
+                    $acc['present'] += 1; // retard justifié = présence
+                    $acc['retard'] += 1;
+                    $acc['retard_justifie'] += 1;
+                }
                 else if ($s === 'absence_justifiee') $acc['absence_justifiee'] += 1;
             }
 
@@ -758,6 +765,7 @@ class ExportController extends Controller
             foreach (($days ?? []) as $cell) {
                 $s = $cell['status'] ?? null;
                 if ($s === 'present') $acc['present'] += 1;
+                else if ($s === 'retard' || $s === 'retard_justifie') $acc['present'] += 1;
                 else if ($s === 'retard' || $s === 'retard_justifie') $acc['retard'] += 1;
                 else if ($s === 'absent') $acc['absent'] += 1;
                 else if ($s === 'conge') $acc['conge'] += 1;

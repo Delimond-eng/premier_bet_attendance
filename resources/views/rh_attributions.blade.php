@@ -37,6 +37,7 @@
                             <th>Type</th>
                             <th>Du</th>
                             <th>Au</th>
+                            <th>Consommés</th>
                             <th>Statut</th>
                             <th></th>
                         </tr>
@@ -61,7 +62,16 @@
                             <td>@{{ c.date_debut_label ?? c.date_debut }}</td>
                             <td>@{{ c.date_fin_label ?? c.date_fin }}</td>
                             <td>
-                                <span class="badge" :class="statusClass(c.status)">@{{ statusLabel(c.status) }}</span>
+                                <span v-if="c.days_consumed != null && c.days_total != null">
+                                    @{{ c.days_consumed }}/@{{ c.days_total }}
+                                </span>
+                                <span v-else>-</span>
+                            </td>
+                            <td>
+                                <span class="badge me-1" :class="statusClass(c.status)">@{{ statusLabel(c.status) }}</span>
+                                <span class="badge" :class="periodClass(c.period_status)">
+                                    @{{ periodLabel(c.period_status) }}
+                                </span>
                             </td>
                             <td class="text-end">
                                 <a href="javascript:void(0);" class="me-2 text-info" @click="edit(c)"><i class="ti ti-edit"></i></a>
@@ -148,6 +158,5 @@
 @endsection
 
 @push("scripts")
-    <script type="module" src="{{ asset("assets/js/scripts/rh-attributions.js") }}"></script>
+    <script type="module" src="{{ asset("assets/js/scripts/rh-attributions.js") . '?v=' . filemtime(public_path('assets/js/scripts/rh-attributions.js')) }}"></script>
 @endpush
-

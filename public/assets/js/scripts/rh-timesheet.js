@@ -35,29 +35,35 @@ function initOrRefreshDatatable(tableEl) {
     });
 }
 
-function summarizeMatrix(matrix) {
-    const acc = {
-        agents: 0,
-        present: 0,
-        retard: 0,
-        absent: 0,
-        conge: 0,
-        autorisation: 0,
-    };
-
-    Object.keys(matrix || {}).forEach((agent) => {
-        acc.agents += 1;
-        const days = matrix[agent] || {};
-        Object.keys(days).forEach((d) => {
-            const s = days[d]?.status;
-            if (s === "present") acc.present += 1;
-            else if (s === "retard" || s === "retard_justifie") acc.retard += 1;
-            else if (s === "absent" || s === "absence_justifiee") acc.absent += 1;
-            else if (s === "conge") acc.conge += 1;
-            else if (s === "autorisation") acc.autorisation += 1;
-        });
-    });
-
+function summarizeMatrix(matrix) { 
+    const acc = { 
+        agents: 0, 
+        present: 0, 
+        retard: 0, 
+        absent: 0, 
+        conge: 0, 
+        autorisation: 0, 
+    }; 
+ 
+    Object.keys(matrix || {}).forEach((agent) => { 
+        acc.agents += 1; 
+        const days = matrix[agent] || {}; 
+        Object.keys(days).forEach((d) => { 
+            const s = days[d]?.status; 
+            if (s === "present") acc.present += 1; 
+            else if (s === "retard") { 
+                acc.present += 1; // retard = présent 
+                acc.retard += 1; 
+            } else if (s === "retard_justifie") { 
+                acc.present += 1; // retard justifié = présent 
+                acc.retard += 1; 
+            } 
+            else if (s === "absent") acc.absent += 1; 
+            else if (s === "conge") acc.conge += 1; 
+            else if (s === "autorisation") acc.autorisation += 1; 
+        }); 
+    }); 
+ 
     return acc;
 }
 

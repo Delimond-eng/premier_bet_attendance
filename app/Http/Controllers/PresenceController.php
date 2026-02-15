@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\AgentGroup;
+use App\Models\AgentGroupAssignment;
 use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
@@ -11,18 +12,19 @@ use App\Models\Conge;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
-use App\Services\AttendanceReportService;
-use App\Services\AbsenceReportService;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-
-class PresenceController extends Controller
-{
+use App\Services\AttendanceReportService; 
+use App\Services\AbsenceReportService; 
+use Barryvdh\DomPDF\Facade\Pdf; 
+use Carbon\Carbon; 
+use Illuminate\Http\JsonResponse; 
+use Illuminate\Http\Request; 
+use Illuminate\Pagination\LengthAwarePaginator; 
+use Illuminate\Support\Facades\DB; 
+use Illuminate\Support\Facades\Log; 
+use Illuminate\Validation\ValidationException; 
+ 
+class PresenceController extends Controller 
+{ 
     /**
      * Enregistre un pointage (check-in / check-out).
      *
@@ -31,19 +33,27 @@ class PresenceController extends Controller
      * - La présence conserve la station d’affectation (site_id) au moment du pointage.
      * - Plus de logique photo (champ ignoré si envoyé).
      */
-    public function createPresenceAgent(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'matricule' => 'required|string|exists:agents,matricule',
-            'key' => 'required|string|in:check-in,check-out',
-            'station_id' => 'nullable|integer|exists:sites,id',
-            'coordonnees' => 'nullable|string', // "lat,lng" (mobile)
-        ]);
-
-        $now = Carbon::now()->setTimezone('Africa/Kinshasa');
-
-        $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail();
-        $assignedStationId = $agent->site_id;
+    public function createPresenceAgent(Request $request): JsonResponse 
+    { 
+        try { 
+            $data = $request->validate([ 
+                'matricule' => 'required|string|exists:agents,matricule', 
+                'key' => 'required|string|in:check-in,check-out', 
+                'station_id' => 'nullable|integer|exists:sites,id', 
+                'coordonnees' => 'nullable|string', // "lat,lng" (mobile) 
+            ]); 
+        } catch (ValidationException $e) { 
+            // Important: keep HTTP 200 to avoid client conflicts (Flutter), encode failures in payload only.
+            return response()->json([ 
+                'status' => 'error', 
+                'errors' => $e->validator->errors()->all(), 
+            ], 200); 
+        } 
+ 
+        $now = Carbon::now()->setTimezone('Africa/Kinshasa'); 
+ 
+        $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail(); 
+        $assignedStationId = $agent->site_id; 
 
         $stationId = $this->resolveStationId(
             stationId: $data['station_id'] ?? null,
@@ -51,23 +61,46 @@ class PresenceController extends Controller
             fallbackAssignedStationId: $assignedStationId,
         );
 
-        if (!$stationId) {
-            return response()->json(['errors' => ['Station introuvable pour ce pointage.']], 422);
-        }
+        if (!$stationId) { 
+            return response()->json(['errors' => ['Station introuvable pour ce pointage.']]); 
+        } 
+ 
+        // On ne requiert un horaire QUE pour le check-in (pour rÃ©soudre date_reference et le retard).
+        // Le check-out s'appuie sur la prÃ©sence ouverte (started_at non null + ended_at null).
+        $horaire = null; 
+        $dateReference = $now->copy()->startOfDay(); 
+        if ($data['key'] === 'check-in') { 
+            $horaire = $this->getHoraireForAgent($agent, $now); 
+            if (!$horaire) { 
+                return response()->json([ 
+                    'status' => 'error', 
+                    'errors' => ['Horaire introuvable pour cet agent (planning/groupe/agent/station).'], 
+                ], 200); 
+            } 
+            $dateReference = $this->getDateReference($now, $horaire); 
+        } 
+ 
+        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in. 
+        if ($data['key'] === 'check-in') { 
+            $gid = AgentGroupAssignment::query() 
+                ->where('agent_id', $agent->id)
+                ->whereDate('start_date', '<=', $dateReference->toDateString())
+                ->where(function ($q) use ($dateReference) {
+                    $q->whereNull('end_date')->orWhereDate('end_date', '>=', $dateReference->toDateString());
+                })
+                ->orderByDesc('start_date')
+                ->value('agent_group_id');
+            $gid = $gid ? (int) $gid : ($agent->groupe_id ? (int) $agent->groupe_id : null);
 
-        $horaire = $this->getHoraireForAgent($agent, $now);
-        $dateReference = $horaire ? $this->getDateReference($now, $horaire) : $now->copy()->startOfDay();
-
-        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in.
-        if ($data['key'] === 'check-in') {
             $isOffDay = AgentGroupPlanning::query()
                 ->where('agent_id', $agent->id)
+                ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
                 ->whereDate('date', $dateReference->toDateString())
                 ->where('is_rest_day', true)
                 ->exists();
 
             if ($isOffDay) {
-                return response()->json(['errors' => ['Jour OFF: pointage non autorise.']], 422);
+                return response()->json(['errors' => ['Jour OFF: pointage non autorise.']]);
             }
         }
 
@@ -85,7 +118,7 @@ class PresenceController extends Controller
                 'agent_id' => $agent->id ?? null,
             ]);
 
-            return response()->json(['errors' => ['Erreur interne lors du pointage.']], 500);
+            return response()->json(['errors' => ['Erreur interne lors du pointage.']]);
         }
     }
 
@@ -97,7 +130,7 @@ class PresenceController extends Controller
             ->first();
 
         if ($existing && $existing->started_at) {
-            return response()->json(['errors' => ['Pointage d’entrée déjà effectué pour cette période.']], 422);
+            return response()->json(['errors' => ['Pointage d’entrée déjà effectué pour cette période.']]);
         }
 
         $retard = 'non';
@@ -140,7 +173,7 @@ class PresenceController extends Controller
             ->first();
 
         if (!$presence) {
-            return response()->json(['errors' => ['Aucun pointage d’entrée ouvert trouvé.']], 422);
+            return response()->json(['errors' => ['Aucun pointage d’entrée ouvert trouvé.']] );
         }
 
         $startedAt = Carbon::parse($presence->started_at);
@@ -211,57 +244,98 @@ class PresenceController extends Controller
             ->first();
     }
 
-    private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire
-    {
-        $date = $now->toDateString();
-        $yesterday = $now->copy()->subDay()->toDateString();
+    private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire 
+    { 
+        $date = $now->toDateString(); 
+        $yesterday = $now->copy()->subDay()->toDateString(); 
 
-        // Night shifts: between 00:00 and the shift end time, the "reference day" is yesterday.
-        // So we first check yesterday's planning if it points to an overnight horaire.
-        $planningYesterday = AgentGroupPlanning::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date', $yesterday)
-            ->where('is_rest_day', false)
-            ->first();
+        // Resolve active group assignment for a given date (prefer assignments; fallback to agent.groupe_id).
+        $groupIdFor = function (string $d) use ($agent): ?int {
+            $a = AgentGroupAssignment::query()
+                ->where('agent_id', $agent->id)
+                ->whereDate('start_date', '<=', $d)
+                ->where(function ($q) use ($d) {
+                    $q->whereNull('end_date')->orWhereDate('end_date', '>=', $d);
+                })
+                ->orderByDesc('start_date')
+                ->first(['agent_group_id']);
 
-        if ($planningYesterday?->horaire_id) {
-            $h = PresenceHoraire::find($planningYesterday->horaire_id);
-            if ($h) {
-                try {
-                    $heureDebut = Carbon::createFromTimeString($h->started_at);
-                    $heureFin = Carbon::createFromTimeString($h->ended_at);
-                    if ($heureFin->lt($heureDebut)) {
-                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at);
-                        if ($now->lt($limiteFin)) {
-                            return $h;
-                        }
-                    }
-                } catch (\Throwable $_) {
-                }
+            if ($a?->agent_group_id) {
+                return (int) $a->agent_group_id;
             }
-        }
 
-        $planning = AgentGroupPlanning::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date', $date)
-            ->where('is_rest_day', false)
-            ->first();
-
-        if ($planning?->horaire_id) {
-            return PresenceHoraire::find($planning->horaire_id);
-        }
-
-        // Default schedule from agent's group (if any)
-        if ($agent->groupe_id) {
-            $group = AgentGroup::query()->with('horaire')->find($agent->groupe_id);
-            if ($group?->horaire_id) {
-                return $group->horaire ?? PresenceHoraire::find($group->horaire_id);
-            }
-        }
-
-        if ($agent->horaire_id) {
-            return PresenceHoraire::find($agent->horaire_id);
-        }
+            return $agent->groupe_id ? (int) $agent->groupe_id : null; 
+        }; 
+ 
+        $groupById = function (?int $gid): ?AgentGroup { 
+            if (!$gid) { 
+                return null; 
+            } 
+            return AgentGroup::query()->find($gid, ['id', 'horaire_id']); 
+        }; 
+ 
+        $gidToday = $groupIdFor($date); 
+        $groupToday = $groupById($gidToday); 
+        $isFlexibleToday = $groupToday && empty($groupToday->horaire_id); 
+ 
+        $gidYesterday = $groupIdFor($yesterday); 
+        $groupYesterday = $groupById($gidYesterday); 
+        $isFlexibleYesterday = $groupYesterday && empty($groupYesterday->horaire_id); 
+ 
+        $planningFor = function (string $d) use ($agent, $groupIdFor) { 
+            $gid = $groupIdFor($d); 
+            return AgentGroupPlanning::query() 
+                ->where('agent_id', $agent->id) 
+                ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid)) 
+                ->whereDate('date', $d) 
+                ->where('is_rest_day', false) 
+                ->first(); 
+        }; 
+ 
+        // Night shifts: between 00:00 and the shift end time, the reference schedule can be yesterday's planning. 
+        $planningYesterday = $planningFor($yesterday); 
+        if ($planningYesterday?->horaire_id) { 
+            $h = PresenceHoraire::find($planningYesterday->horaire_id); 
+            if ($h) { 
+                try { 
+                    $heureDebut = Carbon::createFromTimeString($h->started_at); 
+                    $heureFin = Carbon::createFromTimeString($h->ended_at); 
+                    if ($heureFin->lt($heureDebut)) { 
+                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at); 
+                        if ($now->lt($limiteFin)) { 
+                            return $h; 
+                        } 
+                    } 
+                } catch (\Throwable $_) { 
+                } 
+            } 
+        } 
+ 
+        // For flexible groups, do not fallback to agent/group/station defaults: the planning row is the source of truth.
+        if ($isFlexibleYesterday && $planningYesterday && empty($planningYesterday->horaire_id)) { 
+            return null; 
+        } 
+ 
+        $planning = $planningFor($date); 
+        if ($planning?->horaire_id) { 
+            return PresenceHoraire::find($planning->horaire_id); 
+        } 
+ 
+        if ($isFlexibleToday) { 
+            return null; 
+        } 
+ 
+        // Default schedule from the active group (if any)
+        if ($gidToday) { 
+            $group = AgentGroup::query()->with('horaire')->find($gidToday); 
+            if ($group?->horaire_id) { 
+                return $group->horaire ?? PresenceHoraire::find($group->horaire_id); 
+            } 
+        } 
+ 
+        if ($agent->horaire_id) { 
+            return PresenceHoraire::find($agent->horaire_id); 
+        } 
 
         if ($agent->site_id) {
             return PresenceHoraire::query()->where('site_id', $agent->site_id)->orderBy('started_at')->first();
@@ -856,7 +930,7 @@ class PresenceController extends Controller
 
         $station = Station::query()->find((int) $data['station_id']);
         if (!$station) {
-            return response()->json(['errors' => ['Station introuvable.']], 404);
+            return response()->json(['errors' => ['Station introuvable.']]);
         }
 
         return response()->json([

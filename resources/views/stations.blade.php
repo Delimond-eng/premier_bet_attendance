@@ -20,9 +20,11 @@
                 </nav>
             </div>
 
-            <a href="#" data-bs-target="#add_station" data-bs-toggle="modal" class="btn btn-primary-gradient">
-                <i class="ti ti-plus"></i> Nouvelle station
-            </a>
+            @can('stations.create')
+                <a href="#" data-bs-target="#add_station" data-bs-toggle="modal" class="btn btn-primary-gradient">
+                    <i class="ti ti-plus"></i> Nouvelle station
+                </a>
+            @endcan
         </div>
         <!-- /Breadcrumb -->
 
@@ -40,7 +42,9 @@
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end p-3">
                                     <li>
-                                        <a href="{{ route('stations.qrcode') }}" class="dropdown-item rounded-1">Télécharger les qrcodes</a>
+                                        @can('stations.export')
+                                            <a href="{{ route('stations.qrcode') }}" class="dropdown-item rounded-1">Télécharger les qrcodes</a>
+                                        @endcan
                                     </li>
                                 </ul>
                             </div>
@@ -83,10 +87,16 @@
                                         <div class="badge bg-warning fs-13 rounded-xxl py-2">@{{ s.late_count ?? 0 }}</div>
                                     </td>
                                     <td>
-                                        <div class="action-icon d-inline-flex">
-                                            <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="s.id"><i class="ti ti-edit"></i></a>
-                                            <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="s.id"><i class="ti ti-trash"></i></a>
-                                        </div>
+                                        @canany(['stations.update','stations.delete'])
+                                            <div class="action-icon d-inline-flex">
+                                                @can('stations.update')
+                                                    <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="s.id"><i class="ti ti-edit"></i></a>
+                                                @endcan
+                                                @can('stations.delete')
+                                                    <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="s.id"><i class="ti ti-trash"></i></a>
+                                                @endcan
+                                            </div>
+                                        @endcanany
                                     </td>
                                 </tr>
                                 </tbody>
@@ -97,7 +107,8 @@
             </div>
         </div>
 
-        <div class="modal fade" id="add_station" aria-modal="true" role="dialog">
+        @canany(['stations.create','stations.update'])
+            <div class="modal fade" id="add_station" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -147,7 +158,8 @@
                     </form>
                 </div>
             </div>
-        </div>
+            </div>
+        @endcanany
     </div>
 @endsection
 

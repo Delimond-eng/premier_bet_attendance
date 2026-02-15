@@ -1,5 +1,4 @@
 <div class="sidebar" id="sidebar">
-    <!-- Logo -->
     <div class="sidebar-logo">
         <a href="/" class="logo logo-normal">
             <span class="salama-logo salama-logo--normal" aria-label="SALAMA ATTENDANCE">
@@ -31,24 +30,25 @@
             </span>
         </a>
     </div>
-    <!-- /Logo -->
+
     <div class="modern-profile p-3 pb-0">
         <div class="text-center rounded bg-light p-3 mb-4 user-profile">
             <div class="avatar avatar-lg online mb-3">
-                <img src="{{asset("assets/img/profiles/avatar-02.jpg")}}" alt="Img" class="img-fluid rounded-circle">
+                <img src="{{ asset('assets/img/profiles/avatar-02.jpg') }}" alt="Img" class="img-fluid rounded-circle">
             </div>
-            <h6 class="fs-12 fw-normal mb-1">{{Auth::user()->name}}</h6>
-            <p class="fs-10">{{Auth::user()->role}}</p>
+            <h6 class="fs-12 fw-normal mb-1">{{ Auth::user()->name }}</h6>
+            <p class="fs-10">{{ Auth::user()->getRoleNames()->first() ?? Auth::user()->role }}</p>
         </div>
     </div>
+
     <div class="sidebar-header p-3 pb-0 pt-2">
         <div class="text-center rounded bg-light p-2 mb-4 sidebar-profile d-flex align-items-center">
             <div class="avatar avatar-md onlin">
-                <img src="{{asset("assets/img/profiles/avatar-02.jpg")}}" alt="Img" class="img-fluid rounded-circle">
+                <img src="{{ asset('assets/img/profiles/avatar-02.jpg') }}" alt="Img" class="img-fluid rounded-circle">
             </div>
             <div class="text-start sidebar-profile-info ms-2">
-                <h6 class="fs-12 fw-normal mb-1">{{Auth::user()->name}}</h6>
-                <p class="fs-10">{{Auth::user()->role}}</p>
+                <h6 class="fs-12 fw-normal mb-1">{{ Auth::user()->name }}</h6>
+                <p class="fs-10">{{ Auth::user()->getRoleNames()->first() ?? Auth::user()->role }}</p>
             </div>
         </div>
         <div class="input-group input-group-flat d-inline-flex mb-4">
@@ -61,103 +61,151 @@
             </span>
         </div>
     </div>
+
     <div class="sidebar-inner slimscroll">
         <div id="sidebar-menu" class="sidebar-menu">
             <ul>
                 <li class="menu-title"><span>MENU PRINCIPAL</span></li>
                 <li>
                     <ul>
+                        @canany(['dashboard_admin.view', 'presences.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["dashboard","presences.live"])">
+                            <a href="javascript:void(0);" class="@active(['dashboard','presences.live'])">
                                 <i class="ti ti-smart-home"></i>
                                 <span>Tableau de bord</span>
-                                <span class="badge badge-danger fs-10 fw-medium text-white p-1">admin</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a class="@active(["dashboard"])" href="{{route("dashboard")}}">Vue globale</a></li>
-                                <li><a class="@active(["presences.live"])" href="{{ route('presences.live') }}">Journal de pointage</a></li>
+                                @can('dashboard_admin.view')
+                                <li><a class="@active(['dashboard'])" href="{{ route('dashboard') }}">Vue globale</a></li>
+                                @endcan
+                                @can('presences.view')
+                                <li><a class="@active(['presences.live'])" href="{{ route('presences.live') }}">Journal de pointage</a></li>
+                                @endcan
                             </ul>
                         </li>
+                        @endcanany
                     </ul>
                 </li>
 
                 <li class="menu-title"><span>RH</span></li>
                 <li>
                     <ul>
+                        @canany(['horaires.view', 'groupes.view', 'plannings.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["rh.*"])">
-                                <i class="ti ti-calendar-time"></i><span>Gestion des horaires</span>
+                            <a href="javascript:void(0);" class="@active(['rh.*'])">
+                                <i class="ti ti-calendar-time"></i>
+                                <span>Gestion des horaires</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a class="@active(["rh.horaires.view"])" href="{{route("rh.horaires.view")}}">Horaire de présence</a></li>
-                                <li><a class="@active(["rh.groupes.view"])" href="{{route("rh.groupes.view")}}">Groupe agent</a></li>
-                                <li><a class="@active(["rh.plannings.view"])" href="{{route("rh.plannings.view")}}">Planning de rotation</a></li>
+                                @can('horaires.view')
+                                <li><a class="@active(['rh.horaires.view'])" href="{{ route('rh.horaires.view') }}">Horaire de presence</a></li>
+                                @endcan
+                                @can('groupes.view')
+                                <li><a class="@active(['rh.groupes.view'])" href="{{ route('rh.groupes.view') }}">Groupe agent</a></li>
+                                @endcan
+                                @can('plannings.view')
+                                <li><a class="@active(['rh.plannings.view'])" href="{{ route('rh.plannings.view') }}">Planning de rotation</a></li>
+                                @endcan
                             </ul>
                         </li>
+                        @endcanany
 
-                        <li class="@active(["stations.view"])">
-                            <a href="{{route("stations.view")}}">
+                        @can('stations.view')
+                        <li class="@active(['stations.view'])">
+                            <a href="{{ route('stations.view') }}">
                                 <i class="ti ti-location-cog"></i><span>Gestion stations</span>
                             </a>
                         </li>
+                        @endcan
 
-                        <li class="@active(["agents.view","agents.view.attendances"])">
-                            <a href="{{route("agents.view")}}">
+                        @can('agents.view')
+                        <li class="@active(['agents.view','agents.view.attendances'])">
+                            <a href="{{ route('agents.view') }}">
                                 <i class="ti ti-user-cog"></i><span>Gestion agents</span>
                             </a>
                         </li>
+                        @endcan
 
+                        @canany(['rapport_presences.view', 'rapport_absences.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["reports.*"])">
+                            <a href="javascript:void(0);" class="@active(['reports.*'])">
                                 <i class="ti ti-report"></i><span>Rapports</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a class="@active(["reports.presences"])" href="{{ route('reports.presences') }}">Présences journalières</a></li>
-                                <li><a class="@active(["reports.absences.daily.view"])" href="{{ route('reports.absences.daily.view') }}">Absences journalières</a></li>
-                                <li><a class="@active(["reports.weekly.view"])" href="{{ route('reports.weekly.view') }}">Présences hebdomadaire</a></li>
-                                <li><a class="@active(["reports.monthly.view"])" href="{{ route('reports.monthly.view') }}">Présences mensuelles</a></li>
+                                @can('rapport_presences.view')
+                                <li><a class="@active(['reports.presences'])" href="{{ route('reports.presences') }}">Presences journalieres</a></li>
+                                <li><a class="@active(['reports.weekly.view'])" href="{{ route('reports.weekly.view') }}">Presences hebdomadaire</a></li>
+                                <li><a class="@active(['reports.monthly.view'])" href="{{ route('reports.monthly.view') }}">Presences mensuelles</a></li>
+                                @endcan
+                                @can('rapport_absences.view')
+                                <li><a class="@active(['reports.absences.daily.view'])" href="{{ route('reports.absences.daily.view') }}">Absences journalieres</a></li>
+                                @endcan
                             </ul>
                         </li>
+                        @endcanany
 
+                        @canany(['timesheet.view', 'conges.view', 'attributions.view', 'authorizations.view', 'justifications.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["rh.*"])">
+                            <a href="javascript:void(0);" class="@active(['rh.*'])">
                                 <i class="ti ti-user-screen"></i><span>Ressources humaines</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a class="@active(["rh.timesheet.view"])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
+                                @can('timesheet.view')
+                                <li><a class="@active(['rh.timesheet.view'])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
+                                @endcan
                                 <li class="submenu">
-                                    <a href="javascript:void(0);" class="@active(["rh.conges.view", "rh.attributions.view" ])">Congés & attribution<span class="menu-arrow"></span></a>
+                                    <a href="javascript:void(0);" class="@active(['rh.conges.view', 'rh.attributions.view'])">
+                                        Conges & attribution
+                                        <span class="menu-arrow"></span>
+                                    </a>
                                     <ul>
-                                        <li><a class="@active(["rh.conges.view"])" href="{{ route('rh.conges.view') }}">Congés</a></li>
-                                        <li><a class="@active(["rh.attributions.view"])" href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
+                                        @can('conges.view')
+                                        <li><a class="@active(['rh.conges.view'])" href="{{ route('rh.conges.view') }}">Conges</a></li>
+                                        @endcan
+                                        @can('attributions.view')
+                                        <li><a class="@active(['rh.attributions.view'])" href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
+                                        @endcan
                                     </ul>
                                 </li>
-                                <li><a class="@active(["rh.authorizations.view"])" href="{{ route('rh.authorizations.view') }}">Autorisation spéciale</a></li>
-                                <li><a class="@active(["rh.justifications.retard.view"])"  href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
-                                <li><a class="@active(["rh.justifications.absence.view"])" href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
+                                @can('authorizations.view')
+                                <li><a class="@active(['rh.authorizations.view'])" href="{{ route('rh.authorizations.view') }}">Autorisation speciale</a></li>
+                                @endcan
+                                @can('justifications.view')
+                                <li><a class="@active(['rh.justifications.retard.view'])" href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
+                                <li><a class="@active(['rh.justifications.absence.view'])" href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
+                                @endcan
                             </ul>
                         </li>
+                        @endcanany
                     </ul>
                 </li>
 
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
+                        @canany(['users.view', 'roles.view', 'logs.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(["admin.*"])">
+                            <a href="javascript:void(0);" class="@active(['admin.*'])">
                                 <i class="ti ti-shield-share"></i><span>Gestion d'habilitation</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                <li><a class="@active(["admin.users"])" href="{{route("admin.users")}}" class="@active(["admin.users"])">Utilisateurs</a></li>
-                                <li><a class="@active(["admin.roles"])" href="{{route("admin.roles")}}" class="@active(["admin.roles"])">Roles & Permissions</a></li>
-                                <li><a href="#">Journal d'accès</a></li>
+                                @can('users.view')
+                                <li><a class="@active(['admin.users'])" href="{{ route('admin.users') }}">Utilisateurs</a></li>
+                                @endcan
+                                @can('roles.view')
+                                <li><a class="@active(['admin.roles'])" href="{{ route('admin.roles') }}">Roles & Permissions</a></li>
+                                @endcan
+                                @can('logs.view')
+                                <li><a class="@active(['admin.logs'])" href="{{ route('admin.logs') }}">Journal d'acces</a></li>
+                                @endcan
                             </ul>
                         </li>
+                        @endcanany
                     </ul>
                 </li>
 
@@ -165,3 +213,4 @@
         </div>
     </div>
 </div>
+

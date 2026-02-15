@@ -60,11 +60,17 @@ function computeSummary(matrix, agentsByKey = {}) {
         Object.keys(days).forEach((d) => {
             const s = days[d]?.status;
             if (s === "present") acc.present += 1;
-            else if (s === "retard") acc.retard += 1;
+            else if (s === "retard") {
+                acc.present += 1; // retard = présent (arrivé tard)
+                acc.retard += 1;
+            } else if (s === "retard_justifie") {
+                acc.present += 1; // retard justifié = présent
+                acc.retard += 1;
+                acc.retard_justifie += 1;
+            }
             else if (s === "absent") acc.absent += 1;
             else if (s === "conge") acc.conge += 1;
             else if (s === "autorisation") acc.autorisation += 1;
-            else if (s === "retard_justifie") acc.retard_justifie += 1;
             else if (s === "absence_justifiee") acc.absence_justifiee += 1;
         });
 

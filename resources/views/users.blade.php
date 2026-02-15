@@ -20,9 +20,11 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
                 <div class="mb-2">
+                    @can('users.create')
                     <a href="#" data-bs-toggle="modal" data-bs-target="#add_users"
                        class="btn btn-primary d-flex align-items-center"><i
                             class="ti ti-circle-plus me-2"></i>Ajout Utilisateur</a>
+                    @endcan
                 </div>
             </div>
         </div>
@@ -73,7 +75,7 @@
                             <td>
                                 <div class="d-flex align-items-center file-name-icon">
                                     <a href="#" class="avatar avatar-md avatar-rounded">
-                                        <img src="{{asset("assets/img/profiles/avatar-05.jpg")}}" class="img-fluid" alt="img">
+                                        <img src="{{asset("assets/img/avatar.jpg")}}" class="img-fluid" alt="img">
                                     </a>
                                     <div class="ms-2">
                                         <h6 class="fw-medium"><a href="#">@{{ data.name }}</a></h6>
@@ -98,15 +100,18 @@
                                     <i class="ti ti-point-filled me-1"></i>Active
                                 </span>
                             </td>
-                            <td>
-                                <div class="action-icon d-inline-flex">
-                                    <a href="#" class="me-2" @click="getAccess(data)"><i :class="{'text-gray-3':data.role==='admin'}" class="ti ti-shield"></i></a>
-                                    <a href="#" class="me-2" @click="editUser(data)"><i  class="ti ti-edit"></i></a>
-                                    <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                            class="ti ti-trash"></i></a>
-                                </div>
-                            </td>
-                        </tr>
+                            <td> 
+                                <div class="action-icon d-inline-flex"> 
+                                    @can('users.update')
+                                        <a href="#" class="me-2" @click="getAccess(data)"><i :class="{'text-gray-3':data.role==='admin'}" class="ti ti-shield"></i></a> 
+                                        <a href="#" class="me-2" @click="editUser(data)"><i  class="ti ti-edit"></i></a> 
+                                    @endcan
+                                    @can('users.delete')
+                                        <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a> 
+                                    @endcan
+                                </div> 
+                            </td> 
+                        </tr> 
                         </tbody>
                     </table>
                 </div>
@@ -116,9 +121,10 @@
 
 
         <!-- /Modal create User -->
-        <div class="modal fade" id="add_users">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
-                <div class="modal-content">
+        @canany(['users.create','users.update'])
+        <div class="modal fade" id="add_users"> 
+            <div class="modal-dialog modal-dialog-centered modal-lg"> 
+                <div class="modal-content"> 
                     <div class="modal-header">
                         <h4 class="modal-title">Création compte utilisateur</h4>
                         <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal"
@@ -171,9 +177,11 @@
                     </form>
                 </div>
             </div>
-        </div>
+        </div> 
+        @endcanany
 
         <!-- /Modal access -->
+        @can('users.update')
         <div class="modal fade" id="access_users">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
@@ -226,6 +234,7 @@
                 </div>
             </div>
         </div>
+        @endcan
     </div>
 @endsection
 

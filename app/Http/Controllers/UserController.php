@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class UserController extends Controller
 {
@@ -93,6 +94,7 @@ class UserController extends Controller
             }
             // Synchroniser les permissions
             $role->syncPermissions($permissionNames);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
             DB::commit();
             return response()->json([
                 'message' => !empty($data['role_id']) ? 'Rôle mis à jour avec succès' : 'Rôle créé avec succès',
@@ -135,7 +137,8 @@ class UserController extends Controller
                 'email'    => 'required|email|unique:users,email,' . $userId,
                 'password' => $userId ? 'nullable|string|min:6' : 'required|string|min:6',
                 'role'     => 'required|string|exists:roles,name',
-                'user_id'  => 'nullable|exists:users,id'
+                'user_id'  => 'nullable|exists:users,id',
+                'permissions' => 'nullable|array',
             ]);
 
             DB::beginTransaction();
@@ -165,7 +168,8 @@ class UserController extends Controller
             if ($userId) {
                 $isAdmin = $user->hasRole('admin');
                 if ($isAdmin && $newRole !== 'admin') {
-                    $adminCount = User::where('role', 'admin')->count();
+                    // Count real Spatie role assignments (legacy "role" column can drift)
+                    $adminCount = User::role('admin')->count();
                     if ($adminCount <= 1) {
                         DB::rollBack();
                         return response()->json([
@@ -176,6 +180,28 @@ class UserController extends Controller
             }
             // 🔹 Attribution / mise à jour du rôle
             $user->syncRoles([$newRole]);
+            // Keep legacy column in sync (used in some Blade templates / old logic)
+            $user->role = $newRole;
+            $user->save();
+
+            // Optional: allow passing direct permissions at user creation/update.
+            if (array_key_exists('permissions', $data)) {
+                $permissionNames = [];
+                foreach ((array) ($data['permissions'] ?? []) as $permission) {
+                    $permission = trim((string) $permission);
+                    if ($permission === '') {
+                        continue;
+                    }
+                    $permissionNames[] = $permission;
+                    Permission::firstOrCreate([
+                        'name' => $permission,
+                        'guard_name' => 'web',
+                    ]);
+                }
+                $user->syncPermissions($permissionNames);
+                app(PermissionRegistrar::class)->forgetCachedPermissions();
+            }
+
             DB::commit();
 
             return response()->json([
@@ -207,17 +233,22 @@ class UserController extends Controller
             $user = User::findOrFail($userId);
 
             // 3️⃣ Permissions directes user
-            if (!empty($validated['permissions'])) {
-
+            if (array_key_exists('permissions', $validated)) {
                 $permissionNames = [];
-                foreach ($validated["permissions"] as $permission) {
+                foreach ((array) ($validated["permissions"] ?? []) as $permission) {
+                    $permission = trim((string) $permission);
+                    if ($permission === '') {
+                        continue;
+                    }
                     $permissionNames[] = $permission;
                     Permission::firstOrCreate([
                         'name' => $permission,
                         'guard_name' => 'web'
                     ]);
                 }
+                // If an empty array is provided, this clears direct permissions.
                 $user->syncPermissions($permissionNames);
+                app(PermissionRegistrar::class)->forgetCachedPermissions();
             }
             DB::commit();
             return response()->json([

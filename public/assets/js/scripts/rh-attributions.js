@@ -41,10 +41,24 @@ function translateStatus(status) {
     return status || "--";
 }
 
+function translatePeriodStatus(periodStatus) {
+    if (periodStatus === "a_venir") return "À venir";
+    if (periodStatus === "en_cours") return "En cours";
+    if (periodStatus === "termine") return "Terminé";
+    return periodStatus || "--";
+}
+
 function statusClass(status) {
     if (status === "approved") return "badge-soft-success";
     if (status === "rejected") return "badge-soft-danger";
     return "badge-soft-warning";
+}
+
+function periodClass(periodStatus) {
+    if (periodStatus === "termine") return "badge-soft-danger";
+    if (periodStatus === "en_cours") return "badge-soft-info";
+    if (periodStatus === "a_venir") return "badge-soft-secondary";
+    return "badge-soft-secondary";
 }
 
 new Vue({
@@ -82,6 +96,12 @@ new Vue({
         },
         statusClass(s) {
             return statusClass(s);
+        },
+        periodLabel(s) {
+            return translatePeriodStatus(s);
+        },
+        periodClass(s) {
+            return periodClass(s);
         },
 
         async init() {

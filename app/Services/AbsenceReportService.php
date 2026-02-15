@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\AgentGroupAssignment;
+use App\Models\AgentGroup;
 use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
@@ -32,14 +34,91 @@ class AbsenceReportService
             ->get();
 
         $agentIds = $agents->pluck('id')->all();
+        $agentsById = $agents->keyBy('id');
 
-        $offKeys = AgentGroupPlanning::query()
+        $assignments = AgentGroupAssignment::query()
+            ->whereIn('agent_id', $agentIds)
+            ->whereDate('start_date', '<=', $end->toDateString())
+            ->where(function ($q) use ($start) {
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $start->toDateString());
+            })
+            ->orderByDesc('start_date')
+            ->get(['agent_id', 'agent_group_id', 'start_date', 'end_date'])
+            ->groupBy('agent_id');
+
+        $groupIds = collect($agentIds)
+            ->flatMap(function ($agentId) use ($agentsById, $assignments) {
+                $ids = [];
+                foreach (($assignments[$agentId] ?? collect()) as $a) {
+                    $ids[] = (int) $a->agent_group_id;
+                }
+                $fallback = $agentsById->get($agentId)?->groupe_id;
+                if ($fallback) {
+                    $ids[] = (int) $fallback;
+                }
+                return $ids;
+            })
+            ->unique()
+            ->values()
+            ->all();
+
+        $groupsById = AgentGroup::query()
+            ->get(['id', 'horaire_id'])
+            ->keyBy('id');
+
+        $groupIdFor = function (int $agentId, string $dateKey) use ($assignments, $agentsById): ?int {
+            foreach (($assignments[$agentId] ?? collect()) as $a) {
+                $sd = (string) $a->start_date;
+                $ed = $a->end_date ? (string) $a->end_date : null;
+                if ($dateKey < $sd) {
+                    continue;
+                }
+                if ($ed !== null && $dateKey > $ed) {
+                    continue;
+                }
+                return (int) $a->agent_group_id;
+            }
+
+            $fallback = $agentsById->get($agentId)?->groupe_id;
+            return $fallback ? (int) $fallback : null;
+        };
+
+        $workPlannings = AgentGroupPlanning::query() 
+            ->whereIn('agent_id', $agentIds) 
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()]) 
+            ->where('is_rest_day', false) 
+            ->get(['agent_id', 'agent_group_id', 'date', 'horaire_id']); 
+ 
+        $workKeys = []; 
+        foreach ($workPlannings as $p) { 
+            $d = Carbon::parse($p->date)->toDateString(); 
+            $gid = $groupIdFor((int) $p->agent_id, $d); 
+            if ($gid !== null && (int) $p->agent_group_id !== $gid) { 
+                continue; 
+            } 
+            $isFlexible = $gid !== null && $groupsById->get($gid) && empty($groupsById->get($gid)->horaire_id); 
+            if ($isFlexible && empty($p->horaire_id)) { 
+                // Flexible groups require a concrete hour for the day to be "expected". 
+                continue; 
+            } 
+            $workKeys[$p->agent_id . '|' . $d] = true; 
+        } 
+
+        $offPlannings = AgentGroupPlanning::query()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->where('is_rest_day', true)
-            ->get(['agent_id', 'date'])
-            ->map(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->toDateString())
-            ->flip();
+            ->get(['agent_id', 'agent_group_id', 'date']);
+
+        $offKeys = [];
+        foreach ($offPlannings as $p) {
+            $d = Carbon::parse($p->date)->toDateString();
+            $gid = $groupIdFor((int) $p->agent_id, $d);
+            if ($gid !== null && (int) $p->agent_group_id !== $gid) {
+                continue;
+            }
+            $offKeys[$p->agent_id . '|' . $d] = true;
+        }
 
         $presentKeys = PresenceAgents::query()
             ->whereIn('agent_id', $agentIds)
@@ -84,6 +163,13 @@ class AbsenceReportService
                     continue;
                 }
                 if (isset($presentKeys[$k])) {
+                    continue;
+                }
+
+                $gid = $groupIdFor((int) $agent->id, $d);
+                $isFlexible = $gid !== null && $groupsById->get($gid) && empty($groupsById->get($gid)->horaire_id);
+                if ($isFlexible && !isset($workKeys[$k])) {
+                    // Flexible agents are "expected" only if a work planning exists for the day.
                     continue;
                 }
 

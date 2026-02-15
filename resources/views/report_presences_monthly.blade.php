@@ -103,5 +103,5 @@
 @endsection
 
 @push("scripts")
-    <script type="module" src="{{ asset("assets/js/scripts/report-presences-monthly.js") }}"></script>
+    <script type="module" src="{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}"></script>
 @endpush

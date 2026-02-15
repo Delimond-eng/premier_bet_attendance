@@ -60,7 +60,7 @@
 												</span>
                                         <div>
                                             <h5 class="mb-0">{{Auth::user()->name}}</h5>
-                                            <p class="fs-12 fw-medium mb-0"><a href="#" >{{Auth::user()->role}}</a></p>
+                                            <p class="fs-12 fw-medium mb-0"><a href="#" >{{ Auth::user()->getRoleNames()->first() ?? Auth::user()->role }}</a></p>
                                         </div>
                                     </div>
                                 </div>

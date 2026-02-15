@@ -9,89 +9,120 @@ return [
     */
     'dashboard_admin' => [
         'entity' => 'dashboard_admin',
-        'label'  => 'Tableau de bord Vue globale',
-        'actions' => ['view']
+        'label'  => 'Tableau de bord (vue globale)',
+        'actions' => ['view'],
     ],
-
 
     /*
     |--------------------------------------------------------------------------
-    | RESSOURCES HUMAINES
+    | RH / OPERATIONS
     |--------------------------------------------------------------------------
     */
-
     'agents' => [
         'entity' => 'agents',
         'label'  => 'Agents',
-        'actions' => ['view','create','update','delete','export','import']
+        'actions' => ['view', 'create', 'update', 'delete', 'export', 'import'],
     ],
 
     'stations' => [
         'entity' => 'stations',
         'label'  => 'Stations',
-        'actions' => ['view','create','update','delete']
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
     ],
-
 
     'horaires' => [
         'entity' => 'horaires',
         'label'  => 'Horaires',
-        'actions' => ['view','create','update', 'delete']
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
     ],
 
     'groupes' => [
         'entity' => 'groupes',
         'label'  => 'Groupes',
-        'actions' => ['view','create','update']
+        'actions' => ['view', 'create', 'update'],
     ],
 
     'plannings' => [
         'entity' => 'plannings',
         'label'  => 'Plannings rotatifs',
-        'actions' => ['view','create','update']
+        'actions' => ['view', 'create', 'update', 'import', 'export'],
+    ],
+
+    'presences' => [
+        'entity' => 'presences',
+        'label'  => 'Pointages',
+        'actions' => ['view', 'create', 'export'],
     ],
 
     'retards' => [
         'entity' => 'retards',
         'label'  => 'Retards',
-        'actions' => ['view','create','export']
+        'actions' => ['view', 'create', 'export'],
     ],
 
     'absences' => [
         'entity' => 'absences',
         'label'  => 'Absences',
-        'actions' => ['view','create','update','delete','export']
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
     ],
-
 
     'conges' => [
         'entity' => 'conges',
-        'label'  => 'Congés',
-        'actions' => ['view','create','update','delete','export']
+        'label'  => 'Conges',
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
+    ],
+
+    'attributions' => [
+        'entity' => 'attributions',
+        'label'  => 'Attributions conge',
+        'actions' => ['view', 'create', 'update', 'delete'],
+    ],
+
+    'authorizations' => [
+        'entity' => 'authorizations',
+        'label'  => 'Autorisations speciales',
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
+    ],
+
+    'justifications' => [
+        'entity' => 'justifications',
+        'label'  => 'Justifications RH',
+        'actions' => ['view', 'create', 'update', 'delete'],
+    ],
+
+    'timesheet' => [
+        'entity' => 'timesheet',
+        'label'  => 'Pointage mensuel RH',
+        'actions' => ['view', 'export'],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | RAPPORTS
+    | REPORTS
     |--------------------------------------------------------------------------
     */
-
     'rapport_presences' => [
         'entity' => 'rapport_presences',
-        'label'  => 'Rapports Présences',
-        'actions' => ['view','export']
+        'label'  => 'Rapports presences',
+        'actions' => ['view', 'export'],
+    ],
+
+    'rapport_absences' => [
+        'entity' => 'rapport_absences',
+        'label'  => 'Rapports absences',
+        'actions' => ['view', 'export'],
     ],
 
     'rapport_conges' => [
         'entity' => 'rapport_conges',
-        'label'  => 'Rapports Congés',
-        'actions' => ['view','export']
+        'label'  => 'Rapports conges',
+        'actions' => ['view', 'export'],
     ],
 
     'rapport_retards' => [
         'entity' => 'rapport_retards',
-        'label'  => 'Rapports Retards',
-        'actions' => ['view','export']
+        'label'  => 'Rapports retards',
+        'actions' => ['view', 'export'],
     ],
 
     /*
@@ -99,24 +130,22 @@ return [
     | ADMINISTRATION
     |--------------------------------------------------------------------------
     */
-
     'users' => [
         'entity' => 'users',
         'label'  => 'Utilisateurs',
-        'actions' => ['view','create','update','delete']
+        'actions' => ['view', 'create', 'update', 'delete'],
     ],
 
     'roles' => [
         'entity' => 'roles',
-        'label'  => 'Rôles & permissions',
-        'actions' => ['view','create','update','delete']
+        'label'  => 'Roles & permissions',
+        'actions' => ['view', 'create', 'update', 'delete'],
     ],
 
     'logs' => [
         'entity' => 'logs',
-        'label'  => 'Journal d’accès',
-        'actions' => ['view']
+        'label'  => 'Journal acces',
+        'actions' => ['view'],
     ],
-
-
 ];
+

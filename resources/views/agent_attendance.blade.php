@@ -43,7 +43,7 @@
                         </div>
                         <div class="text-center">
                             <div class="badge badge-md mb-3" :class="agentStatusBadgeClass">@{{ agentStatusText }}</div>
-                            <h6 class="fw-medium d-flex align-items-center justify-content-center mb-3">
+                            <h6 v-if="agentStatusText !== 'Absent'" class="fw-medium d-flex align-items-center justify-content-center mb-3">
                                 <i class="ti ti-fingerprint text-primary me-1"></i>
                                 Arrivé à @{{ arrivedAtText }}
                             </h6>
@@ -127,11 +127,11 @@
                                         <div class="progress bg-transparent-dark mb-3" style="height: 24px;">
                                             <div class="progress-bar bg-white rounded" role="progressbar" style="width: 18%;"></div>
                                             <div class="progress-bar bg-success rounded me-2" role="progressbar" style="width: 18%;"></div>
-                                            <div class="progress-bar bg-warning rounded me-2" role="progressbar" style="width: 5%;"></div>
+                                            <div class="progress-bar bg-success  rounded me-2" role="progressbar" style="width: 5%;"></div>
                                             <div class="progress-bar bg-success rounded me-2" role="progressbar" style="width: 28%;"></div>
-                                            <div class="progress-bar bg-warning rounded me-2" role="progressbar" style="width: 17%;"></div>
+                                            <div class="progress-bar bg-success  rounded me-2" role="progressbar" style="width: 17%;"></div>
                                             <div class="progress-bar bg-success rounded me-2" role="progressbar" style="width: 22%;"></div>
-                                            <div class="progress-bar bg-warning rounded me-2" role="progressbar" style="width: 5%;"></div>
+                                            <div class="progress-bar bg-success  rounded me-2" role="progressbar" style="width: 5%;"></div>
                                             <div class="progress-bar bg-info rounded me-2" role="progressbar" style="width: 3%;"></div>
                                             <div class="progress-bar bg-info rounded" role="progressbar" style="width: 2%;"></div>
                                             <div class="progress-bar bg-white rounded" role="progressbar" style="width: 18%;"></div>

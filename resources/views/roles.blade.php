@@ -20,9 +20,11 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
                 <div class="mb-2">
+                    @can('roles.create')
                     <a href="#" data-bs-toggle="modal" data-bs-target="#role-create"
                        class="btn btn-primary d-flex align-items-center"><i
                             class="ti ti-circle-plus me-2"></i>Ajout Rôle</a>
+                    @endcan
                 </div>
             </div>
         </div>
@@ -67,9 +69,13 @@
                             </td>
                             <td>
                                 <div class="action-icon d-inline-flex">
-                                    <a href="#"  @click="editRole(data)" class="me-2"><i :class="{'text-gray-3':data.name==='admin'}" class="ti ti-edit"></i></a>
-                                    <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                            class="ti ti-trash" :class="{'text-gray-3':data.name==='admin'}"></i></a>
+                                    @can('roles.update')
+                                        <a href="#"  @click="editRole(data)" class="me-2"><i :class="{'text-gray-3':data.name==='admin'}" class="ti ti-edit"></i></a>
+                                    @endcan
+                                    @can('roles.delete')
+                                        <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i
+                                                class="ti ti-trash" :class="{'text-gray-3':data.name==='admin'}"></i></a>
+                                    @endcan
                                 </div>
                             </td>
                         </tr>
@@ -81,6 +87,7 @@
 
 
         <!-- Edit  Users -->
+        @canany(['roles.create','roles.update'])
         <div class="modal fade" id="role-create">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
@@ -141,6 +148,7 @@
                 </div>
             </div>
         </div>
+        @endcanany
         <!-- /Edit  Users -->
 
     </div>

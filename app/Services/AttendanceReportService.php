@@ -3,11 +3,14 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\AgentGroup;
 use App\Models\AgentGroupPlanning;
+use App\Models\AgentGroupAssignment;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\PresenceAgents;
+use App\Models\PresenceHoraire;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -92,11 +95,75 @@ class AttendanceReportService
         $agents = $agentsQuery->get();
         $agentIds = $agents->pluck('id')->all();
 
+        $assignments = AgentGroupAssignment::query()
+            ->whereIn('agent_id', $agentIds)
+            ->whereDate('start_date', '<=', $end->toDateString())
+            ->where(function ($q) use ($start) {
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $start->toDateString());
+            })
+            ->orderByDesc('start_date')
+            ->get(['agent_id', 'agent_group_id', 'start_date', 'end_date'])
+            ->groupBy('agent_id');
+
+        $groupIds = collect($agentIds)
+            ->flatMap(function ($agentId) use ($agents, $assignments) {
+                $ids = [];
+                foreach (($assignments[$agentId] ?? collect()) as $a) {
+                    $ids[] = (int) $a->agent_group_id;
+                }
+                $fallback = $agents->firstWhere('id', $agentId)?->groupe_id;
+                if ($fallback) {
+                    $ids[] = (int) $fallback;
+                }
+                return $ids;
+            })
+            ->unique()
+            ->values()
+            ->all();
+
+        $groupsById = AgentGroup::query()
+            ->with('horaire')
+            ->whereIn('id', $groupIds)
+            ->get()
+            ->keyBy('id');
+
+        $groupIdFor = function (int $agentId, string $dateKey) use ($assignments): ?int {
+            foreach (($assignments[$agentId] ?? collect()) as $a) {
+                $sd = (string) $a->start_date;
+                $ed = $a->end_date ? (string) $a->end_date : null;
+                if ($dateKey < $sd) {
+                    continue;
+                }
+                if ($ed !== null && $dateKey > $ed) {
+                    continue;
+                }
+                return (int) $a->agent_group_id;
+            }
+            return null;
+        };
+
         $plannings = AgentGroupPlanning::query()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->get(['agent_id', 'date', 'is_rest_day', 'horaire_id'])
+            ->get(['agent_id', 'agent_group_id', 'date', 'is_rest_day', 'horaire_id'])
+            ->groupBy(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->format('Y-m-d') . '|' . (int) $p->agent_group_id);
+
+        $planningsAny = $plannings
+            ->flatten(1)
             ->groupBy(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->format('Y-m-d'));
+
+        $planningHoraireIds = $planningsAny
+            ->flatten(1)
+            ->pluck('horaire_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $planningHorairesById = PresenceHoraire::query()
+            ->whereIn('id', $planningHoraireIds)
+            ->get()
+            ->keyBy('id');
 
         $presences = PresenceAgents::query()
             ->with(['horaire'])
@@ -156,21 +223,45 @@ class AttendanceReportService
                 /** @var AttendanceJustification|null $justif */
                 $justif = optional($justifications->get($agent->id . '|' . $dateKey))->first();
 
-                $planning = optional($plannings->get($agent->id . '|' . $dateKey))->first();
-                if ($planning && $planning->is_rest_day) {
-                    $row[$dayKey] = [
-                        'status' => 'off',
-                        'arrivee' => 'OFF',
-                        'depart' => '',
-                        'horaire' => 'OFF',
-                    ];
-                    $cursor->addDay();
-                    continue;
-                }
-
-                $congeForDay = null;
-                if ($conges->has($agent->id)) {
-                    foreach ($conges->get($agent->id) as $c) {
+                $gid = $groupIdFor((int) $agent->id, $dateKey) ?? ($agent->groupe_id ? (int) $agent->groupe_id : null); 
+                $group = $gid !== null ? $groupsById->get($gid) : null; 
+                $planning = $gid !== null 
+                    ? optional($plannings->get($agent->id . '|' . $dateKey . '|' . $gid))->first() 
+                    : null; 
+ 
+                if (!$planning) { 
+                    // Fallback if no assignment match: take any planning for that date (legacy behavior). 
+                    $planning = optional($planningsAny->get($agent->id . '|' . $dateKey))->first(); 
+                } 
+ 
+                $isFlexible = $group && empty($group->horaire_id); 
+ 
+                if ($planning && $planning->is_rest_day) { 
+                    $row[$dayKey] = [ 
+                        'status' => 'off', 
+                        'arrivee' => 'OFF', 
+                        'depart' => '', 
+                        'horaire' => 'OFF', 
+                    ]; 
+                    $cursor->addDay(); 
+                    continue; 
+                } 
+ 
+                // Flexible groups (horaire_id null) are "expected" only if a work planning with horaire_id exists. 
+                if ($isFlexible && (!$planning || empty($planning->horaire_id))) { 
+                    $row[$dayKey] = [ 
+                        'status' => 'unplanned', 
+                        'arrivee' => '--:--', 
+                        'depart' => '--:--', 
+                        'horaire' => '--', 
+                    ]; 
+                    $cursor->addDay(); 
+                    continue; 
+                } 
+ 
+                $congeForDay = null; 
+                if ($conges->has($agent->id)) { 
+                    foreach ($conges->get($agent->id) as $c) { 
                         $from = Carbon::parse($c->date_debut)->startOfDay();
                         $to = Carbon::parse($c->date_fin)->endOfDay();
                         if ($cursor->betweenIncluded($from, $to)) {
@@ -184,6 +275,14 @@ class AttendanceReportService
                 $arrivee = '--:--';
                 $depart = '--:--';
                 $horaire = $presence?->horaire?->libelle ?? $agent->horaire?->libelle ?? '--';
+                if (!$presence && $planning && $planning->horaire_id) {
+                    $ph = $planningHorairesById->get((int) $planning->horaire_id);
+                    if ($ph) {
+                        $rawStart = (string) ($ph->getRawOriginal('started_at') ?? $ph->started_at);
+                        $rawEnd = (string) ($ph->getRawOriginal('ended_at') ?? $ph->ended_at);
+                        $horaire = substr($rawStart, 0, 5) . ' - ' . substr($rawEnd, 0, 5);
+                    }
+                }
 
                 if ($presence && $presence->started_at) {
                     $status = ($presence->retard === 'oui') ? 'retard' : 'present';

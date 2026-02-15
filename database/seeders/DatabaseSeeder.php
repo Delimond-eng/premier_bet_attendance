@@ -2,106 +2,80 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\User;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Models\Permission;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
-use Database\Seeders\DemoDataSeeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     *
-     * @return void
-     */
     public function run(): void
     {
-        // 0) Reset cache Spatie
+        // Reset Spatie cache before seeding.
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        // 1) Charger modules depuis config/actions.php
         $modules = config('actions', []);
         if (!is_array($modules) || empty($modules)) {
-            $this->command?->warn("⚠️ config('actions') est vide ou invalide. Vérifie config/actions.php");
+            $this->command?->warn("config('actions') is empty/invalid. Check config/actions.php");
             return;
         }
 
-        // 2) Créer toutes les permissions à partir de la config
-        // Permission name format: "{action} {entity}"
-        $allPermissionNames = [];
+        // Create permissions from config/actions.php
+        // Permission name format: "{entity}.{action}"
+        $permissionNames = [];
 
         foreach ($modules as $key => $moduleConfig) {
-            if (!is_array($moduleConfig)) continue;
+            if (!is_array($moduleConfig)) {
+                continue;
+            }
 
-            $entity  = $moduleConfig['entity']  ?? $key;
+            $entity = $moduleConfig['entity'] ?? $key;
             $actions = $moduleConfig['actions'] ?? [];
 
-            if (!is_string($entity) || trim($entity) === '') continue;
-            if (!is_array($actions)) $actions = [];
+            if (!is_string($entity) || trim($entity) === '') {
+                continue;
+            }
+            if (!is_array($actions)) {
+                $actions = [];
+            }
 
             foreach ($actions as $action) {
-                if (!is_string($action) || trim($action) === '') continue;
+                if (!is_string($action) || trim($action) === '') {
+                    continue;
+                }
 
-                $permissionName = trim($action) . ' ' . trim($entity);
-                Permission::updateOrCreate(['name' => $permissionName]);
-                $allPermissionNames[] = $permissionName;
+                $name = trim($entity) . '.' . trim($action);
+                Permission::updateOrCreate(
+                    ['name' => $name, 'guard_name' => 'web'],
+                    []
+                );
+                $permissionNames[] = $name;
             }
         }
 
-        $allPermissionNames = array_values(array_unique($allPermissionNames));
+        $permissionNames = array_values(array_unique($permissionNames));
 
-        $roleAdmin      = Role::updateOrCreate(['name' => 'admin']);
+        // Default admin role
+        $roleAdmin = Role::updateOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $roleAdmin->syncPermissions($permissionNames);
 
-        // 4) Attribuer les permissions aux rôles (basé sur la config)
-
-        // 4.1 Super admin: toutes les permissions
-        $roleAdmin->syncPermissions($allPermissionNames);
-
-        $adminPermissionNames = [];
-        foreach ($modules as $key => $moduleConfig) {
-            $entity  = $moduleConfig['entity']  ?? $key;
-            $actions = $moduleConfig['actions'] ?? [];
-
-            foreach ((array)$actions as $action) {
-                $adminPermissionNames[] = trim($action) . ' ' . trim($entity);
-            }
-        }
-        $roleAdmin->syncPermissions(array_values(array_unique($adminPermissionNames)));
-
-        // Exemple: accès lecture RH + rapports (lecture/export optionnel)
-        $supervisorAllowedEntities = [
-            'dashboard_admin',
-            'agents',
-            'stations',
-            'horaires',
-            'groupes',
-            'plannings',
-            'retards',
-            'absences',
-            'conges',
-            'rapport_presences',
-            'rapport_conges',
-            'rapport_retards',
-            'logs',
-        ];
-
-        // 5) Créer un utilisateur admin par défaut
+        // Default admin user (demo)
         $adminUser = User::updateOrCreate(
             ['email' => 'demo@gmail.com'],
             [
                 'name' => 'Administrateur SALAMA',
                 'password' => Hash::make('demo@2025'),
+                'role' => 'admin', // keep legacy column in sync
             ]
         );
-
         $adminUser->syncRoles([$roleAdmin]);
 
-        // 6) Données de démonstration (stations, agents, plannings, présences, RH)
+        // Demo data
         $this->call(DemoDataSeeder::class);
 
-        $this->command?->info('✅ Seeder terminé : Permissions générées depuis config(actions), rôles créés, admin créé.');
+        $this->command?->info('Seeder done: permissions/roles created from config(actions), admin user created.');
     }
 }
+

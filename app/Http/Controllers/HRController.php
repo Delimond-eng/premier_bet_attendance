@@ -234,25 +234,55 @@ class HRController extends Controller
     /**
      * Attributions : liste des congés assignés aux agents.
      */
-    public function attributionsIndex(Request $request): JsonResponse
-    {
-        $query = Conge::query()
-            ->with(['agent.station', 'congeType'])
-            ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id')))
-            ->when($request->query('conge_type_id'), fn ($q) => $q->where('conge_type_id', $request->query('conge_type_id')))
-            ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status')))
-            ->when($request->query('from'), fn ($q) => $q->whereDate('date_fin', '>=', $request->query('from')))
-            ->when($request->query('to'), fn ($q) => $q->whereDate('date_debut', '<=', $request->query('to')))
-            ->orderByDesc('date_debut')
-            ->orderByDesc('id');
-
-        $perPage = (int) ($request->query('per_page', 15));
-
-        return response()->json([
-            'status' => 'success',
-            'attributions' => $query->paginate($perPage),
-        ]);
-    }
+    public function attributionsIndex(Request $request): JsonResponse 
+    { 
+        $tz = 'Africa/Kinshasa'; 
+        $today = Carbon::now($tz)->startOfDay(); 
+ 
+        $query = Conge::query() 
+            ->with(['agent.station', 'congeType']) 
+            ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id'))) 
+            ->when($request->query('conge_type_id'), fn ($q) => $q->where('conge_type_id', $request->query('conge_type_id'))) 
+            ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status'))) 
+            ->when($request->query('from'), fn ($q) => $q->whereDate('date_fin', '>=', $request->query('from'))) 
+            ->when($request->query('to'), fn ($q) => $q->whereDate('date_debut', '<=', $request->query('to'))) 
+            ->orderByDesc('date_debut') 
+            ->orderByDesc('id'); 
+ 
+        $perPage = (int) ($request->query('per_page', 15)); 
+ 
+        $page = $query->paginate($perPage); 
+        $page->getCollection()->transform(function (Conge $c) use ($today, $tz) { 
+            try { 
+                $start = Carbon::parse($c->date_debut, $tz)->startOfDay(); 
+                $end = Carbon::parse($c->date_fin, $tz)->startOfDay(); 
+ 
+                // Jours totaux (inclusif)
+                $totalDays = $start->diffInDays($end) + 1; 
+ 
+                // Jours consommés: du début jusqu'à aujourd'hui inclus, sans dépasser la fin.
+                $consumeTo = $today->lt($start) ? null : ($today->lt($end) ? $today : $end); 
+                $daysConsumed = $consumeTo ? ($start->diffInDays($consumeTo) + 1) : 0; 
+ 
+                // Statut de période (indépendant du workflow pending/approved/rejected)
+                $periodStatus = $today->lt($start) ? 'a_venir' : ($today->gt($end) ? 'termine' : 'en_cours'); 
+ 
+                $c->days_total = $totalDays; 
+                $c->days_consumed = min($daysConsumed, $totalDays); 
+                $c->period_status = $periodStatus; 
+            } catch (\Throwable $_) { 
+                $c->days_total = null; 
+                $c->days_consumed = null; 
+                $c->period_status = null; 
+            } 
+            return $c; 
+        }); 
+ 
+        return response()->json([ 
+            'status' => 'success', 
+            'attributions' => $page, 
+        ]); 
+    } 
 
     /**
      * Attributions : assigner un congé à un agent.

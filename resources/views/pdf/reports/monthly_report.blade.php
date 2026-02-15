@@ -52,17 +52,17 @@
                     @foreach($week as $jour)
                         @php
                             $cell = $joursData[$jour] ?? null;
-                            $arr = $cell['arrivee'] ?? '--:--';
-                            $dep = $cell['depart'] ?? '--:--';
-                            $status = $cell['status'] ?? null;
-
-                            if ($status === 'present') {
-                                $class = 'present';
-                            } elseif ($status === 'absent') {
-                                $class = 'absent';
-                            } else {
-                                $class = 'partial';
-                            }
+                            $arr = $cell['arrivee'] ?? '--:--'; 
+                            $dep = $cell['depart'] ?? '--:--'; 
+                            $status = $cell['status'] ?? null; 
+ 
+                            if (in_array($status, ['present', 'retard', 'retard_justifie'], true)) { 
+                                $class = 'present'; 
+                            } elseif ($status === 'absent') { 
+                                $class = 'absent'; 
+                            } else { 
+                                $class = 'partial'; 
+                            } 
                         @endphp
                         <td class="{{ $class }}">
                             {{ $arr }}@if($dep !== '') / {{ $dep }}@endif

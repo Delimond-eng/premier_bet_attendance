@@ -86,8 +86,8 @@
             </div>
         </div>
     </div>
-@endsection
-
-@push("scripts")
-    <script type="module" src="{{ asset("assets/js/scripts/rh-timesheet.js") }}"></script>
+@endsection 
+ 
+@push("scripts") 
+    <script type="module" src="{{ asset("assets/js/scripts/rh-timesheet.js") . '?v=' . filemtime(public_path('assets/js/scripts/rh-timesheet.js')) }}"></script> 
 @endpush
