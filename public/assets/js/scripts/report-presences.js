@@ -120,8 +120,7 @@ new Vue({
 
                 this.count = data?.count ?? this.count;
                 this.rows = data?.presences?.data ?? [];
-
-                await this.loadStationStats();
+                this.stationStatsById = this.buildStationStatsMap(data?.count_by_station ?? []);
                 this.grouped = this.groupByStation(this.rows, this.stationStatsById);
 
                 this.$nextTick(() => {
@@ -142,32 +141,19 @@ new Vue({
             }
         },
 
-        async loadStationStats() {
-            const date = this.filters.date;
-            if (!date) {
-                this.stationStatsById = {};
-                return;
+        buildStationStatsMap(stationCounts) {
+            const map = {};
+            for (const s of stationCounts || []) {
+                const stationId = s?.station_id != null ? String(s.station_id) : "";
+                if (!stationId) continue;
+                map[stationId] = {
+                    agents: Number(s?.agents_expected ?? 0),
+                    presences: Number(s?.presences ?? 0),
+                    retards: Number(s?.retards ?? 0),
+                    absents: Number(s?.absents ?? 0),
+                };
             }
-
-            try {
-                const { data } = await get(`/stations/list?date=${encodeURIComponent(date)}`);
-                const sites = data?.sites ?? [];
-                const map = {};
-                for (const s of sites) {
-                    const agents = Number(s?.agents_count ?? 0);
-                    const presences = Number(s?.presences_count ?? 0);
-                    const retards = Number(s?.late_count ?? 0);
-                    map[String(s.id)] = {
-                        agents,
-                        presences,
-                        retards,
-                        absents: Math.max(agents - presences, 0),
-                    };
-                }
-                this.stationStatsById = map;
-            } catch (e) {
-                this.stationStatsById = {};
-            }
+            return map;
         },
 
         groupByStation(rows, statsById = {}) {

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\AgentHistory;
+use App\Models\AgentGroup;
+use App\Models\AgentGroupAssignment;
 use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
@@ -102,18 +104,117 @@ class AdminController extends Controller
 
     public function viewAllSites(): JsonResponse
     {
-        $date = request()->query('date') ? Carbon::parse(request()->query('date')) : Carbon::today();
+        $dateRaw = request()->query('date');
+        $hasDate = $dateRaw !== null && trim((string) $dateRaw) !== '';
+        $date = $hasDate ? Carbon::parse($dateRaw) : Carbon::today();
         $dateString = $date->toDateString();
 
         $stations = Station::query()
             ->select(['id', 'name', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'created_at'])
             ->withCount([
                 'agents',
+                'agents as assigned_agents_count',
                 'presences as presences_count' => fn ($q) => $q->whereDate('date_reference', $dateString)->whereNotNull('started_at'),
                 'presences as late_count' => fn ($q) => $q->whereDate('date_reference', $dateString)->where('retard', 'oui'),
             ])
             ->orderBy('name')
             ->get();
+
+        // When a date is provided, "agents_count" must reflect the agents expected to work
+        // for that day at each station, based on the rotating planning (OFF days + flexible groups).
+        if ($hasDate) {
+            $agents = Agent::query()->get(['id', 'site_id', 'groupe_id']);
+            $agentIds = $agents->pluck('id')->all();
+
+            $assignments = AgentGroupAssignment::query()
+                ->whereIn('agent_id', $agentIds)
+                ->whereDate('start_date', '<=', $dateString)
+                ->where(function ($q) use ($dateString) {
+                    $q->whereNull('end_date')->orWhereDate('end_date', '>=', $dateString);
+                })
+                ->orderByDesc('start_date')
+                ->get(['agent_id', 'agent_group_id', 'start_date', 'end_date'])
+                ->groupBy('agent_id');
+
+            $effectiveGroupByAgent = [];
+            $groupIds = [];
+            foreach ($agents as $a) {
+                $gid = null;
+                foreach (($assignments[$a->id] ?? collect()) as $as) {
+                    $gid = (int) $as->agent_group_id;
+                    break; // ordered desc: first match is the effective group for the day
+                }
+                if ($gid === null && $a->groupe_id) {
+                    $gid = (int) $a->groupe_id;
+                }
+                if ($gid !== null) {
+                    $groupIds[] = $gid;
+                }
+                $effectiveGroupByAgent[(int) $a->id] = $gid;
+            }
+
+            $groupsById = AgentGroup::query()
+                ->whereIn('id', array_values(array_unique($groupIds)))
+                ->get(['id', 'horaire_id'])
+                ->keyBy('id');
+
+            $plannings = AgentGroupPlanning::query()
+                ->whereIn('agent_id', $agentIds)
+                ->whereDate('date', $dateString)
+                ->get(['agent_id', 'agent_group_id', 'date', 'is_rest_day', 'horaire_id']);
+
+            $planningByAgentGroup = [];
+            $planningAnyByAgent = [];
+            foreach ($plannings as $p) {
+                $aid = (int) $p->agent_id;
+                $gid = (int) $p->agent_group_id;
+                $planningByAgentGroup[$aid . '|' . $gid] = $p;
+                if (!array_key_exists($aid, $planningAnyByAgent)) {
+                    $planningAnyByAgent[$aid] = $p;
+                }
+            }
+
+            $expectedByStationId = [];
+
+            foreach ($agents as $a) {
+                $stationId = $a->site_id ? (int) $a->site_id : null;
+                if (!$stationId) {
+                    continue;
+                }
+
+                $aid = (int) $a->id;
+                $gid = $effectiveGroupByAgent[$aid] ?? null;
+                $group = $gid !== null ? $groupsById->get($gid) : null;
+                $isFlexible = $group && empty($group->horaire_id);
+
+                $planning = null;
+
+                if ($gid !== null && array_key_exists($aid . '|' . $gid, $planningByAgentGroup)) {
+                    $planning = $planningByAgentGroup[$aid . '|' . $gid];
+                } elseif (!$isFlexible && array_key_exists($aid, $planningAnyByAgent)) {
+                    // Legacy fallback: if no planning for the effective group, use any planning for that date.
+                    $planning = $planningAnyByAgent[$aid];
+                }
+
+                if ($planning && $planning->is_rest_day) {
+                    continue;
+                }
+
+                // Flexible groups (horaire_id null) are expected only when a concrete work planning exists for the day.
+                if ($isFlexible) {
+                    if (!$planning || empty($planning->horaire_id)) {
+                        continue;
+                    }
+                }
+
+                $expectedByStationId[$stationId] = ($expectedByStationId[$stationId] ?? 0) + 1;
+            }
+
+            foreach ($stations as $s) {
+                $sid = (int) $s->id;
+                $s->agents_count = (int) ($expectedByStationId[$sid] ?? 0);
+            }
+        }
 
         return response()->json([
             'status' => 'success',

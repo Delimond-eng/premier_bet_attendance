@@ -608,37 +608,76 @@ class PresenceController extends Controller
         $authorizations = 0;
         $absenceJustifiee = 0;
         $off = 0;
+        $countByStation = [];
+        $agentsByMatrixKey = collect($dailyMatrix['agents'] ?? [])
+            ->mapWithKeys(function (Agent $a) {
+                $key = $a->fullname . ' (' . $a->matricule . ')';
+                return [$key => $a];
+            });
 
         foreach (($dailyMatrix['data'] ?? []) as $agentKey => $row) {
             $cell = $row[$date] ?? null;
             $status = is_array($cell) ? ($cell['status'] ?? null) : null;
+            /** @var Agent|null $agent */
+            $agent = $agentsByMatrixKey->get($agentKey);
+
+            $stationId = $agent && $agent->site_id ? (int) $agent->site_id : null;
+            $stationName = $agent?->station?->name ?? 'Sans station';
+            $stationKey = $stationId !== null ? (string) $stationId : 'none';
+
+            if (!array_key_exists($stationKey, $countByStation)) {
+                $countByStation[$stationKey] = [
+                    'station_id' => $stationId,
+                    'station_name' => $stationName,
+                    'agents' => 0,
+                    'agents_expected' => 0,
+                    'presences' => 0,
+                    'retards' => 0,
+                    'absents' => 0,
+                    'off' => 0,
+                    'conges' => 0,
+                    'authorizations' => 0,
+                    'absence_justifiee' => 0,
+                ];
+            }
+            $countByStation[$stationKey]['agents'] += 1;
 
             if ($status === 'off' || $status === 'future') {
                 $off += 1;
+                $countByStation[$stationKey]['off'] += 1;
                 continue;
             }
 
             $expectedAgents += 1;
+            $countByStation[$stationKey]['agents_expected'] += 1;
 
             if (in_array($status, ['present', 'retard', 'retard_justifie'], true)) {
                 $present += 1;
+                $countByStation[$stationKey]['presences'] += 1;
             }
             if (in_array($status, ['retard', 'retard_justifie'], true)) {
                 $late += 1;
+                $countByStation[$stationKey]['retards'] += 1;
             }
             if ($status === 'absent') {
                 $absent += 1;
+                $countByStation[$stationKey]['absents'] += 1;
             }
             if ($status === 'conge') {
                 $conges += 1;
+                $countByStation[$stationKey]['conges'] += 1;
             }
             if ($status === 'autorisation') {
                 $authorizations += 1;
+                $countByStation[$stationKey]['authorizations'] += 1;
             }
             if ($status === 'absence_justifiee') {
                 $absenceJustifiee += 1;
+                $countByStation[$stationKey]['absence_justifiee'] += 1;
             }
         }
+        $countByStation = array_values($countByStation);
+        usort($countByStation, fn ($a, $b) => strcmp((string) ($a['station_name'] ?? ''), (string) ($b['station_name'] ?? '')));
 
         $presencesQuery = PresenceAgents::query()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
@@ -661,6 +700,7 @@ class PresenceController extends Controller
                 'authorizations' => $authorizations,
                 'absence_justifiee' => $absenceJustifiee,
             ],
+            'count_by_station' => $countByStation,
             'presences' => $presencesQuery
                 ->orderByDesc('date_reference')
                 ->orderByDesc('started_at')
