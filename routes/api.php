@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 |
 | Minimal API surface for mobile:
 | - Scan station QR -> station data
-| - Agent punch (check-in / check-out) using matricule as unique id
+| - Agent punch (check-in / check-out / confirmation) using matricule as unique id
 |
 */
 
@@ -20,4 +20,3 @@ Route::middleware(["cors"])->group(function () {
     Route::post('/agent.punch', [PresenceController::class, 'punchAgent'])->name('agent.punch');
     Route::post('/agent.enroll', [AdminController::class, 'enrollAgent'])->name('agent.enroll');
 });
-

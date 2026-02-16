@@ -20,6 +20,7 @@ class PresenceHoraire extends Model
 
     protected $casts = [
         "started_at"=>"datetime:H:i",
+        "mid_check"=>"datetime:H:i",
         "ended_at"=>"datetime:H:i"
     ];
 
@@ -32,6 +33,7 @@ class PresenceHoraire extends Model
     protected $fillable = [
         "libelle",
         "started_at",
+        "mid_check",
         "ended_at",
         "tolerence_minutes",
         "site_id",

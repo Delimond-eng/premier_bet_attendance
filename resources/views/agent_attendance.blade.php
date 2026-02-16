@@ -102,19 +102,25 @@
                         <div class="card">
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-xl-4">
+                                    <div class="col-xl-3">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-dark-transparent me-1"></i>Horaire affecté</p>
                                             <h3>@{{ schedule ? schedule.name : '---' }}</h3>
                                         </div>
                                     </div>
-                                    <div class="col-xl-4">
+                                    <div class="col-xl-3">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-success me-1"></i>Heure début</p>
                                             <h3>@{{ (schedule && schedule.expected_start) ? schedule.expected_start.replace(':','h') : '--:--' }}</h3>
                                         </div>
                                     </div>
-                                    <div class="col-xl-4">
+                                    <div class="col-xl-3">
+                                        <div class="mb-3">
+                                            <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-info me-1"></i>Controle intermediaire</p>
+                                            <h3>@{{ (schedule && schedule.expected_mid_check) ? schedule.expected_mid_check.replace(':','h') : '--:--' }}</h3>
+                                        </div>
+                                    </div>
+                                    <div class="col-xl-3">
                                         <div class="mb-3">
                                             <p class="d-flex align-items-center mb-1"><i class="ti ti-point-filled text-warning me-1"></i>Heure fin</p>
                                             <h3>@{{ (schedule && schedule.expected_end) ? schedule.expected_end.replace(':','h') : '--:--' }}</h3>
@@ -144,7 +150,10 @@
                                                 v-for="(t, idx) in timeSlots"
                                                 :key="idx"
                                                 class="fs-10"
-                                                :class="{ 'text-success fw-semibold': idx === highlightedTimeIndices.startIdx || idx === highlightedTimeIndices.endIdx }"
+                                                :class="{
+                                                    'text-success fw-semibold': idx === highlightedTimeIndices.startIdx || idx === highlightedTimeIndices.endIdx,
+                                                    'text-info fw-semibold': idx === highlightedTimeIndices.midIdx
+                                                }"
                                             >
                                                 @{{ t }}
                                             </span>
@@ -205,6 +214,7 @@
                                     <th>Station check-out</th>
                                     <th>Heure entrée</th>
                                     <th>Heure sortie</th>
+                                    <th>Controle intermediaire</th>
                                     <th>Statut</th>
                                     <th>Retard</th>
                                     <th>Total heures</th>
@@ -218,6 +228,7 @@
                                     <td>@{{ (p.station_check_out && p.station_check_out.name) ? p.station_check_out.name : '-' }}</td>
                                     <td><span class="badge badge-success-transparent">@{{ p.started_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-danger-transparent">@{{ p.ended_at || '--:--' }}</span></td>
+                                    <td><span class="badge badge-info-transparent">@{{ p.mid_check || '--:--' }}</span></td>
                                     <td>
                                         <span class="badge badge-success-transparent d-inline-flex align-items-center" v-if="p.started_at && p.ended_at">
                                             <i class="ti ti-point-filled me-1"></i>Présent

@@ -158,6 +158,7 @@
                                 <th>Check-out</th>
                                 <th>Heure entrée</th>
                                 <th>Heure sortie</th>
+                                <th>Controle intermediaire</th>
                                 <th>Retard</th>
                                 <th>Durée</th>
                             </tr>
@@ -181,6 +182,7 @@
                                 <td>@{{ row.station_check_out?.name ?? '-' }}</td>
                                 <td><span class="badge badge-success">@{{ row.started_at ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>
+                                <td><span class="badge badge-info">@{{ row.mid_check ?? '--:--' }}</span></td>
                                 <td>
                                     <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
                                     <span class="badge badge-soft-success" v-else>Non</span>

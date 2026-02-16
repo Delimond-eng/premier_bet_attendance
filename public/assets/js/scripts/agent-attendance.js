@@ -285,13 +285,16 @@ new Vue({
 
         highlightedTimeIndices() {
             const start = this.schedule?.expected_start || null;
+            const mid = this.schedule?.expected_mid_check || null;
             const end = this.schedule?.expected_end || null;
-            if (!start && !end) return { startIdx: -1, endIdx: -1 };
+            if (!start && !mid && !end) return { startIdx: -1, midIdx: -1, endIdx: -1 };
 
             const startMatches = [];
+            const midMatches = [];
             const endMatches = [];
             for (let i = 0; i < this.timeSlots.length; i++) {
                 if (start && this.timeSlots[i] === start) startMatches.push(i);
+                if (mid && this.timeSlots[i] === mid) midMatches.push(i);
                 if (end && this.timeSlots[i] === end) endMatches.push(i);
             }
 
@@ -308,7 +311,24 @@ new Vue({
                 }
             }
 
-            return { startIdx, endIdx };
+            let midIdx = -1;
+            if (midMatches.length) {
+                if (startIdx >= 0) {
+                    const between = endIdx >= 0
+                        ? midMatches.find((i) => i >= startIdx && i <= endIdx)
+                        : null;
+                    if (typeof between === "number") {
+                        midIdx = between;
+                    } else {
+                        const afterStart = midMatches.find((i) => i >= startIdx);
+                        midIdx = typeof afterStart === "number" ? afterStart : midMatches[0];
+                    }
+                } else {
+                    midIdx = midMatches[0];
+                }
+            }
+
+            return { startIdx, midIdx, endIdx };
         },
 
         filteredRows() {

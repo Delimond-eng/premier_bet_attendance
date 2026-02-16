@@ -20,6 +20,7 @@ class PresenceAgents extends Model
         'station_check_out_id',
         'horaire_id',
         'started_at',
+        'mid_check',
         'ended_at',
         'duree',
         'retard',
@@ -33,6 +34,7 @@ class PresenceAgents extends Model
     protected $casts = [
         'created_at' => 'date:d/m/Y',
         'started_at' => 'datetime:H:i',
+        'mid_check' => 'datetime:H:i',
         'ended_at' => 'datetime:H:i',
         'date_reference' => 'date:d/ M/Y',
     ];
@@ -67,4 +69,3 @@ class PresenceAgents extends Model
         return $this->belongsTo(Station::class, 'gps_site_id');
     }
 }
-

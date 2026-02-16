@@ -68,6 +68,7 @@
                             <th>Designation</th>
                             <th>Station</th>
                             <th>Heure début</th>
+                            <th>Controle intermediaire</th>
                             <th>Heure fin</th>
                             <th>Tolérance</th>
                             <th></th>
@@ -83,6 +84,7 @@
                             <td><h6 class="fs-14 fw-medium">@{{ h.libelle }}</h6></td>
                             <td>@{{ stationName(h.site_id) }}</td>
                             <td><span class="badge badge-info">@{{ h.started_at }}</span></td>
+                            <td><span class="badge badge-primary">@{{ h.mid_check || '--:--' }}</span></td>
                             <td><span class="badge badge-dark">@{{ h.ended_at }}</span></td>
                             <td><span class="badge badge-purple">@{{ h.tolerence_minutes }} min</span></td>
 
@@ -128,14 +130,21 @@
                                     </div>
                                 </div>
 
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="mb-3">
                                         <label class="form-label">Heure début<span class="text-danger"> *</span></label>
                                         <input type="time" class="form-control" v-model="form.started_at">
                                     </div>
                                 </div>
 
-                                <div class="col-md-6">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">Controle intermediaire</label>
+                                        <input type="time" class="form-control" v-model="form.mid_check">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
                                     <div class="mb-3">
                                         <label class="form-label">Heure Fin<span class="text-danger">*</span></label>
                                         <input type="time" class="form-control" v-model="form.ended_at">

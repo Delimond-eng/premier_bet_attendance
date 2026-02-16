@@ -512,8 +512,23 @@ class AdminController extends Controller
 
     public function generateSiteQrcodes()
     {
-        $stations = Station::all();
+        $stations = Station::query()->orderBy('name')->get();
+        $horairesByStation = PresenceHoraire::query()
+            ->select(['id', 'site_id', 'libelle', 'started_at', 'mid_check', 'ended_at'])
+            ->orderBy('site_id')
+            ->orderBy('started_at')
+            ->get()
+            ->groupBy('site_id');
         $data = [];
+
+        $formatTime = static function ($value): ?string {
+            if ($value === null || $value === '') {
+                return null;
+            }
+
+            $time = (string) $value;
+            return strlen($time) >= 5 ? substr($time, 0, 5) : $time;
+        };
 
         foreach ($stations as $station) {
             $qrData = json_encode([
@@ -521,6 +536,18 @@ class AdminController extends Controller
                 'name' => $station->name,
                 'type' => 'station_pointage',
             ]);
+
+            $stationHoraires = ($horairesByStation->get($station->id) ?? collect())
+                ->map(function (PresenceHoraire $horaire) use ($formatTime) {
+                    return [
+                        'libelle' => (string) ($horaire->libelle ?? ''),
+                        'started_at' => $formatTime($horaire->getRawOriginal('started_at') ?? $horaire->started_at),
+                        'mid_check' => $formatTime($horaire->getRawOriginal('mid_check') ?? $horaire->mid_check),
+                        'ended_at' => $formatTime($horaire->getRawOriginal('ended_at') ?? $horaire->ended_at),
+                    ];
+                })
+                ->values()
+                ->all();
 
             // Use SVG to avoid requiring the Imagick extension for PNG rendering.
             $qrCode = QrCode::format('svg')->size(200)->generate($qrData);
@@ -530,12 +557,14 @@ class AdminController extends Controller
 
             $data[] = [
                 'name' => $station->name,
+                'code' => $station->code,
                 'qrcode' => $qrDataUri,
+                'horaires' => $stationHoraires,
             ];
         }
 
         $pdf = Pdf::loadView('pdf.qrcodes', ['areas' => $data])
-            ->setPaper('a4', 'portrait')
+            ->setPaper('a4', 'landscape')
             ->setOption('isHtml5ParserEnabled', true);
         return $pdf->download('qrcodes_stations.pdf');
     }

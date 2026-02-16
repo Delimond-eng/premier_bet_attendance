@@ -12,14 +12,15 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 18%;">Agent</th>
-            <th style="width: 14%;">Station affectation</th>
-            <th style="width: 12%;">Check-in</th>
-            <th style="width: 12%;">Check-out</th>
+            <th style="width: 16%;">Agent</th>
+            <th style="width: 13%;">Station affectation</th>
+            <th style="width: 11%;">Check-in</th>
+            <th style="width: 11%;">Check-out</th>
             <th style="width: 10%;">Date</th>
-            <th style="width: 8%;">Entree</th>
-            <th style="width: 8%;">Sortie</th>
-            <th style="width: 10%;">Duree</th>
+            <th style="width: 7%;">Entree</th>
+            <th style="width: 7%;">Sortie</th>
+            <th style="width: 9%;">Controle</th>
+            <th style="width: 8%;">Duree</th>
             <th style="width: 8%;">Retard</th>
         </tr>
         </thead>
@@ -36,6 +37,7 @@
                 <td>{{ \Carbon\Carbon::parse($p->date_reference)->toDateString() }}</td>
                 <td>{{ $p->started_at ? \Carbon\Carbon::parse($p->started_at)->format('H:i') : '--:--' }}</td>
                 <td>{{ $p->ended_at ? \Carbon\Carbon::parse($p->ended_at)->format('H:i') : '--:--' }}</td>
+                <td>{{ $p->mid_check ? \Carbon\Carbon::parse($p->mid_check)->format('H:i') : '--:--' }}</td>
                 <td>{{ $p->duree ?? '--' }}</td>
                 <td>
                     @if(($p->retard ?? '') === 'oui')
@@ -49,4 +51,3 @@
         </tbody>
     </table>
 @endsection
-

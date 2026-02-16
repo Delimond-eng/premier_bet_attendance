@@ -38,7 +38,7 @@ class PresenceController extends Controller
         try { 
             $data = $request->validate([ 
                 'matricule' => 'required|string|exists:agents,matricule', 
-                'key' => 'required|string|in:check-in,check-out', 
+                'key' => 'required|string|in:check-in,check-out,confirmation', 
                 'station_id' => 'nullable|integer|exists:sites,id', 
                 'coordonnees' => 'nullable|string', // "lat,lng" (mobile) 
             ]); 
@@ -55,15 +55,18 @@ class PresenceController extends Controller
         $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail(); 
         $assignedStationId = $agent->site_id; 
 
-        $stationId = $this->resolveStationId(
-            stationId: $data['station_id'] ?? null,
-            coordonnees: $data['coordonnees'] ?? null,
-            fallbackAssignedStationId: $assignedStationId,
-        );
+        $stationId = null;
+        if ($data['key'] !== 'confirmation') {
+            $stationId = $this->resolveStationId(
+                stationId: $data['station_id'] ?? null,
+                coordonnees: $data['coordonnees'] ?? null,
+                fallbackAssignedStationId: $assignedStationId,
+            );
 
-        if (!$stationId) { 
-            return response()->json(['errors' => ['Station introuvable pour ce pointage.']]); 
-        } 
+            if (!$stationId) {
+                return response()->json(['errors' => ['Station introuvable pour ce pointage.']]);
+            }
+        }
  
         // On ne requiert un horaire QUE pour le check-in (pour rÃ©soudre date_reference et le retard).
         // Le check-out s'appuie sur la prÃ©sence ouverte (started_at non null + ended_at null).
@@ -110,7 +113,11 @@ class PresenceController extends Controller
                     return $this->handleCheckIn($agent, $assignedStationId, $stationId, $horaire, $dateReference, $now);
                 }
 
-                return $this->handleCheckOut($agent, $stationId, $now);
+                if ($data['key'] === 'check-out') {
+                    return $this->handleCheckOut($agent, $stationId, $now);
+                }
+
+                return $this->handleMidCheckConfirmation($agent, $now);
             });
         } catch (\Throwable $e) {
             Log::error('createPresenceAgent failed', [
@@ -192,6 +199,36 @@ class PresenceController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Sortie enregistrée.',
+            'result' => $presence,
+        ]);
+    }
+
+    private function handleMidCheckConfirmation(Agent $agent, Carbon $now): JsonResponse
+    {
+        $presence = PresenceAgents::query()
+            ->where('agent_id', $agent->id)
+            ->whereNotNull('started_at')
+            ->whereNull('ended_at')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if (!$presence) {
+            return response()->json(['errors' => ["Aucun pointage d'entree ouvert trouve pour confirmation."]]);
+        }
+
+        if (!empty($presence->mid_check)) {
+            return response()->json(['errors' => ['Confirmation deja effectuee.']]);
+        }
+
+        $presence->update([
+            'mid_check' => $now,
+        ]);
+
+        $presence->load(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Controle intermediaire enregistre.',
             'result' => $presence,
         ]);
     }
@@ -420,11 +457,13 @@ class PresenceController extends Controller
             'id' => 'nullable|integer',
             'libelle' => 'required|string',
             'started_at' => 'required|string',
+            'mid_check' => 'nullable|string',
             'ended_at' => 'required|string',
             'tolerence_minutes' => 'nullable|integer|min:0',
             'site_id' => 'required|integer|exists:sites,id',
         ]);
 
+        $data['mid_check'] = !empty($data['mid_check']) ? $data['mid_check'] : null;
         $horaire = PresenceHoraire::updateOrCreate(['id' => $data['id'] ?? null], $data);
 
         return response()->json(['status' => 'success', 'result' => $horaire]);
@@ -833,6 +872,7 @@ class PresenceController extends Controller
             // Keep original fields (incl. formatted casts) but add ISO values for front-end logic.
             $p->date_reference_iso = $p->getRawOriginal('date_reference');
             $p->started_at_raw = $p->getRawOriginal('started_at');
+            $p->mid_check_raw = $p->getRawOriginal('mid_check');
             $p->ended_at_raw = $p->getRawOriginal('ended_at');
             return $p;
         });
@@ -925,8 +965,10 @@ class PresenceController extends Controller
         $todayStatus = $isOffDay ? 'off' : ($isOnLeave ? 'conge' : ($hasPresenceToday ? 'present' : 'absent'));
 
         $expectedStart = $horaire ? (string) $horaire->getRawOriginal('started_at') : null;
+        $expectedMidCheck = $horaire ? (string) $horaire->getRawOriginal('mid_check') : null;
         $expectedEnd = $horaire ? (string) $horaire->getRawOriginal('ended_at') : null;
         $expectedStart = $expectedStart ? substr($expectedStart, 0, 5) : null;
+        $expectedMidCheck = $expectedMidCheck ? substr($expectedMidCheck, 0, 5) : null;
         $expectedEnd = $expectedEnd ? substr($expectedEnd, 0, 5) : null;
 
         return response()->json([
@@ -942,6 +984,7 @@ class PresenceController extends Controller
                 'id' => $horaire->id,
                 'name' => $horaire->libelle,
                 'expected_start' => $expectedStart,
+                'expected_mid_check' => $expectedMidCheck,
                 'expected_end' => $expectedEnd,
                 'tolerance_minutes' => $horaire->tolerence_minutes,
             ] : null,

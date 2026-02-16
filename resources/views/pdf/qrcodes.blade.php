@@ -5,131 +5,209 @@
     <title>QR CODES DES STATIONS</title>
     <style>
         @page {
-            margin: 16px;
+            margin: 14px;
         }
 
         body {
             font-family: DejaVu Sans, Arial, sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             margin: 0;
-            padding: 0;
             color: #111827;
         }
 
         .doc-title {
             font-size: 14px;
-            font-weight: bold;
+            font-weight: 700;
+            margin: 0 0 4px;
+            text-transform: uppercase;
             letter-spacing: 0.4px;
-            margin: 0 0 10px;
         }
 
         .doc-subtitle {
             font-size: 10px;
-            color: #6b7280;
-            margin: 0 0 14px;
+            margin: 0 0 12px;
+            color: #4b5563;
         }
 
-        table.qr-grid {
+        table.grid {
             width: 100%;
             border-collapse: collapse;
         }
 
-        td.qr-cell {
-            width: 25%;
-            padding: 10px 8px;
+        td.grid-cell {
+            width: 50%;
             vertical-align: top;
+            padding: 7px;
         }
 
-        .qr-card {
-            width: 100%;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-            background-color: #ffffff;
+        .card {
+            border: 1px solid #d1d5db;
             page-break-inside: avoid;
         }
 
-        .qr-header {
+        .card-header {
             background: #0f766e;
             color: #ffffff;
-            padding: 10px 12px 8px;
+            padding: 8px 10px;
         }
 
-        .qr-header .title {
-            font-weight: bold;
-            font-size: 12px;
-            letter-spacing: 0.6px;
+        .station-name {
             margin: 0;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            line-height: 1.2;
         }
 
-        .qr-header .subtitle {
-            font-size: 9px;
-            opacity: 0.92;
+        .station-code {
             margin: 2px 0 0;
+            font-size: 9px;
+            opacity: 0.95;
         }
 
-        .qr-body {
-            background: #fff;
-            padding: 14px 12px 10px;
+        .card-body {
+            padding: 10px;
+        }
+
+        table.card-layout {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td.qr-col {
+            width: 33%;
             text-align: center;
+            vertical-align: top;
+            border-right: 1px dashed #d1d5db;
+            padding-right: 8px;
+        }
+
+        td.horaires-col {
+            width: 67%;
+            vertical-align: top;
+            padding-left: 10px;
         }
 
         .qr-img {
-            width: 110px;
-            height: 110px;
+            width: 130px;
+            height: 130px;
             display: block;
-            margin: 0 auto;
+            margin: 0 auto 6px;
         }
 
-        .qr-footer {
-            padding: 10px 12px 12px;
-            border-top: 1px solid #f3f4f6;
-            text-align: center;
-        }
-
-        .label {
-            font-size: 10px;
-            font-weight: bold;
-            text-transform: uppercase;
-            color: #111827;
+        .qr-label {
+            font-size: 9px;
+            color: #374151;
             margin: 0;
             line-height: 1.2;
-            word-break: break-word;
         }
 
-        .slogan {
+        .horaires-title {
+            margin: 0 0 6px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #0f766e;
+        }
+
+        table.horaires-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px;
+        }
+
+        table.horaires-table th {
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            padding: 4px 5px;
+            text-align: left;
+            font-weight: 700;
+        }
+
+        table.horaires-table td {
+            border: 1px solid #e5e7eb;
+            padding: 4px 5px;
+            line-height: 1.25;
+        }
+
+        .empty {
+            margin: 0;
             font-size: 9px;
             color: #6b7280;
-            margin: 4px 0 0;
+            font-style: italic;
+        }
+
+        .card-footer {
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
+            padding: 6px 10px;
+            font-size: 8px;
+            color: #4b5563;
         }
     </style>
 </head>
 <body>
-    <p class="doc-title">QR codes des stations</p>
-    <p class="doc-subtitle">Scan pour pointer sur site</p>
+    <p class="doc-title">Qr codes stations</p>
+    <p class="doc-subtitle">Affichage mural pour pointage. Les horaires affiches sont indicatifs.</p>
 
-    <table class="qr-grid">
+    <table class="grid">
         @foreach($areas as $index => $area)
-            @if($index % 4 === 0)
+            @if($index % 2 === 0)
                 <tr>
             @endif
 
-            <td class="qr-cell">
-                <div class="qr-card">
-                    <div class="qr-header">
-                        <p class="title">SCAN</p>
-                        <p class="subtitle">Approche la camera du code</p>
+            <td class="grid-cell">
+                <div class="card">
+                    <div class="card-header">
+                        <p class="station-name">{{ $area['name'] ?? '-' }}</p>
+                        <p class="station-code">Code station: {{ ($area['code'] ?? null) ?: 'N/A' }}</p>
                     </div>
-                    <div class="qr-body">
-                        <img class="qr-img" src="{{ $area['qrcode'] }}" alt="QR Code">
+
+                    <div class="card-body">
+                        <table class="card-layout">
+                            <tr>
+                                <td class="qr-col">
+                                    <img class="qr-img" src="{{ $area['qrcode'] ?? '' }}" alt="QR Code">
+                                    <p class="qr-label">Scanner pour pointer a cette station</p>
+                                </td>
+                                <td class="horaires-col">
+                                    <p class="horaires-title">Horaires de la station</p>
+                                    @if(!empty($area['horaires']) && count($area['horaires']) > 0)
+                                        <table class="horaires-table">
+                                            <thead>
+                                            <tr>
+                                                <th>Horaire</th>
+                                                <th>Debut</th>
+                                                <th>Controle</th>
+                                                <th>Fin</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach($area['horaires'] as $horaire)
+                                                <tr>
+                                                    <td>{{ ($horaire['libelle'] ?? '') !== '' ? $horaire['libelle'] : '-' }}</td>
+                                                    <td>{{ $horaire['started_at'] ?? '--:--' }}</td>
+                                                    <td>{{ $horaire['mid_check'] ?? '--:--' }}</td>
+                                                    <td>{{ $horaire['ended_at'] ?? '--:--' }}</td>
+                                                </tr>
+                                            @endforeach
+                                            </tbody>
+                                        </table>
+                                    @else
+                                        <p class="empty">Aucun horaire configure pour cette station.</p>
+                                    @endif
+                                </td>
+                            </tr>
+                        </table>
                     </div>
-                    <div class="qr-footer">
-                        <p class="label">{{ $area["name"] }}</p>
-                        <p class="slogan">Salama attendance</p>
+
+                    <div class="card-footer">
+                        Document indicatif pour affichage au mur - Salama Attendance
                     </div>
                 </div>
             </td>
 
-            @if(($index + 1) % 4 === 0 || $index === count($areas) - 1)
+            @if(($index + 1) % 2 === 0 || $index === count($areas) - 1)
                 </tr>
             @endif
         @endforeach

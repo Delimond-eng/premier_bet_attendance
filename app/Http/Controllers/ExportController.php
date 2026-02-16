@@ -83,6 +83,7 @@ class ExportController extends Controller
             'Date',
             'Heure entree',
             'Heure sortie',
+            'Controle intermediaire',
             'Duree',
             'Retard',
         ];
@@ -98,6 +99,7 @@ class ExportController extends Controller
                 Carbon::parse($p->date_reference)->toDateString(),
                 $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
                 $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                 (string) ($p->duree ?? ''),
                 (string) ($p->retard ?? ''),
             ];
@@ -223,13 +225,14 @@ class ExportController extends Controller
             ->orderBy('libelle')
             ->get();
 
-        $headers = ['Designation', 'Station', 'Heure debut', 'Heure fin', 'Tolerance (min)'];
+        $headers = ['Designation', 'Station', 'Heure debut', 'Controle intermediaire', 'Heure fin', 'Tolerance (min)'];
         $table = [];
         foreach ($rows as $h) {
             $table[] = [
                 (string) ($h->libelle ?? ''),
                 (string) (optional($stations->get((int) $h->site_id))->name ?? ''),
                 (string) ($h->started_at ?? ''),
+                (string) ($h->mid_check ?? ''),
                 (string) ($h->ended_at ?? ''),
                 (int) ($h->tolerence_minutes ?? 0),
             ];
@@ -408,6 +411,7 @@ class ExportController extends Controller
             'Date',
             'Heure entree',
             'Heure sortie',
+            'Controle intermediaire',
             'Duree',
             'Retard',
         ];
@@ -425,6 +429,7 @@ class ExportController extends Controller
                 Carbon::parse($p->date_reference)->toDateString(),
                 $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
                 $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                 (string) ($p->duree ?? ''),
                 (string) ($p->retard ?? ''),
             ];

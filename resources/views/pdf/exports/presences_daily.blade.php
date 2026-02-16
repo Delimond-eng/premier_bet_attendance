@@ -18,12 +18,13 @@
         <table>
             <thead>
             <tr>
-                <th style="width: 16%;">Agent</th>
-                <th style="width: 14%;">Affectation</th>
-                <th style="width: 12%;">Check-in</th>
-                <th style="width: 12%;">Check-out</th>
+                <th style="width: 14%;">Agent</th>
+                <th style="width: 12%;">Affectation</th>
+                <th style="width: 10%;">Check-in</th>
+                <th style="width: 10%;">Check-out</th>
                 <th style="width: 8%;">Heure entree</th>
                 <th style="width: 8%;">Heure sortie</th>
+                <th style="width: 8%;">Controle</th>
                 <th style="width: 8%;">Duree</th>
                 <th style="width: 8%;">Retard</th>
                 <th style="width: 14%;">Station agent</th>
@@ -41,6 +42,7 @@
                     <td>{{ $p->stationCheckOut?->name ?? '' }}</td>
                     <td>{{ $p->started_at ? \Carbon\Carbon::parse($p->started_at)->format('H:i') : '' }}</td>
                     <td>{{ $p->ended_at ? \Carbon\Carbon::parse($p->ended_at)->format('H:i') : '' }}</td>
+                    <td>{{ $p->mid_check ? \Carbon\Carbon::parse($p->mid_check)->format('H:i') : '' }}</td>
                     <td>{{ $p->duree ?? '' }}</td>
                     <td>
                         @if(($p->retard ?? '') === 'oui')
@@ -56,4 +58,3 @@
         </table>
     @endforeach
 @endsection
-

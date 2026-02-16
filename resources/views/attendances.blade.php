@@ -61,6 +61,7 @@
                             <th>Date</th>
                             <th>Heure entrée</th>
                             <th>Heure sortie</th>
+                            <th>Controle intermediaire</th>
                             <th>Durée</th>
                             <th>Retard</th>
                         </tr>
@@ -85,6 +86,7 @@
                             <td>@{{ p.date_reference }}</td>
                             <td><span class="badge badge-success">@{{ p.started_at ?? '--:--' }}</span></td>
                             <td><span class="badge badge-purple">@{{ p.ended_at ?? '--:--' }}</span></td>
+                            <td><span class="badge badge-info">@{{ p.mid_check ?? '--:--' }}</span></td>
                             <td><span class="badge badge-info">@{{ p.duree ?? '--' }}</span></td>
                             <td>
                                 <span class="badge badge-soft-danger" v-if="p.retard === 'oui'">Oui</span>
