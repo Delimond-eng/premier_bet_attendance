@@ -32,12 +32,13 @@
         table.grid {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
         td.grid-cell {
             width: 50%;
             vertical-align: top;
-            padding: 7px;
+            padding: 6px;
         }
 
         .card {
