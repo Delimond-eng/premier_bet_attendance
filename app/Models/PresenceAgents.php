@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\ManagerStationContext;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -38,6 +40,18 @@ class PresenceAgents extends Model
         'ended_at' => 'datetime:H:i',
         'date_reference' => 'date:d/ M/Y',
     ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('manager_station', function (Builder $builder) {
+            $stationId = ManagerStationContext::stationId();
+            if ($stationId === null) {
+                return;
+            }
+
+            $builder->where($builder->qualifyColumn('site_id'), $stationId);
+        });
+    }
 
     public function agent(): BelongsTo
     {

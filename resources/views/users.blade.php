@@ -165,6 +165,16 @@
                                         </select>
                                     </div>
                                 </div>
+                                <div class="col-md-6" v-if="form.role !== 'admin'">
+                                    <div class="mb-3">
+                                        <label class="form-label">Station</label>
+                                        <select class="form-select" v-model="form.station_id">
+                                            <option value="">--SÃ©lectionner une station--</option>
+                                            <option v-for="s in allSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                                        </select>
+                                        <small class="text-muted">Obligatoire pour les rÃ´les non admin.</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -239,5 +249,10 @@
 @endsection
 
 @push("scripts")
+    <script>
+        window.__SITES__ = @json($sites ?? []);
+    </script>
     <script type="module" src="{{ asset("assets/js/scripts/user.js") }}"></script>
 @endpush
+
+

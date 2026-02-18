@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\ManagerStationContext;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -58,6 +60,18 @@ class AgentHistory extends Model
         'updated_at'=>'datetime:d/m/Y H:i',
         'date'=>'datetime:d/m/Y'
     ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('manager_station', function (Builder $builder) {
+            $stationId = ManagerStationContext::stationId();
+            if ($stationId === null) {
+                return;
+            }
+
+            $builder->where($builder->qualifyColumn('site_id'), $stationId);
+        });
+    }
 
     /**
      * The attributes that should be mutated to dates.

@@ -10,11 +10,13 @@ new Vue({
             users: [],
             roles: [],
             actions: [],
+            sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
             form: {
                 name: "",
                 email: "",
                 password: "",
                 role: "",
+                station_id: "",
                 user_id: "",
                 permissions: [],
             },
@@ -166,6 +168,7 @@ new Vue({
             this.form.name = user.name;
             this.form.email = user.email;
             this.form.role = user.role;
+            this.form.station_id = user.station_id ?? "";
             this.form.user_id = user.id;
             $("#add_users").modal("show");
         },
@@ -188,6 +191,7 @@ new Vue({
                 email: "",
                 password: "",
                 role: "",
+                station_id: "",
                 user_id: "",
                 permissions: [],
             };
@@ -197,6 +201,14 @@ new Vue({
                 permissions: [],
                 role_id: "",
             };
+        },
+    },
+
+    watch: {
+        "form.role"(value) {
+            if (value === "admin") {
+                this.form.station_id = "";
+            }
         },
     },
 
@@ -211,6 +223,10 @@ new Vue({
 
         allUsers() {
             return this.users;
+        },
+
+        allSites() {
+            return this.sites;
         },
     },
 });

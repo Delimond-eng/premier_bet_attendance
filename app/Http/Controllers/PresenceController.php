@@ -70,18 +70,20 @@ class PresenceController extends Controller
  
         // On ne requiert un horaire QUE pour le check-in (pour rÃ©soudre date_reference et le retard).
         // Le check-out s'appuie sur la prÃ©sence ouverte (started_at non null + ended_at null).
-        $horaire = null; 
-        $dateReference = $now->copy()->startOfDay(); 
-        if ($data['key'] === 'check-in') { 
-            $horaire = $this->getHoraireForAgent($agent, $now); 
-            if (!$horaire) { 
-                return response()->json([ 
-                    'status' => 'error', 
-                    'errors' => ['Horaire introuvable pour cet agent (planning/groupe/agent/station).'], 
-                ], 200); 
-            } 
-            $dateReference = $this->getDateReference($now, $horaire); 
-        } 
+        $horaire = null;
+        $dateReference = $now->copy()->startOfDay();
+        if (in_array($data['key'], ['check-in', 'confirmation'], true)) {
+            $horaire = $this->getHoraireForAgent($agent, $now);
+            if ($data['key'] === 'check-in' && !$horaire) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ['Horaire introuvable pour cet agent (planning/groupe/agent/station).'],
+                ], 200);
+            }
+            if ($horaire) {
+                $dateReference = $this->getDateReference($now, $horaire);
+            }
+        }
  
         // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in. 
         if ($data['key'] === 'check-in') { 
@@ -117,7 +119,7 @@ class PresenceController extends Controller
                     return $this->handleCheckOut($agent, $stationId, $now);
                 }
 
-                return $this->handleMidCheckConfirmation($agent, $now);
+                return $this->handleMidCheckConfirmation($agent, $dateReference, $now);
             });
         } catch (\Throwable $e) {
             Log::error('createPresenceAgent failed', [
@@ -203,17 +205,18 @@ class PresenceController extends Controller
         ]);
     }
 
-    private function handleMidCheckConfirmation(Agent $agent, Carbon $now): JsonResponse
+    private function handleMidCheckConfirmation(Agent $agent, Carbon $dateReference, Carbon $now): JsonResponse
     {
         $presence = PresenceAgents::query()
             ->where('agent_id', $agent->id)
+            ->whereDate('date_reference', $dateReference->toDateString())
             ->whereNotNull('started_at')
             ->whereNull('ended_at')
             ->orderByDesc('started_at')
             ->first();
 
         if (!$presence) {
-            return response()->json(['errors' => ["Aucun pointage d'entree ouvert trouve pour confirmation."]]);
+            return response()->json(['errors' => ["Aucun pointage d'entree ouvert trouve pour la date de reference."]]);
         }
 
         if (!empty($presence->mid_check)) {
@@ -446,7 +449,13 @@ class PresenceController extends Controller
             ->when($siteId !== null, fn ($q) => $q->where('site_id', (int) $siteId))
             ->orderBy('site_id')
             ->orderBy('started_at')
-            ->get();
+            ->get()
+            ->map(function (PresenceHoraire $horaire) {
+                $horaire->started_at = $horaire->getRawOriginal('started_at') ?? $horaire->started_at;
+                $horaire->mid_check = $horaire->getRawOriginal('mid_check') ?? $horaire->mid_check;
+                $horaire->ended_at = $horaire->getRawOriginal('ended_at') ?? $horaire->ended_at;
+                return $horaire;
+            });
 
         return response()->json(['status' => 'success', 'horaires' => $horaires]);
     }
@@ -724,6 +733,12 @@ class PresenceController extends Controller
             ->whereIn('agent_id', $agentIds);
 
         $perPage = (int) ($data['per_page'] ?? 25);
+        $presences = $presencesQuery
+            ->orderByDesc('date_reference')
+            ->orderByDesc('started_at')
+            ->paginate($perPage);
+
+        $this->attachPresenceMotifs($presences->getCollection(), $date);
 
         return response()->json([
             'status' => 'success',
@@ -740,11 +755,76 @@ class PresenceController extends Controller
                 'absence_justifiee' => $absenceJustifiee,
             ],
             'count_by_station' => $countByStation,
-            'presences' => $presencesQuery
-                ->orderByDesc('date_reference')
-                ->orderByDesc('started_at')
-                ->paginate($perPage),
+            'presences' => $presences,
         ]);
+    }
+
+    private function attachPresenceMotifs(\Illuminate\Support\Collection $rows, string $date): void
+    {
+        $agentIds = $rows->pluck('agent_id')->filter()->unique()->values()->all();
+        if (empty($agentIds)) {
+            return;
+        }
+
+        $authorizations = AttendanceAuthorization::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_reference', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        $justifications = AttendanceJustification::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_reference', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        $conges = Conge::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_debut', '<=', $date)
+            ->whereDate('date_fin', '>=', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        foreach ($rows as $p) {
+            $motifs = [];
+            $auth = optional($authorizations->get($p->agent_id ?? null))->first();
+            if ($auth) {
+                $label = 'Autorisation';
+                if (!empty($auth->reason)) {
+                    $label .= ': ' . $auth->reason;
+                } elseif (!empty($auth->type)) {
+                    $label .= ': ' . strtoupper((string) $auth->type);
+                }
+                $motifs[] = $label;
+            }
+
+            $justif = optional($justifications->get($p->agent_id ?? null))->first();
+            if ($justif) {
+                $label = $justif->kind === 'retard' ? 'Retard justifie' : 'Absence justifiee';
+                if (!empty($justif->justification)) {
+                    $label .= ': ' . $justif->justification;
+                }
+                $motifs[] = $label;
+            }
+
+            $conge = optional($conges->get($p->agent_id ?? null))->first();
+            if ($conge) {
+                $label = 'Conge';
+                if (!empty($conge->motif)) {
+                    $label .= ': ' . $conge->motif;
+                }
+                $motifs[] = $label;
+            }
+
+            if (($p->retard ?? '') === 'oui' && !$justif) {
+                $motifs[] = 'Retard';
+            }
+
+            $p->setAttribute('motif', implode(' | ', $motifs));
+        }
     }
 
     /**

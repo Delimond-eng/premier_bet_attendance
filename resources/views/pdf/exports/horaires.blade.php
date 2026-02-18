@@ -20,16 +20,37 @@
         </tr>
         </thead>
         <tbody>
-        @foreach(($rows ?? []) as $h)
-            <tr>
-                <td><strong>{{ $h->libelle ?? '-' }}</strong></td>
-                <td>{{ optional(($stationsById ?? collect())->get((int) ($h->site_id ?? 0)))->name ?? '' }}</td>
-                <td>{{ $h->started_at ?? '' }}</td>
-                <td>{{ $h->mid_check ?? '' }}</td>
-                <td>{{ $h->ended_at ?? '' }}</td>
-                <td>{{ (int) ($h->tolerence_minutes ?? 0) }}</td>
-            </tr>
-        @endforeach
+        @php
+            $groups = $grouped ?? null;
+        @endphp
+        @if(is_iterable($groups))
+            @foreach($groups as $g)
+                <tr>
+                    <td colspan="6"><strong>{{ $g['station_name'] ?? 'Station' }}</strong></td>
+                </tr>
+                @foreach(($g['rows'] ?? []) as $h)
+                    <tr>
+                        <td><strong>{{ $h->libelle ?? '-' }}</strong></td>
+                        <td>{{ optional(($stationsById ?? collect())->get((int) ($h->site_id ?? 0)))->name ?? '' }}</td>
+                        <td>{{ $h->started_at ?? '' }}</td>
+                        <td>{{ $h->mid_check ?? '' }}</td>
+                        <td>{{ $h->ended_at ?? '' }}</td>
+                        <td>{{ (int) ($h->tolerence_minutes ?? 0) }}</td>
+                    </tr>
+                @endforeach
+            @endforeach
+        @else
+            @foreach(($rows ?? []) as $h)
+                <tr>
+                    <td><strong>{{ $h->libelle ?? '-' }}</strong></td>
+                    <td>{{ optional(($stationsById ?? collect())->get((int) ($h->site_id ?? 0)))->name ?? '' }}</td>
+                    <td>{{ $h->started_at ?? '' }}</td>
+                    <td>{{ $h->mid_check ?? '' }}</td>
+                    <td>{{ $h->ended_at ?? '' }}</td>
+                    <td>{{ (int) ($h->tolerence_minutes ?? 0) }}</td>
+                </tr>
+            @endforeach
+        @endif
         </tbody>
     </table>
 @endsection

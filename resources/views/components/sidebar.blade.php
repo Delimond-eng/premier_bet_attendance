@@ -183,7 +183,7 @@
                         @endcanany
                     </ul>
                 </li>
-
+                @if(Auth::user()->hasRole("admin"))
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
@@ -208,6 +208,7 @@
                         @endcanany
                     </ul>
                 </li>
+                @endif
 
             </ul>
         </div>

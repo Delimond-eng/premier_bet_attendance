@@ -22,7 +22,7 @@ Route::get('/schedules.verify', function () {
     return response()->json(['status' => 'success']);
 })->name('schedules.verify');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Generic delete endpoint used by some Vue scripts (kept, but protected).
     Route::post('/table/delete', [AdminController::class, 'triggerDelete'])
@@ -278,7 +278,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Admin pages
     Route::prefix('admin')->name('admin.')->group(function () {
-        Route::get('/users', fn () => view('users'))
+        Route::get('/users', fn () => view('users', ['sites' => \App\Models\Station::all()]))
             ->name('users')
             ->middleware('can:users.view');
         Route::get('/roles', fn () => view('roles'))

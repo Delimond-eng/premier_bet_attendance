@@ -61,6 +61,10 @@ class DatabaseSeeder extends Seeder
         $roleAdmin = Role::updateOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $roleAdmin->syncPermissions($permissionNames);
 
+        // Default manager role (same permissions, data remains station scoped at runtime)
+        $roleManager = Role::updateOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $roleManager->syncPermissions($permissionNames);
+
         // Default admin user (demo)
         $adminUser = User::updateOrCreate(
             ['email' => 'demo@gmail.com'],
@@ -78,4 +82,3 @@ class DatabaseSeeder extends Seeder
         $this->command?->info('Seeder done: permissions/roles created from config(actions), admin user created.');
     }
 }
-

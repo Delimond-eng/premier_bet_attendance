@@ -157,9 +157,10 @@
                                 <th>Check-in</th>
                                 <th>Check-out</th>
                                 <th>Heure entrée</th>
-                                <th>Heure sortie</th>
                                 <th>Controle intermediaire</th>
+                                <th>Heure sortie</th>
                                 <th>Retard</th>
+                                <th>Motif</th>
                                 <th>Durée</th>
                             </tr>
                             </thead>
@@ -181,12 +182,13 @@
                                 <td>@{{ row.station_check_in?.name ?? '-' }}</td>
                                 <td>@{{ row.station_check_out?.name ?? '-' }}</td>
                                 <td><span class="badge badge-success">@{{ row.started_at ?? '--:--' }}</span></td>
-                                <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-info">@{{ row.mid_check ?? '--:--' }}</span></td>
+                                <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>
                                 <td>
                                     <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
                                     <span class="badge badge-soft-success" v-else>Non</span>
                                 </td>
+                                <td>@{{ row.motif || '--' }}</td>
                                 <td><span class="badge badge-info">@{{ row.duree ?? '--' }}</span></td>
                             </tr>
                             </tbody>
@@ -201,3 +203,4 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/report-presences.js") }}"></script>
 @endpush
+

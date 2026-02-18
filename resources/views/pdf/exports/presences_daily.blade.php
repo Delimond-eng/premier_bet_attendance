@@ -27,7 +27,8 @@
                 <th style="width: 8%;">Controle</th>
                 <th style="width: 8%;">Duree</th>
                 <th style="width: 8%;">Retard</th>
-                <th style="width: 14%;">Station agent</th>
+                <th style="width: 14%;">Motif</th>
+                <th style="width: 12%;">Station agent</th>
             </tr>
             </thead>
             <tbody>
@@ -51,6 +52,7 @@
                             <span class="badge badge-ok">Non</span>
                         @endif
                     </td>
+                    <td>{{ $p->motif ?? '' }}</td>
                     <td>{{ $p->agent?->station?->name ?? '' }}</td>
                 </tr>
             @endforeach

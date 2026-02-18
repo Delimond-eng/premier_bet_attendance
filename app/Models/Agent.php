@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\ManagerStationContext;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Carbon\Carbon;
@@ -35,6 +37,18 @@ class Agent extends Model
         'created_at' => 'datetime:d/m/Y H:i',
         'updated_at' => 'datetime:d/m/Y H:i'
     ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('manager_station', function (Builder $builder) {
+            $stationId = ManagerStationContext::stationId();
+            if ($stationId === null) {
+                return;
+            }
+
+            $builder->where($builder->qualifyColumn('site_id'), $stationId);
+        });
+    }
 
     /**
      * Station d'affectation de l'agent.

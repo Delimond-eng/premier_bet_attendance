@@ -331,8 +331,7 @@
                         <div v-for="item in latestCheckins.slice(0, 5)" :key="item.id" class="p-2 bg-light rounded border-bottom d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
                                     <a href="javascript:void(0);" class="avatar flex-shrink-0">
-                                        <img v-if="item.agent.photo" :src="item.agent?.photo" class="rounded-circle" alt="user">
-                                        <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="user">
+                                        <img v-if="item.agent.photo" :src="item.agent?.photo ?? '{{asset("assets/img/avatar.jpg")}}'" class="rounded-circle" alt="user">
                                     </a>
                                     <div class="ms-2">
                                         <p class="fs-14 fw-medium text-truncate mb-1"><a href="#">@{{ item.agent?.fullname ?? 'Agent' }}</a></p>

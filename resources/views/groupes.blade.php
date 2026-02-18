@@ -52,7 +52,13 @@
                         </tr>
                         </thead>
                         <tbody>
-                        <tr v-for="g in groups" :key="g.id">
+                        <template v-for="groupe in groupedGroups" :key="groupe.key">
+                        <tr class="table-primary">
+                            <td :colspan="5" class="text-uppercase fw-bold">
+                                @{{ groupe.station_name }}
+                            </td>
+                        </tr>
+                        <tr v-for="g in groupe.rows" :key="g.id">
                             <td>
                                 <div class="form-check form-check-md">
                                     <input class="form-check-input" type="checkbox">
@@ -81,6 +87,7 @@
                                 </div>
                             </td>
                         </tr>
+                        </template>
                         </tbody>
                     </table>
                 </div>
@@ -142,4 +149,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/groupes.js") }}"></script>
 @endpush
-

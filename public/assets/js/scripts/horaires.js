@@ -141,7 +141,11 @@ new Vue({
         async save() {
             this.isLoading = true;
             try {
-                const { data } = await postJson("/rh/horaire/store", this.form);
+                const payload = {
+                    ...this.form,
+                    mid_check: this.form.mid_check || null,
+                };
+                const { data } = await postJson("/rh/horaire/store", payload);
                 if (data?.errors) return;
                 window.$("#add_horaire").modal("hide");
                 this.reset();
@@ -170,20 +174,32 @@ new Vue({
     },
 
     computed: {
-        exportPdfUrl() {
-            const params = new URLSearchParams();
-            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
-            return `/rh/horaires/export/pdf?${params.toString()}`;
+        groupedHoraires() {
+            const buckets = new Map();
+            this.horaires.forEach((h) => {
+                const key = h.site_id ?? "none";
+                if (!buckets.has(key)) buckets.set(key, []);
+                buckets.get(key).push(h);
+            });
+
+            const groups = [];
+            for (const [key, rows] of buckets.entries()) {
+                let stationName = "Station non affectee";
+                if (key !== "none") {
+                    const s = this.sites.find((x) => String(x.id) === String(key));
+                    stationName = s ? s.name : `Station ${key}`;
+                }
+
+                groups.push({
+                    key,
+                    station_name: stationName,
+                    rows,
+                });
+            }
+
+            return groups.sort((a, b) => String(a.station_name).localeCompare(String(b.station_name)));
         },
 
-        exportExcelUrl() {
-            const params = new URLSearchParams();
-            if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));
-            return `/rh/horaires/export/excel?${params.toString()}`;
-        },
-    },
-
-    computed: {
         exportPdfUrl() {
             const params = new URLSearchParams();
             if (this.filters.site_id) params.set("station_id", String(this.filters.site_id));

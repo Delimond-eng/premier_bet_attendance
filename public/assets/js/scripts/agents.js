@@ -145,8 +145,8 @@ new Vue({
             else if (action === "remove") this.removeAgent(agent);
         },
 
-        async load() {
-            if (this.isLoading) return;
+        async load(force = false) {
+            if (this.isLoading && !force) return;
             const stationId =
                 (this.$refs.stationSelect && String(this.$refs.stationSelect.value || "")) ||
                 String(this.filters.station_id || "");
@@ -253,7 +253,8 @@ new Vue({
                     alert((data.errors || []).join("\n"));
                     return;
                 }
-                await this.load();
+                this.isLoading = false;
+                await this.load(true);
             } catch (e) {
                 alert("Erreur lors de la suppression de l'agent.");
             } finally {

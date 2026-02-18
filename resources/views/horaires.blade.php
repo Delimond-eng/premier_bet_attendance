@@ -75,7 +75,13 @@
                         </tr>
                         </thead>
                         <tbody>
-                        <tr v-for="h in horaires" :key="h.id">
+                        <template v-for="g in groupedHoraires" :key="g.key">
+                        <tr class="table-primary">
+                            <td :colspan="8" class="text-uppercase fw-bold">
+                                @{{ g.station_name }}
+                            </td>
+                        </tr>
+                        <tr v-for="h in g.rows" :key="h.id">
                             <td>
                                 <div class="form-check form-check-md">
                                     <input class="form-check-input" type="checkbox">
@@ -95,6 +101,7 @@
                                 </div>
                             </td>
                         </tr>
+                        </template>
                         </tbody>
                     </table>
                 </div>

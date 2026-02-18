@@ -14,6 +14,7 @@ use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
 use App\Models\User;
+use App\Support\ManagerStationContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -34,6 +35,17 @@ class AdminController extends Controller
                 'code' => 'nullable|string|unique:sites,code,' . ($request->id ?? 'NULL'),
                 'adresse' => 'required|string',
             ]);
+
+            $managerStationId = ManagerStationContext::stationId();
+            if ($managerStationId !== null) {
+                $incomingId = isset($data['id']) ? (int) $data['id'] : null;
+                if ($incomingId === null || $incomingId !== $managerStationId) {
+                    return response()->json([
+                        'status' => 'error',
+                        'errors' => ['Un manager peut uniquement modifier sa propre station.'],
+                    ], 403);
+                }
+            }
 
             // Phone/GPS removed from the UI. Keep columns null to avoid stale values.
             $data['latlng'] = null;
@@ -607,9 +619,73 @@ class AdminController extends Controller
             'id' => 'required|integer',
         ]);
 
+        $managerStationId = ManagerStationContext::stationId();
+        if ($managerStationId !== null) {
+            $allowed = $this->canManagerDeleteRow(
+                table: (string) $data['table'],
+                id: (int) $data['id'],
+                stationId: $managerStationId
+            );
+
+            if (!$allowed) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ['Suppression hors station non autorisee pour ce manager.'],
+                ], 403);
+            }
+        }
+
         $result = DB::table($data['table'])->where('id', $data['id'])->delete();
 
         return response()->json(['status' => 'success', 'result' => $result]);
+    }
+
+    private function canManagerDeleteRow(string $table, int $id, int $stationId): bool
+    {
+        return match ($table) {
+            'sites' => $id === $stationId,
+            'agents' => Agent::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
+            'presence_horaires' => PresenceHoraire::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
+            'agent_histories' => AgentHistory::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
+            'presence_agents' => PresenceAgents::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
+            'agent_group_plannings' => AgentGroupPlanning::withoutGlobalScopes()
+                ->whereKey($id)
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->exists(),
+            'conges' => Conge::withoutGlobalScopes()
+                ->whereKey($id)
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->exists(),
+            'attendance_authorizations' => AttendanceAuthorization::withoutGlobalScopes()
+                ->whereKey($id)
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->exists(),
+            'attendance_justifications' => AttendanceJustification::withoutGlobalScopes()
+                ->whereKey($id)
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->exists(),
+            'agent_groups' => $this->canManagerDeleteGroup($id, $stationId),
+            default => false,
+        };
+    }
+
+    private function canManagerDeleteGroup(int $groupId, int $stationId): bool
+    {
+        $usedOutside = Agent::withoutGlobalScopes()
+            ->where('groupe_id', $groupId)
+            ->where(function ($q) use ($stationId) {
+                $q->whereNull('site_id')->orWhere('site_id', '!=', $stationId);
+            })
+            ->exists();
+
+        if ($usedOutside) {
+            return false;
+        }
+
+        return Agent::withoutGlobalScopes()
+            ->where('groupe_id', $groupId)
+            ->where('site_id', $stationId)
+            ->exists();
     }
 
     public function fetchAgents(Request $request): JsonResponse

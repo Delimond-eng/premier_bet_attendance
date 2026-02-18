@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\AttendanceAuthorization;
+use App\Models\AttendanceJustification;
+use App\Models\Conge;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
@@ -200,11 +203,27 @@ class ExportController extends Controller
             ->orderBy('libelle')
             ->get();
 
+        $grouped = $rows->groupBy(function ($h) {
+            return $h->site_id ?? 'none';
+        })->map(function ($items, $key) use ($stationsById) {
+            $stationName = 'Station non affectee';
+            if ($key !== 'none') {
+                $stationName = (string) (optional($stationsById->get((int) $key))->name ?? ('Station ' . $key));
+            }
+
+            return [
+                'key' => $key,
+                'station_name' => $stationName,
+                'rows' => $items,
+            ];
+        })->sortBy('station_name')->values();
+
         $pdf = Pdf::loadView('pdf.exports.horaires', [
             'title' => 'Liste des horaires',
             'station' => $station,
             'stationsById' => $stationsById,
             'rows' => $rows,
+            'grouped' => $grouped,
         ])->setPaper('a4', 'portrait');
 
         return $pdf->download('horaires' . ($station ? ('_station_' . $station->id) : '') . '.pdf');
@@ -227,15 +246,40 @@ class ExportController extends Controller
 
         $headers = ['Designation', 'Station', 'Heure debut', 'Controle intermediaire', 'Heure fin', 'Tolerance (min)'];
         $table = [];
-        foreach ($rows as $h) {
-            $table[] = [
-                (string) ($h->libelle ?? ''),
-                (string) (optional($stations->get((int) $h->site_id))->name ?? ''),
-                (string) ($h->started_at ?? ''),
-                (string) ($h->mid_check ?? ''),
-                (string) ($h->ended_at ?? ''),
-                (int) ($h->tolerence_minutes ?? 0),
+        $grouped = $rows->groupBy(function ($h) {
+            return $h->site_id ?? 'none';
+        })->map(function ($items, $key) use ($stations) {
+            $stationName = 'Station non affectee';
+            if ($key !== 'none') {
+                $stationName = (string) (optional($stations->get((int) $key))->name ?? ('Station ' . $key));
+            }
+
+            return [
+                'key' => $key,
+                'station_name' => $stationName,
+                'rows' => $items,
             ];
+        })->sortBy('station_name')->values();
+
+        foreach ($grouped as $group) {
+            $table[] = [
+                'Station: ' . $group['station_name'],
+                '',
+                '',
+                '',
+                '',
+                '',
+            ];
+            foreach ($group['rows'] as $h) {
+                $table[] = [
+                    (string) ($h->libelle ?? ''),
+                    (string) (optional($stations->get((int) $h->site_id))->name ?? ''),
+                    (string) ($h->started_at ?? ''),
+                    (string) ($h->mid_check ?? ''),
+                    (string) ($h->ended_at ?? ''),
+                    (int) ($h->tolerence_minutes ?? 0),
+                ];
+            }
         }
 
         $meta = [
@@ -361,6 +405,7 @@ class ExportController extends Controller
             ->orderBy('started_at')
             ->get();
 
+        $this->attachPresenceMotifs($rows, $date);
         $groups = $this->groupPresenceRowsByStation($rows);
 
         $pdf = Pdf::loadView('pdf.exports.presences_daily', [
@@ -401,6 +446,7 @@ class ExportController extends Controller
             ->orderBy('started_at')
             ->get();
 
+        $this->attachPresenceMotifs($rows, $date);
         $headers = [
             'Station',
             'Matricule',
@@ -414,6 +460,7 @@ class ExportController extends Controller
             'Controle intermediaire',
             'Duree',
             'Retard',
+            'Motif',
         ];
 
         $table = [];
@@ -432,6 +479,7 @@ class ExportController extends Controller
                 $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                 (string) ($p->duree ?? ''),
                 (string) ($p->retard ?? ''),
+                (string) ($p->motif ?? ''),
             ];
         }
 
@@ -807,6 +855,74 @@ class ExportController extends Controller
         $groups = array_values($map);
         usort($groups, fn ($a, $b) => strcmp((string) $a['station_name'], (string) $b['station_name']));
         return $groups;
+    }
+
+    private function attachPresenceMotifs(Collection $rows, string $date): void
+    {
+        $agentIds = $rows->pluck('agent_id')->filter()->unique()->values()->all();
+        if (empty($agentIds)) {
+            return;
+        }
+
+        $authorizations = AttendanceAuthorization::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_reference', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        $justifications = AttendanceJustification::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_reference', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        $conges = Conge::query()
+            ->whereIn('agent_id', $agentIds)
+            ->where('status', 'approved')
+            ->whereDate('date_debut', '<=', $date)
+            ->whereDate('date_fin', '>=', $date)
+            ->get()
+            ->groupBy('agent_id');
+
+        foreach ($rows as $p) {
+            $motifs = [];
+            $auth = optional($authorizations->get($p->agent_id ?? null))->first();
+            if ($auth) {
+                $label = 'Autorisation';
+                if (!empty($auth->reason)) {
+                    $label .= ': ' . $auth->reason;
+                } elseif (!empty($auth->type)) {
+                    $label .= ': ' . strtoupper((string) $auth->type);
+                }
+                $motifs[] = $label;
+            }
+
+            $justif = optional($justifications->get($p->agent_id ?? null))->first();
+            if ($justif) {
+                $label = $justif->kind === 'retard' ? 'Retard justifie' : 'Absence justifiee';
+                if (!empty($justif->justification)) {
+                    $label .= ': ' . $justif->justification;
+                }
+                $motifs[] = $label;
+            }
+
+            $conge = optional($conges->get($p->agent_id ?? null))->first();
+            if ($conge) {
+                $label = 'Conge';
+                if (!empty($conge->motif)) {
+                    $label .= ': ' . $conge->motif;
+                }
+                $motifs[] = $label;
+            }
+
+            if (($p->retard ?? '') === 'oui' && !$justif) {
+                $motifs[] = 'Retard';
+            }
+
+            $p->setAttribute('motif', implode(' | ', $motifs));
+        }
     }
 
     private function downloadXlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows): StreamedResponse

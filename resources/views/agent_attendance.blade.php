@@ -213,8 +213,8 @@
                                     <th>Station check-in</th>
                                     <th>Station check-out</th>
                                     <th>Heure entrée</th>
-                                    <th>Heure sortie</th>
                                     <th>Controle intermediaire</th>
+                                    <th>Heure sortie</th>
                                     <th>Statut</th>
                                     <th>Retard</th>
                                     <th>Total heures</th>
@@ -227,8 +227,8 @@
                                     <td>@{{ (p.station_check_in && p.station_check_in.name) ? p.station_check_in.name : '-' }}</td>
                                     <td>@{{ (p.station_check_out && p.station_check_out.name) ? p.station_check_out.name : '-' }}</td>
                                     <td><span class="badge badge-success-transparent">@{{ p.started_at || '--:--' }}</span></td>
-                                    <td><span class="badge badge-danger-transparent">@{{ p.ended_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-info-transparent">@{{ p.mid_check || '--:--' }}</span></td>
+                                    <td><span class="badge badge-danger-transparent">@{{ p.ended_at || '--:--' }}</span></td>
                                     <td>
                                         <span class="badge badge-success-transparent d-inline-flex align-items-center" v-if="p.started_at && p.ended_at">
                                             <i class="ti ti-point-filled me-1"></i>Présent
