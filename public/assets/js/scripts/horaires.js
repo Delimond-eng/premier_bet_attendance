@@ -1,39 +1,6 @@
 import { get, postJson } from "../modules/http.js";
 import { initSelect2ForVue } from "../modules/select2.js";
 
-function destroyDatatable(tableEl) {
-    const $ = window.$;
-    if (!tableEl || !$ || !$.fn || !$.fn.DataTable) return;
-
-    if ($.fn.DataTable.isDataTable(tableEl)) {
-        const dt = $(tableEl).DataTable();
-        dt.destroy();
-    }
-}
-
-function initOrRefreshDatatable(tableEl) {
-    const $ = window.$;
-    if (!$ || !$.fn || !$.fn.DataTable) return;
-
-    destroyDatatable(tableEl);
-
-    $(tableEl).DataTable({
-        bFilter: true,
-        ordering: true,
-        info: true,
-        language: {
-            search: " ",
-            sLengthMenu: "Lignes par page _MENU_",
-            searchPlaceholder: "Rechercher",
-            info: "Affichage _START_ - _END_ sur _TOTAL_",
-            paginate: {
-                next: '<i class="ti ti-chevron-right"></i>',
-                previous: '<i class="ti ti-chevron-left"></i> ',
-            },
-        },
-    });
-}
-
 new Vue({
     el: "#App",
 
@@ -89,8 +56,8 @@ new Vue({
             return s ? s.name : "--";
         },
 
-        async load() {
-            if (this.isLoading) return;
+        async load(force = false) {
+            if (this.isLoading && !force) return;
             this.isLoading = true;
             try {
                 const siteId =
@@ -99,13 +66,10 @@ new Vue({
                     String(this.filters.site_id || "");
                 this.filters.site_id = siteId;
 
-                destroyDatatable(this.$refs.table);
-
                 const params = new URLSearchParams();
                 if (siteId) params.set("site_id", siteId);
                 const { data } = await get(`/rh/horaires?${params.toString()}`);
                 this.horaires = data?.horaires ?? [];
-                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.horaires = [];
             } finally {
@@ -149,7 +113,8 @@ new Vue({
                 if (data?.errors) return;
                 window.$("#add_horaire").modal("hide");
                 this.reset();
-                await this.load();
+                this.isLoading = false;
+                await this.load(true);
             } finally {
                 this.isLoading = false;
             }
@@ -166,7 +131,8 @@ new Vue({
                     id: h.id,
                 });
                 if (data?.errors) return;
-                await this.load();
+                this.isLoading = false;
+                await this.load(true);
             } finally {
                 this.isLoading = false;
             }

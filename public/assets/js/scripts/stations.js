@@ -221,6 +221,7 @@ new Vue({
                 if (data?.errors) return;
                 this.closeModal();
                 this.reset();
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;
@@ -238,6 +239,7 @@ new Vue({
                     id: site.id,
                 });
                 if (data?.errors) return;
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;

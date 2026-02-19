@@ -56,54 +56,55 @@
                 </div>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table" ref="table">
-                        <thead class="thead-light">
-                        <tr>
-                            <th class="no-sort">
-                                <div class="form-check form-check-md">
-                                    <input class="form-check-input" type="checkbox" id="select-all">
-                                </div>
-                            </th>
-                            <th>Designation</th>
-                            <th>Station</th>
-                            <th>Heure début</th>
-                            <th>Controle intermediaire</th>
-                            <th>Heure fin</th>
-                            <th>Tolérance</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <template v-for="g in groupedHoraires" :key="g.key">
-                        <tr class="table-primary">
-                            <td :colspan="8" class="text-uppercase fw-bold">
-                                @{{ g.station_name }}
-                            </td>
-                        </tr>
-                        <tr v-for="h in g.rows" :key="h.id">
-                            <td>
-                                <div class="form-check form-check-md">
-                                    <input class="form-check-input" type="checkbox">
-                                </div>
-                            </td>
-                            <td><h6 class="fs-14 fw-medium">@{{ h.libelle }}</h6></td>
-                            <td>@{{ stationName(h.site_id) }}</td>
-                            <td><span class="badge badge-info">@{{ h.started_at }}</span></td>
-                            <td><span class="badge badge-primary">@{{ h.mid_check || '--:--' }}</span></td>
-                            <td><span class="badge badge-dark">@{{ h.ended_at }}</span></td>
-                            <td><span class="badge badge-purple">@{{ h.tolerence_minutes }} min</span></td>
+                <div v-if="groupedHoraires.length === 0" class="text-muted">Aucune donnée.</div>
 
-                            <td>
-                                <div class="action-icon d-inline-flex">
-                                    <a href="javascript:void(0);" class="me-2 text-info" @click="edit(h)"><i class="ti ti-edit"></i></a>
-                                    <a href="javascript:void(0);" class="text-danger" @click="remove(h)"><i class="ti ti-trash"></i></a>
-                                </div>
-                            </td>
-                        </tr>
-                        </template>
-                        </tbody>
-                    </table>
+                <div v-for="g in groupedHoraires" :key="g.key" class="mb-4">
+                    <div class="alert alert-info d-flex align-items-center mb-2 py-2">
+                        <i class="ti ti-home-bolt me-2"></i>
+                        <strong>Station : @{{ g.station_name }}</strong>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead class="thead-light">
+                            <tr>
+                                <th class="no-sort">
+                                    <div class="form-check form-check-md">
+                                        <input class="form-check-input" type="checkbox">
+                                    </div>
+                                </th>
+                                <th>Designation</th>
+                                <th>Station</th>
+                                <th>Heure début</th>
+                                <th>Controle intermediaire</th>
+                                <th>Heure fin</th>
+                                <th>Tolérance</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="h in g.rows" :key="h.id">
+                                <td>
+                                    <div class="form-check form-check-md">
+                                        <input class="form-check-input" type="checkbox">
+                                    </div>
+                                </td>
+                                <td><h6 class="fs-14 fw-medium">@{{ h.libelle }}</h6></td>
+                                <td>@{{ stationName(h.site_id) }}</td>
+                                <td><span class="badge badge-info">@{{ h.started_at ?? "--:--" }}</span></td>
+                                <td class="text-center"><span class="badge badge-primary">@{{ h.mid_check || "--:--" }}</span></td>
+                                <td><span class="badge badge-dark">@{{ h.ended_at ?? "--:--" }}</span></td>
+                                <td><span class="badge badge-purple">@{{ h.tolerence_minutes }} min</span></td>
+                                <td>
+                                    <div class="action-icon d-inline-flex">
+                                        <a href="javascript:void(0);" class="me-2 text-info" @click="edit(h)"><i class="ti ti-edit"></i></a>
+                                        <a href="javascript:void(0);" class="text-danger" @click="remove(h)"><i class="ti ti-trash"></i></a>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -146,7 +147,7 @@
 
                                 <div class="col-md-4">
                                     <div class="mb-3">
-                                        <label class="form-label">Controle intermediaire</label>
+                                        <label class="form-label">Contrôle</label>
                                         <input type="time" class="form-control" v-model="form.mid_check">
                                     </div>
                                 </div>
@@ -183,3 +184,6 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/horaires.js") }}"></script>
 @endpush
+
+
+

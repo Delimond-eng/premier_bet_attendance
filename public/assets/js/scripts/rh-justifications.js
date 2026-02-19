@@ -129,6 +129,7 @@ new Vue({
                 if (data?.errors) return;
                 window.$("#justif_modal").modal("hide");
                 this.reset();
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;
@@ -142,6 +143,7 @@ new Vue({
             try {
                 const { data } = await postJson("/rh/justifications/delete", { id: j.id });
                 if (data?.errors) return;
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;

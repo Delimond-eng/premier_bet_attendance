@@ -61,6 +61,7 @@
                             <th>Date création</th>
                             <th>Date modif.</th>
                             <th>Role</th>
+                            <th>Station</th>
                             <th>Status</th>
                             <th></th>
                         </tr>
@@ -95,23 +96,24 @@
                                 <span :class="data.role ==='admin' ? 'badge-pink-transparent' : 'badge-info-transparent'"
                                       class=" badge badge-md p-2 fs-10">@{{ data.role }}</span>
                             </td>
+                            <td> <span class="badge badge-purple">@{{ data.station?.name ?? '-' }}</span> </td>
                             <td>
                                 <span class="badge badge-success d-inline-flex align-items-center badge-xs">
                                     <i class="ti ti-point-filled me-1"></i>Active
                                 </span>
                             </td>
-                            <td> 
-                                <div class="action-icon d-inline-flex"> 
+                            <td>
+                                <div class="action-icon d-inline-flex">
                                     @can('users.update')
-                                        <a href="#" class="me-2" @click="getAccess(data)"><i :class="{'text-gray-3':data.role==='admin'}" class="ti ti-shield"></i></a> 
-                                        <a href="#" class="me-2" @click="editUser(data)"><i  class="ti ti-edit"></i></a> 
+                                        <a href="#" class="me-2" @click="getAccess(data)"><i :class="{'text-gray-3':data.role==='admin' || data.role==='manager' }" class="ti ti-shield"></i></a>
+                                        <a href="#" class="me-2" @click="editUser(data)"><i  class="ti ti-edit"></i></a>
                                     @endcan
                                     @can('users.delete')
-                                        <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a> 
+                                        <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
                                     @endcan
-                                </div> 
-                            </td> 
-                        </tr> 
+                                </div>
+                            </td>
+                        </tr>
                         </tbody>
                     </table>
                 </div>
@@ -122,9 +124,9 @@
 
         <!-- /Modal create User -->
         @canany(['users.create','users.update'])
-        <div class="modal fade" id="add_users"> 
-            <div class="modal-dialog modal-dialog-centered modal-lg"> 
-                <div class="modal-content"> 
+        <div class="modal fade" id="add_users">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
                     <div class="modal-header">
                         <h4 class="modal-title">Création compte utilisateur</h4>
                         <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal"
@@ -169,10 +171,10 @@
                                     <div class="mb-3">
                                         <label class="form-label">Station</label>
                                         <select class="form-select" v-model="form.station_id">
-                                            <option value="">--SÃ©lectionner une station--</option>
+                                            <option value="">--Sélectionner une station--</option>
                                             <option v-for="s in allSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                                         </select>
-                                        <small class="text-muted">Obligatoire pour les rÃ´les non admin.</small>
+                                        <small class="text-muted">Obligatoire pour les utilisateurs non admin</small>
                                     </div>
                                 </div>
                             </div>
@@ -187,7 +189,7 @@
                     </form>
                 </div>
             </div>
-        </div> 
+        </div>
         @endcanany
 
         <!-- /Modal access -->

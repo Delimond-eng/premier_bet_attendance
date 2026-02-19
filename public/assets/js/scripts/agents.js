@@ -295,6 +295,15 @@ new Vue({
     },
 
     computed: {
+        filteredGroups() {
+            if (!this.createForm.site_id) {
+                return this.groups;
+            }
+            const stationId = String(this.createForm.site_id);
+            return this.groups.filter(
+                (g) => String(g?.horaire?.site_id ?? "") === stationId
+            );
+        },
         exportPdfUrl() {
             const params = new URLSearchParams();
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
@@ -305,6 +314,20 @@ new Vue({
             const params = new URLSearchParams();
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             return `/agents/export/excel?${params.toString()}`;
+        },
+    },
+
+    watch: {
+        "createForm.site_id"(value) {
+            if (!value || !this.createForm.groupe_id) return;
+            const keep = this.groups.some(
+                (g) =>
+                    String(g.id) === String(this.createForm.groupe_id) &&
+                    String(g?.horaire?.site_id ?? "") === String(value)
+            );
+            if (!keep) {
+                this.createForm.groupe_id = "";
+            }
         },
     },
 });

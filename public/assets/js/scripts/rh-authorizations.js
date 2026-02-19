@@ -121,6 +121,7 @@ new Vue({
                 if (data?.errors) return;
                 window.$("#auth_modal").modal("hide");
                 this.reset();
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;
@@ -134,6 +135,7 @@ new Vue({
             try {
                 const { data } = await postJson("/rh/authorizations/delete", { id: a.id });
                 if (data?.errors) return;
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;

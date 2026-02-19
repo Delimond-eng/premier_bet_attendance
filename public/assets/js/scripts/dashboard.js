@@ -39,7 +39,7 @@ new Vue({
             range: {
                 from: null,
                 to: null,
-                mode: "week",
+                mode: "today",
             },
         };
     },
@@ -96,8 +96,8 @@ new Vue({
                 return;
             }
 
+            const start = window.moment();
             const end = window.moment();
-            const start = window.moment().subtract(6, "days");
 
             this.range.from = start.format("YYYY-MM-DD");
             this.range.to = end.format("YYYY-MM-DD");

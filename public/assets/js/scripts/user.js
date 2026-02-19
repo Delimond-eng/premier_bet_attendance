@@ -155,7 +155,7 @@ new Vue({
         },
 
         editRole(role) {
-            if (role.name !== "admin") {
+            if (role.name !== "admin" || role.name !=="manager") {
                 this.formRole.name = role.name;
                 // role.permissions est un tableau d'objets, on récupère juste le name
                 this.formRole.permissions = role.permissions.map((p) => p.name);
@@ -174,7 +174,7 @@ new Vue({
         },
 
         getAccess(user) {
-            if (user.role !== "admin") {
+            if (user.role !== "admin" || user.role !=='manager') {
                 this.form.user_id = user.id;
                 const permissions =
                     user.permissions.length > 0

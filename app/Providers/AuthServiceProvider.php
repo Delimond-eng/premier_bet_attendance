@@ -24,12 +24,9 @@ class AuthServiceProvider extends ServiceProvider
         $this->registerPolicies();
 
         Gate::before(function ($user, $ability) {
-            if ($user->hasRole('admin')) {
+            $role = strtolower((string) ($user->role ?? ''));
+            if ($user->hasRole('admin') || $user->hasRole('manager') || $role === 'admin' || $role === 'manager') {
                 return true; // full access
-            }
-
-            if ($user->hasRole('manager')) {
-                return true; // full access, station scope applies only when station_id is set
             }
             return null;
         });

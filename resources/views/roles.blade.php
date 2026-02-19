@@ -70,11 +70,11 @@
                             <td>
                                 <div class="action-icon d-inline-flex">
                                     @can('roles.update')
-                                        <a href="#"  @click="editRole(data)" class="me-2"><i :class="{'text-gray-3':data.name==='admin'}" class="ti ti-edit"></i></a>
+                                        <a href="#"  @click="editRole(data)" class="me-2"><i :class="{'text-gray-3':data.name==='admin' || data.name==='manager'}" class="ti ti-edit"></i></a>
                                     @endcan
                                     @can('roles.delete')
                                         <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i
-                                                class="ti ti-trash" :class="{'text-gray-3':data.name==='admin'}"></i></a>
+                                                class="ti ti-trash" :class="{'text-gray-3':data.name==='admin' || data.name==='manager'}"></i></a>
                                     @endcan
                                 </div>
                             </td>

@@ -121,6 +121,7 @@ new Vue({
                 }
                 window.$("#conge_type_modal").modal("hide");
                 this.reset();
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;
@@ -134,6 +135,7 @@ new Vue({
             try {
                 const { data } = await postJson("/rh/conges/delete", { id: t.id });
                 if (data?.errors) return;
+                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;
@@ -141,3 +143,5 @@ new Vue({
         },
     },
 });
+
+
