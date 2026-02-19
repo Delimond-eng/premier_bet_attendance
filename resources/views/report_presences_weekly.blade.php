@@ -66,7 +66,8 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="avatar avatar-sm me-2">
-                                        <img :src="r.agent?.photo || '{{asset("assets/img/avatar.jpg")}}'" class="rounded-circle" alt="img">
+                                        <img v-if="r.agent?.photo" :src="r.agent?.photo" :data-zoom="r.agent?.photo" class="rounded-circle" alt="img">
+                                        <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="img">
                                     </span>
                                     <div>
                                         <h6 class="mb-0">@{{ r.agent?.fullname ?? '-' }}</h6>

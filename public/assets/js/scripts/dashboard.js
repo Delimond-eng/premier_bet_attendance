@@ -49,9 +49,13 @@ new Vue({
             document.getElementById("global-loader").style.display = "none";
         }
 
+        const today = new Date().toISOString().slice(0, 10);
+        this.range.mode = "today";
+        this.range.from = today;
+        this.range.to = today;
+
         this.initRangePicker();
         this.applyMode();
-        this.refresh();
     },
 
     methods: {

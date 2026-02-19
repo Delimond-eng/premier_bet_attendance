@@ -38,7 +38,8 @@
                                 <span class="progress-bar border-success"></span>
                             </span>
                             <div class="avatar avatar-xxl avatar-rounded">
-                                <img :src="agent.photo || '{{ asset("assets/img/avatar.jpg") }}'" alt="Img">
+                                <img v-if="agent.photo" :src="agent.photo" :data-zoom="agent.photo" alt="Img">
+                                <img v-else src="{{ asset("assets/img/avatar.jpg") }}" alt="Img">
                             </div>
                         </div>
                         <div class="text-center">

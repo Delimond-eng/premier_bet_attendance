@@ -20,12 +20,14 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/daterangepicker/daterangepicker.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/dataTables.bootstrap5.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/plugins/fancybox/jquery.fancybox.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/salama-logo.css') }}">
 
 	@stack("styles")
     <style>
         [v-cloak] { display: none; }
+        img[data-zoom] { cursor: zoom-in; }
     </style>
 </head>
 <body data-sidebarbg="sidebarbg4">
@@ -78,6 +80,19 @@
     <script src="{{asset("assets/plugins/chartjs/chart.min.js")}}"></script>
     <script src="{{asset("assets/plugins/chartjs/chartjs-plugin-datalabels.min.js")}}"></script>
     <script src="{{asset("assets/plugins/chartjs/chart-data.js")}}"></script>
+
+    <script src="{{asset("assets/plugins/fancybox/jquery.fancybox.min.js")}}"></script>
+    <script>
+        (function ($) {
+            if (!$ || !$.fancybox) return;
+            $(document).on("click", "img[data-zoom]", function (e) {
+                const src = $(this).attr("data-zoom") || $(this).attr("src");
+                if (!src) return;
+                e.preventDefault();
+                $.fancybox.open([{ src, type: "image" }], { buttons: ["zoom", "close"] });
+            });
+        })(window.jQuery);
+    </script>
 
     <script src="{{ asset('assets/js/moment.min.js') }}"></script>
     <script src="{{ asset('assets/js/bootstrap-datetimepicker.min.js') }}"></script>

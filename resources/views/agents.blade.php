@@ -192,7 +192,7 @@
                                     <td>
                                         <div class="d-flex align-items-center">
                                             <a href="#" class="avatar avatar-md" data-bs-toggle="modal" data-bs-target="#view_details">
-                                                <img v-if="data.photo" :src="data.photo" class="img-fluid rounded-circle" alt="user">
+                                                <img v-if="data.photo" :src="data.photo" :data-zoom="data.photo" class="img-fluid rounded-circle" alt="user">
                                                 <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="img-fluid rounded-circle" alt="user">
                                             </a>
                                             <div class="ms-2">
@@ -259,8 +259,8 @@
                                 <div class="col-md-12">
                                     <div class="d-flex align-items-center flex-wrap row-gap-3 border-1 border-light-subtle bg-light-200 w-100 rounded p-3 mb-4">
                                         <div class="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                                            <img v-if="createForm.photo_preview_url" :src="createForm.photo_preview_url" class="img-fluid rounded-circle" alt="photo">
-                                            <img v-else-if="createForm.existing_photo_url" :src="createForm.existing_photo_url" class="img-fluid rounded-circle" alt="photo">
+                                            <img v-if="createForm.photo_preview_url" :src="createForm.photo_preview_url" :data-zoom="createForm.photo_preview_url" class="img-fluid rounded-circle" alt="photo">
+                                            <img v-else-if="createForm.existing_photo_url" :src="createForm.existing_photo_url" :data-zoom="createForm.existing_photo_url" class="img-fluid rounded-circle" alt="photo">
                                             <i v-else class="ti ti-photo text-gray-2 fs-16"></i>
                                         </div>
                                         <div class="profile-upload">

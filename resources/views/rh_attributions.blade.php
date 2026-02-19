@@ -47,7 +47,7 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="avatar avatar-sm me-2">
-                                        <img v-if="c.agent?.photo" :src="c.agent?.photo" class="rounded-circle" alt="img">
+                                        <img v-if="c.agent?.photo" :src="c.agent?.photo" :data-zoom="c.agent?.photo" class="rounded-circle" alt="img">
                                         <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="img">
 
                                     </span>
