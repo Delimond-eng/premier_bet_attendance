@@ -1,10 +1,10 @@
 <?php
 
-namespace App\View\Components;
+namespace bootstrap\View\Components;
 
 use Illuminate\View\Component;
 
-class DomLoader extends Component
+class EmptyState extends Component
 {
     /**
      * Create a new component instance.
@@ -23,6 +23,6 @@ class DomLoader extends Component
      */
     public function render()
     {
-        return view('components.dom-loader');
+        return view('components.empty-state');
     }
 }

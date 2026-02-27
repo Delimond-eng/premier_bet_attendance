@@ -11,7 +11,7 @@ function destroyDatatable(tableEl) {
     }
 }
 
-function initOrRefreshDatatable(tableEl) {
+function initOrRefreshDatatable(tableEl, order = [[0, "desc"]]) {
     const $ = window.$;
     if (!$ || !$.fn || !$.fn.DataTable) return;
 
@@ -20,7 +20,7 @@ function initOrRefreshDatatable(tableEl) {
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[0, "desc"]],
+        order,
         info: true,
         language: {
             search: " ",
@@ -66,11 +66,13 @@ new Vue({
         return {
             isLoading: false,
             agentId: null,
+            activeTab: "presences",
             agent: {},
             schedule: null,
             todayStatus: null,
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
             rows: [],
+            maintenanceRows: [],
             filters: {
                 from: "",
                 to: "",
@@ -106,9 +108,21 @@ new Vue({
         this.initRangePicker();
         this.loadSummary();
         this.load();
+        this.loadMaintenance();
     },
 
     methods: {
+        switchTab(tab) {
+            this.activeTab = tab;
+            this.$nextTick(() => {
+                if (tab === "presences") {
+                    initOrRefreshDatatable(this.$refs.tablePresences, [[0, "desc"]]);
+                } else {
+                    initOrRefreshDatatable(this.$refs.tableMaintenances, [[0, "desc"]]);
+                }
+            });
+        },
+
         initRangePicker() {
             const input = window.$?.(".bookingrange");
             if (!input || !input.length || !window.$?.fn?.daterangepicker || !window.moment) {
@@ -132,6 +146,7 @@ new Vue({
                     this.filters.from = startDate.format("YYYY-MM-DD");
                     this.filters.to = endDate.format("YYYY-MM-DD");
                     this.load();
+                    this.loadMaintenance();
                 }
             );
         },
@@ -183,6 +198,7 @@ new Vue({
 
             await this.loadSummary();
             await this.load();
+            await this.loadMaintenance();
         },
 
         async load() {
@@ -191,7 +207,7 @@ new Vue({
 
             this.isLoading = true;
             try {
-                destroyDatatable(this.$refs.table);
+                destroyDatatable(this.$refs.tablePresences);
                 const params = new URLSearchParams();
                 params.set("agent_id", this.agentId);
                 params.set("per_page", "500");
@@ -206,8 +222,8 @@ new Vue({
                     this.agent = this.rows[0].agent ?? {};
                 }
 
-                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
-            } catch (e) {
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.tablePresences, [[0, "desc"]]), 0));
+            } catch (_) {
                 this.rows = [];
                 if (!this.agent) this.agent = {};
             } finally {
@@ -215,25 +231,29 @@ new Vue({
             }
         },
 
-        recomputeStats() {
-            const presentRows = this.rows.filter((r) => !!r.started_at);
-            const lateRows = this.rows.filter((r) => r.retard === "oui");
+        async loadMaintenance() {
+            if (!this.agentId) return;
 
-            let totalMinutes = 0;
-            for (const r of presentRows) {
-                const mins = this.extractMinutes(r);
-                totalMinutes += mins;
+            try {
+                destroyDatatable(this.$refs.tableMaintenances);
+
+                const params = new URLSearchParams();
+                params.set("agent_id", this.agentId);
+                params.set("per_page", "500");
+                if (this.filters.from) params.set("from", this.filters.from);
+                if (this.filters.to) params.set("to", this.filters.to);
+                if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+
+                const { data } = await get(`/agents/attendances/maintenance-history?${params.toString()}`);
+                this.maintenanceRows = data?.history?.data ?? [];
+
+                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.tableMaintenances, [[0, "desc"]]), 0));
+            } catch (_) {
+                this.maintenanceRows = [];
             }
-
-            this.stats = {
-                totalHoursPeriod: (totalMinutes / 60).toFixed(1),
-                presences: presentRows.length,
-                retards: lateRows.length,
-            };
         },
 
         extractMinutes(row) {
-            // Priorité : started_at/ended_at (plus fiable). Sinon : champ duree ("8h 30min").
             if (row.started_at && row.ended_at) {
                 const start = parseDateTime(row.started_at);
                 const end = parseDateTime(row.ended_at);
@@ -260,7 +280,6 @@ new Vue({
 
     computed: {
         timeSlots() {
-            // Keep the same visual "timeline" already used in the template.
             return [
                 "06:00",
                 "07:00",
@@ -302,7 +321,6 @@ new Vue({
             let endIdx = -1;
 
             if (endMatches.length) {
-                // Prefer an end index after the chosen start index, to avoid highlighting the wrong duplicate.
                 if (startIdx >= 0) {
                     const after = endMatches.find((i) => i > startIdx);
                     endIdx = typeof after === "number" ? after : endMatches[endMatches.length - 1];
@@ -350,19 +368,19 @@ new Vue({
         },
 
         agentStatusText() {
-            if (this.todayStatus === "conge") return "En congé";
-            if (this.todayStatus === "present") return "Présent";
+            if (this.todayStatus === "conge") return "En conge";
+            if (this.todayStatus === "present") return "Present";
             if (this.todayStatus === "absent") return "Absent";
 
             const today = new Date().toISOString().slice(0, 10);
             const todayRow = this.rows.find((r) => (r.date_reference_iso || r.date_reference) === today);
             if (todayRow) {
-                return todayRow.started_at ? "Présent" : "Absent";
+                return todayRow.started_at ? "Present" : "Absent";
             }
 
             const latest = this.rows[0] ?? null;
             if (latest) {
-                return latest.started_at ? "Présent" : "Absent";
+                return latest.started_at ? "Present" : "Absent";
             }
 
             return "Absent";
@@ -372,7 +390,7 @@ new Vue({
             if (this.todayStatus === "conge") return "badge-primary";
             if (this.todayStatus === "present") return "badge-success";
             if (this.todayStatus === "absent") return "badge-danger";
-            return this.agentStatusText === "Présent" ? "badge-success" : "badge-danger";
+            return this.agentStatusText === "Present" ? "badge-success" : "badge-danger";
         },
 
         arrivedAtText() {
@@ -403,7 +421,6 @@ new Vue({
         },
 
         profileProgress() {
-            // Simple valeur de 0-100 basée sur présence dans la période (visuel).
             const total = this.rows.length || 1;
             const present = this.rows.filter((r) => !!r.started_at).length;
             return Math.min(Math.max(Math.round((present / total) * 100), 0), 100);
@@ -413,10 +430,12 @@ new Vue({
     watch: {
         "filters.station_id"() {
             this.load();
+            this.loadMaintenance();
         },
         "filters.status"() {
-            destroyDatatable(this.$refs.table);
-            this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
+            if (this.activeTab !== "presences") return;
+            destroyDatatable(this.$refs.tablePresences);
+            this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.tablePresences, [[0, "desc"]]), 0));
         },
     },
 });

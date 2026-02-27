@@ -9,6 +9,7 @@ use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
+use App\Models\MaintenanceAgent;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
@@ -38,9 +39,12 @@ class PresenceController extends Controller
         try { 
             $data = $request->validate([ 
                 'matricule' => 'required|string|exists:agents,matricule', 
-                'key' => 'required|string|in:check-in,check-out,confirmation', 
+                'key' => 'required|string|in:check-in,check-out,confirmation,maintenance-in,maintenance-out', 
                 'station_id' => 'nullable|integer|exists:sites,id', 
                 'coordonnees' => 'nullable|string', // "lat,lng" (mobile) 
+                'photo' => 'nullable',
+                'photo_debut' => 'nullable',
+                'photo_fin' => 'nullable',
             ]); 
         } catch (ValidationException $e) { 
             // Important: keep HTTP 200 to avoid client conflicts (Flutter), encode failures in payload only.
@@ -62,6 +66,14 @@ class PresenceController extends Controller
                 coordonnees: $data['coordonnees'] ?? null,
                 fallbackAssignedStationId: $assignedStationId,
             );
+
+            if (!$stationId && $data['key'] === 'maintenance-out') {
+                $stationId = MaintenanceAgent::query()
+                    ->where('agent_id', $agent->id)
+                    ->whereNull('end_at')
+                    ->orderByDesc('started_at')
+                    ->value('station_id');
+            }
 
             if (!$stationId) {
                 return response()->json(['errors' => ['Station introuvable pour ce pointage.']]);
@@ -109,14 +121,26 @@ class PresenceController extends Controller
             }
         }
 
+        $photoDebut = $this->normalizePunchPhoto($data['photo_debut'] ?? $data['photo'] ?? null);
+        $photoFin = $this->normalizePunchPhoto($data['photo_fin'] ?? $data['photo'] ?? null);
+        $coordonnees = $data['coordonnees'] ?? null;
+
         try {
-            return DB::transaction(function () use ($data, $agent, $assignedStationId, $stationId, $horaire, $dateReference, $now) {
+            return DB::transaction(function () use ($data, $agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut, $photoFin, $coordonnees) {
                 if ($data['key'] === 'check-in') {
-                    return $this->handleCheckIn($agent, $assignedStationId, $stationId, $horaire, $dateReference, $now);
+                    return $this->handleCheckIn($agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut);
                 }
 
                 if ($data['key'] === 'check-out') {
-                    return $this->handleCheckOut($agent, $stationId, $now);
+                    return $this->handleCheckOut($agent, $stationId, $now, $photoFin);
+                }
+
+                if ($data['key'] === 'maintenance-in') {
+                    return $this->handleMaintenanceIn($agent, $stationId, $now, $photoDebut, $coordonnees);
+                }
+
+                if ($data['key'] === 'maintenance-out') {
+                    return $this->handleMaintenanceOut($agent, $stationId, $now, $photoFin, $coordonnees);
                 }
 
                 return $this->handleMidCheckConfirmation($agent, $dateReference, $now);
@@ -131,7 +155,7 @@ class PresenceController extends Controller
         }
     }
 
-    private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now): JsonResponse
+    private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now, ?string $photoDebut = null): JsonResponse
     {
         $existing = PresenceAgents::query()
             ->where('agent_id', $agent->id)
@@ -160,6 +184,7 @@ class PresenceController extends Controller
             'date_reference' => $dateReference->toDateString(),
             'started_at' => $now,
             'retard' => $retard,
+            'photos_debut' => $photoDebut,
             'status' => 'arrive',
         ]);
 
@@ -172,7 +197,7 @@ class PresenceController extends Controller
         ]);
     }
 
-    private function handleCheckOut(Agent $agent, int $stationId, Carbon $now): JsonResponse
+    private function handleCheckOut(Agent $agent, int $stationId, Carbon $now, ?string $photoFin = null): JsonResponse
     {
         $presence = PresenceAgents::query()
             ->where('agent_id', $agent->id)
@@ -193,6 +218,7 @@ class PresenceController extends Controller
             'ended_at' => $now,
             'duree' => $dureeFormat,
             'station_check_out_id' => $stationId,
+            'photos_fin' => $photoFin,
             'status' => 'depart',
         ]);
 
@@ -234,6 +260,269 @@ class PresenceController extends Controller
             'message' => 'Controle intermediaire enregistre.',
             'result' => $presence,
         ]);
+    }
+
+    private function handleMaintenanceIn(Agent $agent, int $stationId, Carbon $now, ?string $photoDebut, ?string $coordonnees): JsonResponse
+    {
+        $openMaintenance = MaintenanceAgent::query()
+            ->where('agent_id', $agent->id)
+            ->whereNull('end_at')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if ($openMaintenance) {
+            return response()->json(['errors' => ['Une maintenance est deja ouverte pour cet agent.']]);
+        }
+
+        $geo = $this->buildMaintenanceGeoContext($stationId, $coordonnees);
+
+        $maintenance = MaintenanceAgent::create([
+            'agent_id' => $agent->id,
+            'station_id' => $stationId,
+            'started_at' => $now,
+            'date_maintenance' => $now->toDateString(),
+            'photo_debut' => $photoDebut,
+            'latlng' => $geo['station_latlng'],
+            'commentaire' => $this->buildMaintenanceCommentLine('debut', $geo),
+        ]);
+
+        $maintenance->load(['agent.station', 'station']);
+        $this->attachMaintenanceMeta($maintenance);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Debut de maintenance enregistre.',
+            'result' => $maintenance,
+        ]);
+    }
+
+    private function handleMaintenanceOut(Agent $agent, int $stationId, Carbon $now, ?string $photoFin, ?string $coordonnees): JsonResponse
+    {
+        $maintenance = MaintenanceAgent::query()
+            ->where('agent_id', $agent->id)
+            ->whereNull('end_at')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if (!$maintenance) {
+            return response()->json(['errors' => ['Aucune maintenance ouverte trouvee pour cet agent.']]);
+        }
+
+        $targetStationId = (int) ($maintenance->station_id ?: $stationId);
+        $geo = $this->buildMaintenanceGeoContext($targetStationId, $coordonnees);
+        $existingComment = trim((string) ($maintenance->commentaire ?? ''));
+        $endComment = $this->buildMaintenanceCommentLine('fin', $geo);
+
+        $maintenance->update([
+            'end_at' => $now,
+            'photo_fin' => $photoFin,
+            'latlng' => $maintenance->latlng ?: $geo['station_latlng'],
+            'commentaire' => $existingComment !== ''
+                ? ($existingComment . "\n" . $endComment)
+                : $endComment,
+        ]);
+
+        $maintenance->load(['agent.station', 'station']);
+        $this->attachMaintenanceMeta($maintenance);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Fin de maintenance enregistree.',
+            'result' => $maintenance,
+        ]);
+    }
+
+    private function buildMaintenanceGeoContext(int $stationId, ?string $coordonnees): array
+    {
+        $station = Station::query()
+            ->withoutGlobalScopes()
+            ->find($stationId, ['id', 'name', 'latlng']);
+
+        $stationLatLng = $station?->latlng ? trim((string) $station->latlng) : null;
+        $agentLatLng = $coordonnees ? trim((string) $coordonnees) : null;
+
+        $stationPoint = $this->parseLatLng($stationLatLng);
+        $agentPoint = $this->parseLatLng($agentLatLng);
+        $errors = [];
+
+        $distanceMeters = null;
+        $isOnStation = null;
+
+        if (!$stationLatLng) {
+            $errors[] = 'latlng station non renseigne';
+        } elseif (!$stationPoint) {
+            $errors[] = 'latlng station invalide';
+        }
+
+        if (!$agentLatLng) {
+            $errors[] = 'coordonnees agent non renseignees';
+        } elseif (!$agentPoint) {
+            $errors[] = 'coordonnees agent invalides';
+        }
+
+        if ($stationPoint && $agentPoint) {
+            $distanceMeters = $this->calculateDistanceMeters(
+                $agentPoint['lat'],
+                $agentPoint['lng'],
+                $stationPoint['lat'],
+                $stationPoint['lng']
+            );
+            $isOnStation = $distanceMeters <= 500;
+        }
+
+        return [
+            'station_name' => $station?->name,
+            'station_latlng' => $stationLatLng,
+            'agent_latlng' => $agentLatLng,
+            'distance_meters' => $distanceMeters,
+            'is_on_station' => $isOnStation,
+            'station_latlng_valid' => $stationPoint !== null,
+            'agent_latlng_valid' => $agentPoint !== null,
+            'errors' => $errors,
+        ];
+    }
+
+    private function buildMaintenanceCommentLine(string $phase, array $geo): string
+    {
+        $label = $phase === 'fin' ? 'Fin' : 'Debut';
+
+        if ($geo['distance_meters'] === null) {
+            $line = $label . ' distance: inconnue';
+            if (!empty($geo['errors'])) {
+                $line .= ', cause: ' . implode('; ', $geo['errors']);
+            }
+        } else {
+            $line = $label . ' distance: ' . $geo['distance_meters'] . ' m';
+        }
+
+        if ($geo['is_on_station'] !== null) {
+            $line .= ', sur station: ' . ($geo['is_on_station'] ? 'oui' : 'non');
+        }
+
+        if (!empty($geo['agent_latlng'])) {
+            $line .= ', position agent: ' . $geo['agent_latlng'];
+        }
+
+        if (!empty($geo['station_latlng'])) {
+            $line .= ', position station: ' . $geo['station_latlng'];
+        }
+
+        return $line;
+    }
+
+    private function attachMaintenanceMeta(MaintenanceAgent $maintenance): void
+    {
+        $meta = $this->extractMaintenanceMeta($maintenance->commentaire);
+        $maintenance->setAttribute('distance_meters', $meta['distance_meters']);
+        $maintenance->setAttribute('is_on_station', $meta['is_on_station']);
+        $maintenance->setAttribute('distance_label', $meta['distance_label']);
+    }
+
+    private function extractMaintenanceMeta(?string $commentaire): array
+    {
+        $text = (string) ($commentaire ?? '');
+
+        $debutDistance = null;
+        $finDistance = null;
+        $debutOnStation = null;
+        $finOnStation = null;
+
+        if (preg_match('/Debut\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $debutDistance = (int) $m[1];
+        }
+
+        if (preg_match('/Fin\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $finDistance = (int) $m[1];
+        }
+
+        if (preg_match('/Debut\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+            $debutOnStation = strtolower($m[1]) === 'oui';
+        }
+
+        if (preg_match('/Fin\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+            $finOnStation = strtolower($m[1]) === 'oui';
+        }
+
+        $distance = $finDistance ?? $debutDistance;
+        $onStation = $finOnStation ?? $debutOnStation;
+
+        return [
+            'distance_meters' => $distance,
+            'is_on_station' => $onStation,
+            'distance_label' => $distance !== null ? ($distance . ' m') : 'Distance indisponible',
+        ];
+    }
+
+    private function parseLatLng(?string $value): ?array
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $parts = array_map('trim', explode(',', $value));
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        if (!is_numeric($parts[0]) || !is_numeric($parts[1])) {
+            return null;
+        }
+
+        $lat = (float) $parts[0];
+        $lng = (float) $parts[1];
+
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+            return null;
+        }
+
+        return [
+            'lat' => $lat,
+            'lng' => $lng,
+        ];
+    }
+
+    private function normalizePunchPhoto(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            return $trimmed !== '' ? $trimmed : null;
+        }
+
+        if ($value instanceof \Illuminate\Http\UploadedFile) {
+            $directory = public_path('uploads/punches');
+            if (!is_dir($directory)) {
+                @mkdir($directory, 0777, true);
+            }
+
+            $filename = 'punch_' . time() . '_' . uniqid() . '.' . $value->getClientOriginalExtension();
+            $value->move($directory, $filename);
+
+            return url('uploads/punches/' . $filename);
+        }
+
+        return null;
+    }
+
+    private function calculateDistanceMeters(float $lat1, float $lng1, float $lat2, float $lng2): int
+    {
+        $earthRadius = 6371000;
+        $lat1Rad = deg2rad($lat1);
+        $lng1Rad = deg2rad($lng1);
+        $lat2Rad = deg2rad($lat2);
+        $lng2Rad = deg2rad($lng2);
+
+        $latDiff = $lat2Rad - $lat1Rad;
+        $lngDiff = $lng2Rad - $lng1Rad;
+
+        $a = sin($latDiff / 2) * sin($latDiff / 2)
+            + cos($lat1Rad) * cos($lat2Rad) * sin($lngDiff / 2) * sin($lngDiff / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return (int) round($earthRadius * $c);
     }
 
     private function resolveStationId(?int $stationId, ?string $coordonnees, ?int $fallbackAssignedStationId): ?int
@@ -759,6 +1048,103 @@ class PresenceController extends Controller
         ]);
     }
 
+    public function maintenanceAgents(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'search' => 'nullable|string',
+        ]);
+
+        $agents = Agent::query()
+            ->select(['id', 'fullname', 'matricule', 'photo', 'site_id'])
+            ->with('station:id,name')
+            ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', (int) $data['station_id']))
+            ->when(!empty($data['search']), function ($q) use ($data) {
+                $search = trim((string) $data['search']);
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('fullname', 'like', '%' . $search . '%')
+                        ->orWhere('matricule', 'like', '%' . $search . '%');
+                });
+            })
+            ->orderBy('fullname')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'agents' => $agents,
+        ]);
+    }
+
+    public function maintenanceReport(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'date' => 'nullable|date',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'agent_id' => 'nullable|integer|exists:agents,id',
+            'per_page' => 'nullable|integer|min:1|max:500',
+        ]);
+
+        $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $baseDate->copy()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : $baseDate->copy()->endOfDay();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+
+        $baseQuery = MaintenanceAgent::query()
+            ->whereDate('date_maintenance', '>=', $start->toDateString())
+            ->whereDate('date_maintenance', '<=', $end->toDateString())
+            ->when(!empty($data['station_id']), fn ($q) => $q->where('station_id', (int) $data['station_id']))
+            ->when(!empty($data['agent_id']), fn ($q) => $q->where('agent_id', (int) $data['agent_id']));
+
+        $total = (clone $baseQuery)->count();
+        $completed = (clone $baseQuery)->whereNotNull('end_at')->count();
+        $ongoing = max($total - $completed, 0);
+
+        $onStation = 0;
+        $offStation = 0;
+        foreach ((clone $baseQuery)->get(['commentaire']) as $row) {
+            $meta = $this->extractMaintenanceMeta((string) $row->commentaire);
+            if ($meta['is_on_station'] === true) {
+                $onStation += 1;
+            } elseif ($meta['is_on_station'] === false) {
+                $offStation += 1;
+            }
+        }
+
+        $perPage = (int) ($data['per_page'] ?? 200);
+        $maintenances = (clone $baseQuery)
+            ->with(['agent.station', 'station'])
+            ->orderByDesc('date_maintenance')
+            ->orderByDesc('started_at')
+            ->paginate($perPage);
+
+        $maintenances->getCollection()->transform(function (MaintenanceAgent $maintenance) {
+            $maintenance->date_maintenance_iso = $maintenance->getRawOriginal('date_maintenance');
+            $maintenance->started_at_raw = $maintenance->getRawOriginal('started_at');
+            $maintenance->end_at_raw = $maintenance->getRawOriginal('end_at');
+            $this->attachMaintenanceMeta($maintenance);
+            return $maintenance;
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'summary' => [
+                'total' => $total,
+                'completed' => $completed,
+                'ongoing' => $ongoing,
+                'on_station' => $onStation,
+                'off_station' => $offStation,
+            ],
+            'maintenances' => $maintenances,
+        ]);
+    }
+
     private function attachPresenceMotifs(\Illuminate\Support\Collection $rows, string $date): void
     {
         $agentIds = $rows->pluck('agent_id')->filter()->unique()->values()->all();
@@ -913,6 +1299,41 @@ class PresenceController extends Controller
                         ],
                     ];
                 }),
+        ]);
+    }
+
+    public function agentMaintenanceHistory(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'per_page' => 'nullable|integer|min:1|max:500',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $query = MaintenanceAgent::query()
+            ->with(['agent.station', 'station'])
+            ->where('agent_id', (int) $data['agent_id'])
+            ->when(!empty($data['from']), fn ($q) => $q->whereDate('date_maintenance', '>=', $data['from']))
+            ->when(!empty($data['to']), fn ($q) => $q->whereDate('date_maintenance', '<=', $data['to']))
+            ->when(!empty($data['station_id']), fn ($q) => $q->where('station_id', (int) $data['station_id']))
+            ->orderByDesc('date_maintenance')
+            ->orderByDesc('started_at');
+
+        $perPage = (int) ($data['per_page'] ?? 15);
+        $page = $query->paginate($perPage);
+        $page->getCollection()->transform(function (MaintenanceAgent $maintenance) {
+            $maintenance->date_maintenance_iso = $maintenance->getRawOriginal('date_maintenance');
+            $maintenance->started_at_raw = $maintenance->getRawOriginal('started_at');
+            $maintenance->end_at_raw = $maintenance->getRawOriginal('end_at');
+            $this->attachMaintenanceMeta($maintenance);
+            return $maintenance;
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'history' => $page,
         ]);
     }
 

@@ -1,10 +1,10 @@
 <?php
 
-namespace App\View\Components;
+namespace bootstrap\View\Components;
 
 use Illuminate\View\Component;
 
-class EmptyState extends Component
+class UserSession extends Component
 {
     /**
      * Create a new component instance.
@@ -23,6 +23,6 @@ class EmptyState extends Component
      */
     public function render()
     {
-        return view('components.empty-state');
+        return view('components.user-session');
     }
 }

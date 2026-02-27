@@ -70,7 +70,7 @@
                     <ul>
                         @canany(['dashboard_admin.view', 'presences.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(['dashboard','presences.live'])">
+                            <a href="javascript:void(0);" class="@active(['dashboard','dashboard.maintenance.view','presences.live'])">
                                 <i class="ti ti-smart-home"></i>
                                 <span>Tableau de bord</span>
                                 <span class="menu-arrow"></span>
@@ -78,6 +78,7 @@
                             <ul>
                                 @can('dashboard_admin.view')
                                 <li><a class="@active(['dashboard'])" href="{{ route('dashboard') }}">Vue globale</a></li>
+                                <li><a class="@active(['dashboard.maintenance.view'])" href="{{ route('dashboard.maintenance.view') }}">Statistiques maintenance</a></li>
                                 @endcan
                                 @can('presences.view')
                                 <li><a class="@active(['presences.live'])" href="{{ route('presences.live') }}">Journal de pointage</a></li>
@@ -139,6 +140,7 @@
                                 <li><a class="@active(['reports.presences'])" href="{{ route('reports.presences') }}">Presences journalieres</a></li>
                                 <li><a class="@active(['reports.weekly.view'])" href="{{ route('reports.weekly.view') }}">Presences hebdomadaire</a></li>
                                 <li><a class="@active(['reports.monthly.view'])" href="{{ route('reports.monthly.view') }}">Presences mensuelles</a></li>
+                                <li><a class="@active(['reports.maintenance.view'])" href="{{ route('reports.maintenance.view') }}">Rapport de maintenance</a></li>
                                 @endcan
                                 @can('rapport_absences.view')
                                 <li><a class="@active(['reports.absences.daily.view'])" href="{{ route('reports.absences.daily.view') }}">Absences journalieres</a></li>
@@ -214,4 +216,3 @@
         </div>
     </div>
 </div>
-

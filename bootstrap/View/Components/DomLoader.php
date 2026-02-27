@@ -1,10 +1,10 @@
 <?php
 
-namespace App\View\Components;
+namespace bootstrap\View\Components;
 
 use Illuminate\View\Component;
 
-class UserSession extends Component
+class DomLoader extends Component
 {
     /**
      * Create a new component instance.
@@ -23,6 +23,6 @@ class UserSession extends Component
      */
     public function render()
     {
-        return view('components.user-session');
+        return view('components.dom-loader');
     }
 }

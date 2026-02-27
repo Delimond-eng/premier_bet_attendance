@@ -37,4 +37,9 @@ class Station extends Model
     public function presences() : HasMany {
         return $this->hasMany(PresenceAgents::class, 'site_id');
     }
+
+    public function maintenances(): HasMany
+    {
+        return $this->hasMany(MaintenanceAgent::class, 'station_id');
+    }
 }

@@ -81,8 +81,24 @@
                                 </div>
                             </td>
                             <td><span class="badge badge-soft-success">@{{ p.assigned_station?.name ?? '-' }}</span></td>
-                            <td><span class="badge badge-soft-info">@{{ p.station_check_in?.name ?? '-' }}</span></td>
-                            <td><span class="badge badge-soft-dark">@{{ p.station_check_out?.name ?? '-' }}</span></td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-sm me-2">
+                                        <img v-if="p.photos_debut" :src="p.photos_debut" :data-zoom="p.photos_debut" class="rounded-circle" alt="check-in">
+                                        <img v-else src="{{ asset('assets/img/avatar.jpg') }}" class="rounded-circle" alt="check-in">
+                                    </span>
+                                    <span class="badge badge-soft-info">@{{ p.station_check_in?.name ?? '-' }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-sm me-2">
+                                        <img v-if="p.photos_fin" :src="p.photos_fin" :data-zoom="p.photos_fin" class="rounded-circle" alt="check-out">
+                                        <img v-else src="{{ asset('assets/img/avatar.jpg') }}" class="rounded-circle" alt="check-out">
+                                    </span>
+                                    <span class="badge badge-soft-dark">@{{ p.station_check_out?.name ?? '-' }}</span>
+                                </div>
+                            </td>
                             <td>@{{ p.date_reference }}</td>
                             <td><span class="badge badge-success">@{{ p.started_at ?? '--:--' }}</span></td>
                             <td><span class="badge badge-info">@{{ p.mid_check ?? '--:--' }}</span></td>

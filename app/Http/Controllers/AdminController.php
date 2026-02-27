@@ -10,6 +10,7 @@ use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
+use App\Models\MaintenanceAgent;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
@@ -487,6 +488,43 @@ class AdminController extends Controller
             ->whereNull('ended_at')
             ->count();
 
+        $maintenanceBase = MaintenanceAgent::query()
+            ->whereDate('date_maintenance', '>=', $fromDate)
+            ->whereDate('date_maintenance', '<=', $toDate);
+
+        $maintenanceTotal = (clone $maintenanceBase)->count();
+        $maintenanceCompleted = (clone $maintenanceBase)->whereNotNull('end_at')->count();
+        $maintenanceOngoing = max($maintenanceTotal - $maintenanceCompleted, 0);
+
+        $maintenanceOnStation = 0;
+        $maintenanceOffStation = 0;
+        foreach ((clone $maintenanceBase)->get(['commentaire']) as $row) {
+            $meta = $this->extractMaintenanceMeta((string) $row->commentaire);
+            if ($meta['is_on_station'] === true) {
+                $maintenanceOnStation += 1;
+            } elseif ($meta['is_on_station'] === false) {
+                $maintenanceOffStation += 1;
+            }
+        }
+
+        $latestMaintenances = (clone $maintenanceBase)
+            ->with(['agent', 'station'])
+            ->orderByDesc('date_maintenance')
+            ->orderByDesc('started_at')
+            ->limit(10)
+            ->get();
+
+        $latestMaintenances->transform(function (MaintenanceAgent $maintenance) {
+            $meta = $this->extractMaintenanceMeta((string) $maintenance->commentaire);
+            $maintenance->setAttribute('distance_meters', $meta['distance_meters']);
+            $maintenance->setAttribute('is_on_station', $meta['is_on_station']);
+            $maintenance->setAttribute('distance_label', $meta['distance_label']);
+            $maintenance->setAttribute('date_maintenance_iso', $maintenance->getRawOriginal('date_maintenance'));
+            $maintenance->setAttribute('started_at_raw', $maintenance->getRawOriginal('started_at'));
+            $maintenance->setAttribute('end_at_raw', $maintenance->getRawOriginal('end_at'));
+            return $maintenance;
+        });
+
         return response()->json([
             'status' => 'success',
             'count' => [
@@ -519,7 +557,52 @@ class AdminController extends Controller
                 'weekly_average' => $weeklyAverage,
             ],
             'latest_checkins' => $latest,
+            'maintenances' => [
+                'summary' => [
+                    'total' => $maintenanceTotal,
+                    'completed' => $maintenanceCompleted,
+                    'ongoing' => $maintenanceOngoing,
+                    'on_station' => $maintenanceOnStation,
+                    'off_station' => $maintenanceOffStation,
+                ],
+                'latest' => $latestMaintenances,
+            ],
         ]);
+    }
+
+    private function extractMaintenanceMeta(?string $commentaire): array
+    {
+        $text = (string) ($commentaire ?? '');
+
+        $debutDistance = null;
+        $finDistance = null;
+        $debutOnStation = null;
+        $finOnStation = null;
+
+        if (preg_match('/Debut\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $debutDistance = (int) $m[1];
+        }
+
+        if (preg_match('/Fin\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $finDistance = (int) $m[1];
+        }
+
+        if (preg_match('/Debut\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+            $debutOnStation = strtolower($m[1]) === 'oui';
+        }
+
+        if (preg_match('/Fin\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+            $finOnStation = strtolower($m[1]) === 'oui';
+        }
+
+        $distance = $finDistance ?? $debutDistance;
+        $onStation = $finOnStation ?? $debutOnStation;
+
+        return [
+            'distance_meters' => $distance,
+            'is_on_station' => $onStation,
+            'distance_label' => $distance !== null ? ($distance . ' m') : 'Distance indisponible',
+        ];
     }
 
     public function generateSiteQrcodes()

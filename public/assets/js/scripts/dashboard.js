@@ -32,7 +32,19 @@ new Vue({
                 missed_punches: 0,
                 weekly_average: 0,
             },
+            maintenances: {
+                summary: {
+                    total: 0,
+                    completed: 0,
+                    ongoing: 0,
+                    on_station: 0,
+                    off_station: 0,
+                },
+                latest: [],
+            },
             latestCheckins: [],
+            selectedMaintenance: null,
+            _maintenanceModal: null,
             _apexStatusChart: null,
             _apexLeaveChart: null,
             _chartJsTrend: null,
@@ -147,6 +159,10 @@ new Vue({
                 this.authorizations = { ...this.authorizations, ...(data?.authorizations ?? {}) };
                 this.weeklyKpis = { ...this.weeklyKpis, ...(data?.weekly_kpis ?? {}) };
                 this.latestCheckins = data?.latest_checkins ?? [];
+                this.maintenances = {
+                    ...this.maintenances,
+                    ...(data?.maintenances ?? {}),
+                };
 
                 this.renderStatusApex();
                 this.renderLeaveApex();
@@ -320,6 +336,20 @@ new Vue({
                     },
                 },
             });
+        },
+
+        openMaintenanceDetails(item) {
+            this.selectedMaintenance = item;
+
+            if (!window.bootstrap?.Modal) return;
+
+            if (!this._maintenanceModal) {
+                const el = document.getElementById("maintenanceDetailsModal");
+                if (!el) return;
+                this._maintenanceModal = new window.bootstrap.Modal(el);
+            }
+
+            this._maintenanceModal.show();
         },
     },
 

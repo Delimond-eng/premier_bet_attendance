@@ -33,6 +33,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
     Route::get('/', [HomeController::class, 'index'])
         ->name('dashboard')
         ->middleware('can:dashboard_admin.view');
+    Route::get('/dashboard/maintenance', fn () => view('maintenance_stats'))
+        ->name('dashboard.maintenance.view')
+        ->middleware('can:dashboard_admin.view');
     Route::get('/dashboard/stats', [AdminController::class, 'getDashboardData'])
         ->name('dashboard.stats')
         ->middleware('can:dashboard_admin.view');
@@ -77,6 +80,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:agents.view');
         Route::get('/attendances/history', [PresenceController::class, 'agentHistory'])
             ->name('attendances.history')
+            ->middleware('can:agents.view');
+        Route::get('/attendances/maintenance-history', [PresenceController::class, 'agentMaintenanceHistory'])
+            ->name('attendances.maintenance_history')
             ->middleware('can:agents.view');
         Route::get('/export/pdf', [ExportController::class, 'agentsPdf'])
             ->name('export.pdf')
@@ -236,9 +242,18 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/monthly/view', fn () => view('report_presences_monthly'))
             ->name('reports.monthly.view')
             ->middleware('can:rapport_presences.view');
+        Route::get('/maintenance/view', fn () => view('report_maintenances'))
+            ->name('reports.maintenance.view')
+            ->middleware('can:rapport_presences.view');
 
         Route::get('/daily/data', [PresenceController::class, 'dailyReport'])
             ->name('reports.daily.data')
+            ->middleware('can:rapport_presences.view');
+        Route::get('/maintenance/agents', [PresenceController::class, 'maintenanceAgents'])
+            ->name('reports.maintenance.agents')
+            ->middleware('can:rapport_presences.view');
+        Route::get('/maintenance/data', [PresenceController::class, 'maintenanceReport'])
+            ->name('reports.maintenance.data')
             ->middleware('can:rapport_presences.view');
         Route::get('/absences/daily/data', [PresenceController::class, 'dailyAbsenceReport'])
             ->name('reports.absences.daily.data')

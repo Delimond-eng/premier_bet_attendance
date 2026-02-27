@@ -180,8 +180,24 @@
                                     </div>
                                 </td>
                                 <td>@{{ row.assigned_station?.name ?? '-' }}</td>
-                                <td>@{{ row.station_check_in?.name ?? '-' }}</td>
-                                <td>@{{ row.station_check_out?.name ?? '-' }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <span class="avatar avatar-sm me-2">
+                                            <img v-if="row.photos_debut" :src="row.photos_debut" :data-zoom="row.photos_debut" class="rounded-circle" alt="check-in">
+                                            <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="check-in">
+                                        </span>
+                                        <span>@{{ row.station_check_in?.name ?? '-' }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <span class="avatar avatar-sm me-2">
+                                            <img v-if="row.photos_fin" :src="row.photos_fin" :data-zoom="row.photos_fin" class="rounded-circle" alt="check-out">
+                                            <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="check-out">
+                                        </span>
+                                        <span>@{{ row.station_check_out?.name ?? '-' }}</span>
+                                    </div>
+                                </td>
                                 <td><span class="badge badge-success">@{{ row.started_at ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-info">@{{ row.mid_check ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>

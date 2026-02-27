@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Class Agent
@@ -89,5 +89,10 @@ class Agent extends Model
     public function plannings()
     {
         return $this->hasMany(AgentGroupPlanning::class, "agent_id");
+    }
+
+    public function maintenances(): HasMany
+    {
+        return $this->hasMany(MaintenanceAgent::class, 'agent_id');
     }
 }
