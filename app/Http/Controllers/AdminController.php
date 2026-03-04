@@ -48,10 +48,6 @@ class AdminController extends Controller
                 }
             }
 
-            // Phone/GPS removed from the UI. Keep columns null to avoid stale values.
-            $data['latlng'] = null;
-            $data['phone'] = null;
-
             $incomingCode = strtoupper(trim((string) ($data['code'] ?? '')));
             $data['code'] = $incomingCode !== '' ? $incomingCode : null;
 
@@ -123,6 +119,7 @@ class AdminController extends Controller
         $dateString = $date->toDateString();
 
         $stations = Station::query()
+            ->withoutGlobalScopes()
             ->select(['id', 'name', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'created_at'])
             ->withCount([
                 'agents',
@@ -327,14 +324,14 @@ class AdminController extends Controller
             ->whereBetween('date_reference', [$fromDate, $toDate])
             ->where('status', 'approved')
             ->get(['agent_id', 'date_reference', 'type'])
-            ->groupBy(fn (AttendanceAuthorization $a) => Carbon::parse($a->date_reference)->toDateString());
+            ->groupBy(fn ($a) => Carbon::parse($a->date_reference)->toDateString());
 
         $absenceJustifByDay = AttendanceJustification::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
             ->where('status', 'approved')
             ->where('kind', 'absence')
             ->get(['agent_id', 'date_reference'])
-            ->groupBy(fn (AttendanceJustification $j) => Carbon::parse($j->date_reference)->toDateString());
+            ->groupBy(fn ($j) => Carbon::parse($j->date_reference)->toDateString());
 
         $conges = Conge::query()
             ->where('status', 'approved')
@@ -1074,7 +1071,7 @@ class AdminController extends Controller
                 ]);
             }
 
-            
+
 
             return response()->json([
                 "status"=>"success",

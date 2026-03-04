@@ -9,7 +9,7 @@
         }
 
         body {
-            font-family: 'Helvetica', Arial, sans-serif;
+            font-family: Arial, sans-serif;
             margin: 0;
             color: #111827;
             background-color: #ffffff;
@@ -32,12 +32,12 @@
 
         .card {
             border: 2px solid #1e40af;
-            border-radius: 0px; /* Coins normaux */
+            border-radius: 0 !important; /* Force coins carrés */
             overflow: hidden;
             background: #ffffff;
             page-break-inside: avoid;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            /* Suppression du shadow pour un look plus industriel et net */
         }
 
         .card-header {
@@ -73,13 +73,14 @@
             padding: 10px;
             display: inline-block;
             border: 1px solid #e2e8f0;
-            border-radius: 0px; /* Coins normaux pour le QR */
+            border-radius: 0 !important; /* Force coins carrés pour le bloc QR */
         }
 
         .qr-img {
             width: 200px;
             height: 200px;
             display: block;
+            border-radius: 0 !important;
         }
 
         .station-footer {

@@ -88,39 +88,74 @@
     </div>
 
     <style>
-        .station-label {
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 2px 6px;
-            font-weight: 600;
-            font-size: 11px;
-            white-space: nowrap;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        /* Conteneur du marqueur */
+        .marker-container {
+            position: relative;
+            text-align: center;
         }
 
+        /* Le point physique sur la carte */
+        .station-marker {
+            width: 16px;
+            height: 16px;
+            background-color: #3388ff;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        /* État maintenance */
+        .station-marker.in-maintenance {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+            transform: scale(1.2);
+        }
+
+        /* Label texte de la station */
+        .station-label {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-weight: 700;
+            font-size: 11px;
+            color: #1e293b;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            pointer-events: none; /* Ne pas bloquer le clic sur le marqueur */
+        }
+
+        /* Animation Pulse */
         .pulse-animation {
             border-radius: 50%;
-            height: 40px;
-            width: 40px;
+            height: 44px;
+            width: 44px;
             position: absolute;
-            left: -10px;
-            top: -10px;
-            background: rgba(var(--bs-primary-rgb), 0.4);
+            left: -14px;
+            top: -14px;
+            background: rgba(239, 68, 68, 0.4);
             animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: 5;
         }
 
         @keyframes pulse-ring {
-            0% { transform: scale(.33); }
-            80%, 100% { opacity: 0; }
+            0% { transform: scale(.33); opacity: 1; }
+            80%, 100% { transform: scale(1.2); opacity: 0; }
         }
 
-        .maintenance-marker-icon {
-            position: relative;
+        .custom-div-icon {
+            background: none;
+            border: none;
         }
     </style>
 @endsection
 
-@section("scripts")
+@push("scripts")
     <script src="{{ asset('assets/js/scripts/map.js') }}" type="module"></script>
-@endsection
+@endpush

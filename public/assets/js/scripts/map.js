@@ -7,8 +7,8 @@ new Vue({
         return {
             isLoading: false,
             map: null,
-            markers: {}, // Mapping station_id -> {marker, station}
-            activeMaintenances: [], // Liste brute des maintenances actives (polling)
+            markers: {},
+            activeMaintenances: [],
             activeMaintenanceId: null,
             sidebar: null,
             currentStation: {},
@@ -17,10 +17,6 @@ new Vue({
     },
 
     computed: {
-        /**
-         * Mapping réactif : ID Station -> Objet Maintenance
-         * Permet un accès instantané O(1) pour le watcher et les clics
-         */
         maintenanceMap() {
             const map = {};
             this.activeMaintenances.forEach(m => {
@@ -31,10 +27,6 @@ new Vue({
     },
 
     watch: {
-        /**
-         * Watcher fluide : Se déclenche dès que la liste des maintenances change.
-         * Il synchronise l'UI de chaque marqueur sans recréer les objets Leaflet.
-         */
         maintenanceMap: {
             handler(newMap) {
                 this.syncMarkersUI(newMap);
@@ -52,22 +44,31 @@ new Vue({
 
     methods: {
         initMap() {
-            // Initialisation de la carte sur Kinshasa
-            this.map = L.map('map').setView([-4.4419, 15.2663], 12);
+            try {
+                // Initialisation sur Kinshasa par défaut
+                this.map = L.map('map', {
+                    center: [-4.4419, 15.2663],
+                    zoom: 12
+                });
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(this.map);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; Salama Group LTD'
+                }).addTo(this.map);
 
-            this.loadStations();
+                // Forcer le rendu initial
+                setTimeout(() => {
+                    this.map.invalidateSize();
+                }, 500);
 
-            // Polling récursif fluide (10s pour un feeling realtime sans surcharger)
-            this.startPolling();
+                this.loadStations();
+                this.startPolling();
 
-            // Initialisation de la sidebar Bootstrap
-            const sbEl = document.getElementById('maintenance-info-sidebar');
-            if (sbEl) {
-                this.sidebar = new bootstrap.Offcanvas(sbEl);
+                const sbEl = document.getElementById('maintenance-info-sidebar');
+                if (sbEl) {
+                    this.sidebar = new bootstrap.Offcanvas(sbEl);
+                }
+            } catch (e) {
+                console.error("Erreur Leaflet:", e);
             }
         },
 
@@ -80,22 +81,53 @@ new Vue({
         async loadStations() {
             try {
                 this.isLoading = true;
-                const data = await get("/stations/list");
+                const response = await get("/stations/list");
+                const resData = response.data;
 
-                if (data.status === 'success') {
-                    data.sites.forEach(station => {
-                        if (station.latlng) {
-                            const coords = station.latlng.split(',').map(c => parseFloat(c.trim()));
-                            if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
-                                this.addStationMarker(station, coords);
+                if (resData && resData.status === 'success' && resData.sites) {
+                    let markersAdded = 0;
+
+                    resData.sites.forEach(station => {
+                        if (station.latlng && station.latlng.trim() !== "") {
+                            const cleanLatLng = station.latlng.replace(/[\(\) ]/g, '');
+                            const parts = cleanLatLng.split(',');
+
+                            if (parts.length === 2) {
+                                const lat = parseFloat(parts[0]);
+                                const lng = parseFloat(parts[1]);
+
+                                if (!isNaN(lat) && !isNaN(lng)) {
+                                    this.addStationMarker(station, [lat, lng]);
+                                    markersAdded++;
+                                }
                             }
                         }
                     });
+
+                    if (markersAdded > 0) {
+                        setTimeout(() => {
+                            this.fitMarkers();
+                            this.map.invalidateSize();
+                        }, 600);
+                    }
                 }
             } catch (error) {
-                console.error("Erreur chargement stations:", error);
+                console.error("Erreur loadStations:", error);
             } finally {
                 this.isLoading = false;
+            }
+        },
+
+        fitMarkers() {
+            const markerArray = Object.values(this.markers).map(m => m.marker);
+            if (markerArray.length === 0) return;
+
+            if (markerArray.length === 1) {
+                const target = markerArray[0].getLatLng();
+                this.map.setView(target, 16);
+            } else {
+                const group = new L.featureGroup(markerArray);
+                this.map.fitBounds(group.getBounds(), { padding: [50, 50] });
             }
         },
 
@@ -103,16 +135,15 @@ new Vue({
             const icon = L.divIcon({
                 className: 'custom-div-icon',
                 html: `<div class="marker-container" id="marker-station-${station.id}">
-                        <div class="station-marker" style="background-color: #3388ff; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>
-                        <div class="station-label" style="position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; white-space: nowrap; border: 1px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${station.name}</div>
+                        <div class="station-marker"></div>
+                        <div class="station-label">${station.name}</div>
                       </div>`,
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
+                iconSize: [24, 24], // Agrandissement du pin
+                iconAnchor: [12, 12]
             });
 
             const marker = L.marker(coords, { icon: icon }).addTo(this.map);
 
-            // Enregistrement réactif du marqueur
             this.$set(this.markers, station.id, {
                 marker: marker,
                 station: station
@@ -120,16 +151,19 @@ new Vue({
 
             marker.on('click', () => {
                 const maintenance = this.maintenanceMap[station.id];
-                this.showSidebar(station, maintenance);
+                // N'afficher la sidebar QUE si une maintenance est en cours
+                if (maintenance) {
+                    this.showSidebar(station, maintenance);
+                }
             });
         },
 
         async loadActiveMaintenances() {
             try {
-                // On récupère uniquement les maintenances "In" (end_at est null)
-                const data = await get("/reports/maintenance/data?only_active=1&per_page=100");
-                if (data.status === 'success') {
-                    this.activeMaintenances = data.maintenances.data;
+                const response = await get("/reports/maintenance/data?only_active=1&per_page=100");
+                const resData = response.data;
+                if (resData && resData.status === 'success') {
+                    this.activeMaintenances = resData.maintenances.data;
                 }
             } catch (error) {
                 console.error("Erreur polling maintenances:", error);
@@ -146,22 +180,17 @@ new Vue({
                 const hasPulse = !!markerElement.querySelector('.pulse-animation');
 
                 if (isMaintenance) {
-                    // Maintenance en cours (In)
-                    dot.style.backgroundColor = '#ef4444';
-                    dot.style.boxShadow = '0 0 8px #ef4444';
-
+                    dot.classList.add('in-maintenance');
                     if (!hasPulse) {
                         const pulse = document.createElement('div');
                         pulse.className = 'pulse-animation';
-                        pulse.style.cssText = "border-radius: 50%; height: 40px; width: 40px; position: absolute; left: -13px; top: -13px; background: rgba(239, 68, 68, 0.4); animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;";
                         markerElement.appendChild(pulse);
                     }
                 } else {
-                    // Maintenance terminée (Out) ou aucune maintenance
-                    dot.style.backgroundColor = '#3388ff';
-                    dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
+                    dot.classList.remove('in-maintenance');
                     if (hasPulse) {
-                        markerElement.querySelector('.pulse-animation').remove();
+                        const pulseEl = markerElement.querySelector('.pulse-animation');
+                        if (pulseEl) pulseEl.remove();
                     }
                 }
             });
@@ -187,7 +216,6 @@ new Vue({
                 document.getElementById('sb-maintenance-start').innerText = maintenance.started_at;
                 document.getElementById('sb-maintenance-active-ui').style.display = 'block';
 
-                // Gestion de la photo de début (maintenance-in)
                 if (maintenance.photo_debut) {
                     photoInImg.src = maintenance.photo_debut;
                     photoInImg.setAttribute('data-zoom', maintenance.photo_debut);
@@ -195,15 +223,6 @@ new Vue({
                 } else {
                     photoInContainer.style.display = 'none';
                 }
-            } else {
-                // Reset infos agent si pas de maintenance
-                document.getElementById('sb-agent-name').innerText = "---";
-                document.getElementById('sb-agent-matricule').innerText = "Matricule: ---";
-                document.getElementById('sb-agent-photo').src = "/assets/img/profiles/avatar-01.jpg";
-                document.getElementById('sb-maintenance-date').innerText = "---";
-                document.getElementById('sb-maintenance-start').innerText = "---";
-                document.getElementById('sb-maintenance-active-ui').style.display = 'none';
-                photoInContainer.style.display = 'none';
             }
 
             if (this.sidebar) {
@@ -231,19 +250,15 @@ new Vue({
 
             try {
                 this.isLoading = true;
-
-                // Préparation des données via FormData
                 const formData = new FormData();
                 formData.append('key', 'maintenance-out');
                 formData.append('matricule', this.currentMaintenance.agent.matricule);
                 formData.append('station_id', this.currentStation.id);
 
-                // Reprise de la photo IN pour le OUT via le champ 'photo' générique
                 if (this.currentMaintenance.photo_debut) {
                     formData.append('photo', this.currentMaintenance.photo_debut);
                 }
 
-                // Utilisation de fetch pour envoyer le FormData avec le token CSRF
                 const response = await fetch("/presences/store", {
                     method: 'POST',
                     headers: {
@@ -252,14 +267,14 @@ new Vue({
                     body: formData
                 });
 
-                const data = await response.json();
+                const resData = await response.json();
 
-                if (data.status === 'success') {
+                if (resData.status === 'success') {
                     Swal.fire("Succès", "Maintenance clôturée avec succès.", "success");
                     if (this.sidebar) this.sidebar.hide();
                     await this.loadActiveMaintenances();
                 } else {
-                    Swal.fire("Erreur", (data.errors ? data.errors.join(', ') : 'Inconnue'), "error");
+                    Swal.fire("Erreur", (resData.errors ? resData.errors.join(', ') : 'Inconnue'), "error");
                 }
             } catch (error) {
                 console.error("Erreur clôture:", error);
@@ -271,7 +286,6 @@ new Vue({
     },
 });
 
-// Exposer globalement pour le bouton onclick dans le HTML de la sidebar
 window.closeActiveMaintenance = function() {
     const app = document.getElementById('App').__vue__;
     if (app) app.closeActiveMaintenance();
