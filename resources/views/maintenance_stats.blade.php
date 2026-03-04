@@ -21,6 +21,7 @@
                         <option value="today">Aujourd'hui</option>
                         <option value="week">Cette semaine</option>
                         <option value="month">Ce mois</option>
+                        <option value="year">Cette annee</option>
                         <option value="custom">Personnalise</option>
                     </select>
                 </div>
@@ -84,32 +85,54 @@
             </div>
         </div>
 
-        <div class="card mt-2">
-            <div class="card-body">
-                <div class="border rounded border-start border-start-info d-flex align-items-center justify-content-between p-2 gap-2 flex-wrap mb-3">
-                    <h2 class="card-title mb-0">(@{{ (maintenances.latest || []).length }}) 10 dernieres maintenances</h2>
-                </div>
-                <div v-if="isLoading" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
-                    <div class="text-muted">Chargement...</div>
-                </div>
-                <div v-else-if="!maintenances.latest || maintenances.latest.length === 0" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
-                    <div class="text-muted">Aucune maintenance trouvee.</div>
-                </div>
-                <div v-for="m in (maintenances.latest || [])" :key="'m-' + m.id" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
-                    <div class="d-flex align-items-center">
-                        <a href="javascript:void(0);" class="avatar flex-shrink-0">
-                            <img v-if="m.agent?.photo" :src="m.agent.photo" :data-zoom="m.agent.photo" class="rounded-circle" alt="agent">
-                            <img v-else src="{{ asset('assets/img/avatar.jpg') }}" class="rounded-circle" alt="agent">
-                        </a>
-                        <div class="ms-2">
-                            <p class="fs-14 fw-medium text-truncate mb-1">@{{ m.agent?.fullname ?? 'Agent' }}</p>
-                            <p class="fs-13 mb-0">@{{ m.station?.name ?? 'Station' }}</p>
-                            <small class="text-muted">@{{ m.started_at || '--:--' }} - @{{ m.end_at || '--:--' }}</small>
+        <div class="row g-3 mt-1">
+            <div class="col-xl-8">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <h5 class="mb-0">Progression des maintenances par station</h5>
+                        <span class="badge badge-soft-info text-uppercase">
+                            @{{ progressionLabel }}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div id="maintenance-progression-chart" style="min-height: 360px;"></div>
+                        <div v-if="!hasProgressionData && !isLoading" class="text-center text-muted py-4">
+                            Aucune maintenance sur la periode selectionnee.
                         </div>
                     </div>
-                    <div class="text-end">
-                        <p class="fs-12 text-muted mb-1">@{{ m.distance_label || 'Distance indisponible' }}</p>
-                        <button class="btn btn-sm btn-outline-primary" @click="openDetails(m)">Voir details</button>
+                </div>
+            </div>
+
+            <div class="col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h6 class="mb-0">10 dernieres maintenances</h6>
+                        <span class="text-muted fs-12">@{{ (maintenances.latest || []).length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div v-if="isLoading" class="p-2 bg-light rounded border text-muted">
+                            Chargement...
+                        </div>
+                        <div v-else-if="!maintenances.latest || maintenances.latest.length === 0" class="p-2 bg-light rounded border text-muted">
+                            Aucune maintenance trouvee.
+                        </div>
+
+                        <div v-for="m in (maintenances.latest || [])" :key="'m-' + m.id" class="d-flex align-items-start justify-content-between py-2 border-bottom">
+                            <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                                <a href="javascript:void(0);" class="avatar avatar-sm flex-shrink-0">
+                                    <img v-if="m.agent?.photo" :src="m.agent.photo" :data-zoom="m.agent.photo" class="rounded-circle" alt="agent">
+                                    <img v-else src="{{ asset('assets/img/avatar.jpg') }}" class="rounded-circle" alt="agent">
+                                </a>
+                                <div style="min-width: 0;">
+                                    <p class="mb-0 fs-13 fw-semibold text-truncate">@{{ m.agent?.fullname ?? 'Agent' }}</p>
+                                    <p class="mb-0 fs-12 text-muted text-truncate">@{{ m.station?.name ?? 'Station' }}</p>
+                                    <small class="text-muted">@{{ m.started_at || '--:--' }} - @{{ m.end_at || '--:--' }}</small>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary flex-shrink-0 ms-2" @click="openDetails(m)">
+                                Details
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

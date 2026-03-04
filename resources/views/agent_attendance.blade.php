@@ -265,7 +265,6 @@
                                     <th>Heure debut</th>
                                     <th>Heure fin</th>
                                     <th>Distance</th>
-                                    <th>Commentaire</th>
                                     <th>Photo debut</th>
                                     <th>Photo fin</th>
                                     <th>Statut</th>
@@ -278,7 +277,6 @@
                                     <td><span class="badge badge-soft-success">@{{ m.started_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-soft-dark">@{{ m.end_at || '--:--' }}</span></td>
                                     <td>@{{ m.distance_label || 'Distance indisponible' }}</td>
-                                    <td class="text-wrap">@{{ m.commentaire || '-' }}</td>
                                     <td>
                                         <img v-if="m.photo_debut" :src="m.photo_debut" :data-zoom="m.photo_debut" class="rounded border" style="width:42px;height:42px;object-fit:cover;" alt="photo debut maintenance">
                                         <span v-else class="text-muted">-</span>

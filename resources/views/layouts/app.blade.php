@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="{{ asset('assets/plugins/tabler-icons/tabler-icons.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/select2/css/select2.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/fontawesome/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/plugins/leaflet/leaflet.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap-datetimepicker.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/daterangepicker/daterangepicker.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/plugins/flatpickr/flatpickr.min.css') }}">
@@ -75,6 +76,9 @@
     <!-- Chart JS -->
     <script src="{{asset("assets/plugins/apexchart/apexcharts.min.js")}}"></script>
     <script src="{{asset("assets/plugins/apexchart/chart-data.js")}}"></script>
+
+
+    <script src="{{asset("assets/plugins/leaflet/leaflet.js")}}"></script>
 
 
     <script src="{{asset("assets/plugins/chartjs/chart.min.js")}}"></script>

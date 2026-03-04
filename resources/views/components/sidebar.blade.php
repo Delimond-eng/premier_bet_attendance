@@ -114,10 +114,15 @@
                         @endcanany
 
                         @can('stations.view')
-                        <li class="@active(['stations.view'])">
-                            <a href="{{ route('stations.view') }}">
+                        <li class="submenu">
+                            <a href="javascript:void(0);" class="@active(['stations.*', 'map.view'])">
                                 <i class="ti ti-location-cog"></i><span>Gestion stations</span>
+                                <span class="menu-arrow"></span>
                             </a>
+                            <ul>
+                                <li><a class="@active(['stations.view'])" href="{{ route('stations.view') }}">Liste des stations</a></li>
+                                <li><a class="@active(['map.view'])" href="{{ route('map.view') }}">Cartographie Live</a></li>
+                            </ul>
                         </li>
                         @endcan
 

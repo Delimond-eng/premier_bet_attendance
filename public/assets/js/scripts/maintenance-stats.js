@@ -20,9 +20,15 @@ new Vue({
                     off_station: 0,
                 },
                 latest: [],
+                progression: {
+                    granularity: "day",
+                    labels: [],
+                    series: [],
+                },
             },
             selectedMaintenance: null,
             _modal: null,
+            _progressionChart: null,
         };
     },
 
@@ -62,6 +68,13 @@ new Vue({
                 if (m) {
                     this.range.from = now.clone().startOf("month").format("YYYY-MM-DD");
                     this.range.to = now.clone().endOf("month").format("YYYY-MM-DD");
+                }
+            }
+
+            if (this.range.mode === "year") {
+                if (m) {
+                    this.range.from = now.clone().startOf("year").format("YYYY-MM-DD");
+                    this.range.to = now.clone().endOf("year").format("YYYY-MM-DD");
                 }
             }
 
@@ -105,10 +118,24 @@ new Vue({
             const params = new URLSearchParams();
             if (this.range.from) params.set("from", this.range.from);
             if (this.range.to) params.set("to", this.range.to);
+            if (this.range.mode) params.set("mode", this.range.mode);
 
             try {
                 const { data } = await get(`/dashboard/stats?${params.toString()}`);
                 this.maintenances = {
+                    summary: {
+                        total: 0,
+                        completed: 0,
+                        ongoing: 0,
+                        on_station: 0,
+                        off_station: 0,
+                    },
+                    latest: [],
+                    progression: {
+                        granularity: "day",
+                        labels: [],
+                        series: [],
+                    },
                     ...this.maintenances,
                     ...(data?.maintenances ?? {}),
                 };
@@ -122,10 +149,91 @@ new Vue({
                         off_station: 0,
                     },
                     latest: [],
+                    progression: {
+                        granularity: "day",
+                        labels: [],
+                        series: [],
+                    },
                 };
             } finally {
                 this.isLoading = false;
+                this.$nextTick(() => this.renderProgressionChart());
             }
+        },
+
+        renderProgressionChart() {
+            const el = document.querySelector("#maintenance-progression-chart");
+            if (!el) return;
+
+            if (this._progressionChart) {
+                try {
+                    this._progressionChart.destroy();
+                } catch (_) {}
+                this._progressionChart = null;
+            }
+
+            el.innerHTML = "";
+
+            if (!window.ApexCharts) return;
+
+            const progression = this.maintenances?.progression ?? {};
+            const labels = Array.isArray(progression.labels) ? progression.labels : [];
+            const baseSeries = Array.isArray(progression.series) ? progression.series : [];
+
+            const chartSeries = baseSeries
+                .map((item) => ({
+                    name: item?.name || "Station",
+                    data: Array.isArray(item?.data) ? item.data.map((v) => Number(v || 0)) : [],
+                }))
+                .filter((item) => item.data.length > 0 && item.data.some((v) => v > 0));
+
+            if (!labels.length || !chartSeries.length) {
+                return;
+            }
+
+            const options = {
+                chart: {
+                    type: "line",
+                    height: 360,
+                    toolbar: { show: false },
+                    zoom: { enabled: false },
+                },
+                series: chartSeries,
+                xaxis: {
+                    categories: labels,
+                    labels: {
+                        rotate: labels.length > 10 ? -35 : 0,
+                    },
+                },
+                yaxis: {
+                    min: 0,
+                    forceNiceScale: true,
+                    labels: {
+                        formatter: (value) => String(Math.round(Number(value || 0))),
+                    },
+                },
+                stroke: {
+                    curve: "smooth",
+                    width: 3,
+                },
+                markers: {
+                    size: 3,
+                },
+                dataLabels: {
+                    enabled: false,
+                },
+                legend: {
+                    position: "bottom",
+                    horizontalAlign: "left",
+                },
+                tooltip: {
+                    shared: true,
+                    intersect: false,
+                },
+            };
+
+            this._progressionChart = new window.ApexCharts(el, options);
+            this._progressionChart.render();
         },
 
         openDetails(item) {
@@ -140,5 +248,32 @@ new Vue({
 
             this._modal.show();
         },
+    },
+
+    computed: {
+        hasProgressionData() {
+            const progression = this.maintenances?.progression ?? {};
+            const series = Array.isArray(progression.series) ? progression.series : [];
+
+            return series.some((item) =>
+                Array.isArray(item?.data) && item.data.some((value) => Number(value || 0) > 0)
+            );
+        },
+
+        progressionLabel() {
+            const granularity = this.maintenances?.progression?.granularity ?? "day";
+            if (granularity === "month") return "Vue mensuelle";
+            if (granularity === "week") return "Vue hebdomadaire";
+            return "Vue journaliere";
+        },
+    },
+
+    beforeDestroy() {
+        if (this._progressionChart) {
+            try {
+                this._progressionChart.destroy();
+            } catch (_) {}
+            this._progressionChart = null;
+        }
     },
 });

@@ -59,9 +59,9 @@
                             <th>Check-in</th>
                             <th>Check-out</th>
                             <th>Date</th>
-                            <th>Heure entrée</th>
-                            <th>Controle intermediaire</th>
-                            <th>Heure sortie</th>
+                            <th>Entrée</th>
+                            <th>Sortie</th>
+                            <th>Distance</th>
                             <th>Durée</th>
                             <th>Retard</th>
                         </tr>
@@ -101,8 +101,12 @@
                             </td>
                             <td>@{{ p.date_reference }}</td>
                             <td><span class="badge badge-success">@{{ p.started_at ?? '--:--' }}</span></td>
-                            <td><span class="badge badge-info">@{{ p.mid_check ?? '--:--' }}</span></td>
                             <td><span class="badge badge-purple">@{{ p.ended_at ?? '--:--' }}</span></td>
+                            <td>
+                                <span class="badge d-inline-flex align-items-center" :class="p.is_on_station ? 'badge-soft-success' : 'badge-soft-danger'">
+                                    <i class="ti ti-map-pin-check me-1"></i> @{{ p.distance_label || 'Inconnue' }}
+                                </span>
+                            </td>
                             <td><span class="badge badge-info">@{{ p.duree ?? '--' }}</span></td>
                             <td>
                                 <span class="badge badge-soft-danger" v-if="p.retard === 'oui'">Oui</span>

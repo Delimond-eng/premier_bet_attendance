@@ -40,6 +40,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         ->name('dashboard.stats')
         ->middleware('can:dashboard_admin.view');
 
+    // Map View
+    Route::get('/map', fn () => view('map'))->name('map.view')->middleware('can:stations.view');
+
     // Stations
     Route::prefix('stations')->name('stations.')->group(function () {
         Route::get('/view', fn () => view('stations'))
@@ -175,8 +178,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->name('authorizations.store')
             ->middleware('canany:authorizations.create,authorizations.update');
         Route::post('/authorizations/delete', [HRController::class, 'authorizationsDelete'])
-            ->name('authorizations.delete')
-            ->middleware('can:authorizations.delete');
+            ->name('authorizations.delete');
 
         Route::get('/justifications', [HRController::class, 'justificationsIndex'])
             ->name('justifications.index')
@@ -185,8 +187,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->name('justifications.store')
             ->middleware('canany:justifications.create,justifications.update');
         Route::post('/justifications/delete', [HRController::class, 'justificationsDelete'])
-            ->name('justifications.delete')
-            ->middleware('can:justifications.delete');
+            ->name('justifications.delete');
 
         Route::get('/attributions', [HRController::class, 'attributionsIndex'])
             ->name('attributions.index')
@@ -195,8 +196,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->name('attributions.store')
             ->middleware('canany:attributions.create,attributions.update');
         Route::post('/attributions/delete', [HRController::class, 'attributionsDelete'])
-            ->name('attributions.delete')
-            ->middleware('can:attributions.delete');
+            ->name('attributions.delete');
 
         Route::get('/timesheet/monthly', [HRController::class, 'monthlyTimesheet'])
             ->name('timesheet.monthly')

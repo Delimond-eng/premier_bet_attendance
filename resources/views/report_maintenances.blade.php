@@ -154,7 +154,11 @@
                                     <span class="badge badge-soft-dark">@{{ m.end_at || '--:--' }}</span>
                                 </div>
                             </td>
-                            <td>@{{ m.distance_label || 'Distance indisponible' }}</td>
+                            <td>
+                                <span class="badge d-inline-flex align-items-center" :class="m.is_on_station ? 'badge-soft-success' : 'badge-soft-danger'">
+                                    <i class="ti ti-map-pin-check me-1"></i> @{{ m.distance_label || 'Inconnue' }}
+                                </span>
+                            </td>
                             <td>
                                 <span v-if="m.end_at" class="badge badge-success-transparent">Cloturee</span>
                                 <span v-else class="badge badge-warning-transparent">En cours</span>

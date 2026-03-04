@@ -13,19 +13,19 @@ use App\Models\MaintenanceAgent;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
-use App\Services\AttendanceReportService; 
-use App\Services\AbsenceReportService; 
-use Barryvdh\DomPDF\Facade\Pdf; 
-use Carbon\Carbon; 
-use Illuminate\Http\JsonResponse; 
-use Illuminate\Http\Request; 
-use Illuminate\Pagination\LengthAwarePaginator; 
-use Illuminate\Support\Facades\DB; 
-use Illuminate\Support\Facades\Log; 
-use Illuminate\Validation\ValidationException; 
- 
-class PresenceController extends Controller 
-{ 
+use App\Services\AttendanceReportService;
+use App\Services\AbsenceReportService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+
+class PresenceController extends Controller
+{
     /**
      * Enregistre un pointage (check-in / check-out).
      *
@@ -34,30 +34,30 @@ class PresenceController extends Controller
      * - La présence conserve la station d’affectation (site_id) au moment du pointage.
      * - Plus de logique photo (champ ignoré si envoyé).
      */
-    public function createPresenceAgent(Request $request): JsonResponse 
-    { 
-        try { 
-            $data = $request->validate([ 
-                'matricule' => 'required|string|exists:agents,matricule', 
-                'key' => 'required|string|in:check-in,check-out,confirmation,maintenance-in,maintenance-out', 
-                'station_id' => 'nullable|integer|exists:sites,id', 
-                'coordonnees' => 'nullable|string', // "lat,lng" (mobile) 
+    public function createPresenceAgent(Request $request): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'matricule' => 'required|string|exists:agents,matricule',
+                'key' => 'required|string|in:check-in,check-out,confirmation,maintenance-in,maintenance-out',
+                'station_id' => 'nullable|integer|exists:sites,id',
+                'coordonnees' => 'nullable|string', // "lat,lng" (mobile)
                 'photo' => 'nullable',
                 'photo_debut' => 'nullable',
                 'photo_fin' => 'nullable',
-            ]); 
-        } catch (ValidationException $e) { 
+            ]);
+        } catch (ValidationException $e) {
             // Important: keep HTTP 200 to avoid client conflicts (Flutter), encode failures in payload only.
-            return response()->json([ 
-                'status' => 'error', 
-                'errors' => $e->validator->errors()->all(), 
-            ], 200); 
-        } 
- 
-        $now = Carbon::now()->setTimezone('Africa/Kinshasa'); 
- 
-        $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail(); 
-        $assignedStationId = $agent->site_id; 
+            return response()->json([
+                'status' => 'error',
+                'errors' => $e->validator->errors()->all(),
+            ], 200);
+        }
+
+        $now = Carbon::now()->setTimezone('Africa/Kinshasa');
+
+        $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail();
+        $assignedStationId = $agent->site_id;
 
         $stationId = null;
         if ($data['key'] !== 'confirmation') {
@@ -79,7 +79,7 @@ class PresenceController extends Controller
                 return response()->json(['errors' => ['Station introuvable pour ce pointage.']]);
             }
         }
- 
+
         // On ne requiert un horaire QUE pour le check-in (pour rÃ©soudre date_reference et le retard).
         // Le check-out s'appuie sur la prÃ©sence ouverte (started_at non null + ended_at null).
         $horaire = null;
@@ -96,10 +96,10 @@ class PresenceController extends Controller
                 $dateReference = $this->getDateReference($now, $horaire);
             }
         }
- 
-        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in. 
-        if ($data['key'] === 'check-in') { 
-            $gid = AgentGroupAssignment::query() 
+
+        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in.
+        if ($data['key'] === 'check-in') {
+            $gid = AgentGroupAssignment::query()
                 ->where('agent_id', $agent->id)
                 ->whereDate('start_date', '<=', $dateReference->toDateString())
                 ->where(function ($q) use ($dateReference) {
@@ -121,18 +121,29 @@ class PresenceController extends Controller
             }
         }
 
-        $photoDebut = $this->normalizePunchPhoto($data['photo_debut'] ?? $data['photo'] ?? null);
-        $photoFin = $this->normalizePunchPhoto($data['photo_fin'] ?? $data['photo'] ?? null);
+        $isMaintenanceKey = str_starts_with((string) $data['key'], 'maintenance-');
+        $photoDirectory = $isMaintenanceKey ? 'maintenances' : 'presences';
+
+        $photoDebut = null;
+        $photoFin = null;
+
+        if (in_array($data['key'], ['check-in', 'maintenance-in'], true)) {
+            $photoDebut = $this->normalizePunchPhoto($data['photo_debut'] ?? $data['photo'] ?? null, $photoDirectory);
+        }
+
+        if (in_array($data['key'], ['check-out', 'maintenance-out'], true)) {
+            $photoFin = $this->normalizePunchPhoto($data['photo_fin'] ?? $data['photo'] ?? null, $photoDirectory);
+        }
         $coordonnees = $data['coordonnees'] ?? null;
 
         try {
             return DB::transaction(function () use ($data, $agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut, $photoFin, $coordonnees) {
                 if ($data['key'] === 'check-in') {
-                    return $this->handleCheckIn($agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut);
+                    return $this->handleCheckIn($agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut, $coordonnees);
                 }
 
                 if ($data['key'] === 'check-out') {
-                    return $this->handleCheckOut($agent, $stationId, $now, $photoFin);
+                    return $this->handleCheckOut($agent, $stationId, $now, $photoFin, $coordonnees);
                 }
 
                 if ($data['key'] === 'maintenance-in') {
@@ -155,7 +166,7 @@ class PresenceController extends Controller
         }
     }
 
-    private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now, ?string $photoDebut = null): JsonResponse
+    private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now, ?string $photoDebut = null, ?string $coordonnees = null): JsonResponse
     {
         $existing = PresenceAgents::query()
             ->where('agent_id', $agent->id)
@@ -175,6 +186,12 @@ class PresenceController extends Controller
             }
         }
 
+        $commentLine = "";
+        if ($coordonnees) {
+            $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
+            $commentLine = $this->buildGenericCommentLine('Check-in', $geo);
+        }
+
         $presence = PresenceAgents::create([
             'agent_id' => $agent->id,
             'site_id' => $assignedStationId, // station d'affectation (référence/contrôle)
@@ -186,6 +203,7 @@ class PresenceController extends Controller
             'retard' => $retard,
             'photos_debut' => $photoDebut,
             'status' => 'arrive',
+            'commentaires' => $commentLine,
         ]);
 
         $presence->load(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation']);
@@ -197,7 +215,7 @@ class PresenceController extends Controller
         ]);
     }
 
-    private function handleCheckOut(Agent $agent, int $stationId, Carbon $now, ?string $photoFin = null): JsonResponse
+    private function handleCheckOut(Agent $agent, int $stationId, Carbon $now, ?string $photoFin = null, ?string $coordonnees = null): JsonResponse
     {
         $presence = PresenceAgents::query()
             ->where('agent_id', $agent->id)
@@ -214,12 +232,22 @@ class PresenceController extends Controller
         $dureeMinutes = $startedAt->diffInMinutes($now);
         $dureeFormat = $this->formatDuration($dureeMinutes);
 
+        $existingComment = trim((string) ($presence->commentaires ?? ''));
+        $commentLine = "";
+        if ($coordonnees) {
+            $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
+            $commentLine = $this->buildGenericCommentLine('Check-out', $geo);
+        }
+
         $presence->update([
             'ended_at' => $now,
             'duree' => $dureeFormat,
             'station_check_out_id' => $stationId,
             'photos_fin' => $photoFin,
             'status' => 'depart',
+            'commentaires' => $existingComment !== '' && $commentLine !== ''
+                ? ($existingComment . "\n" . $commentLine)
+                : ($commentLine !== '' ? $commentLine : $existingComment),
         ]);
 
         $presence->load(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation']);
@@ -229,6 +257,52 @@ class PresenceController extends Controller
             'message' => 'Sortie enregistrée.',
             'result' => $presence,
         ]);
+    }
+
+    private function buildGenericGeoContext(int $stationId, ?string $coordonnees): array
+    {
+        $station = Station::query()
+            ->withoutGlobalScopes()
+            ->find($stationId, ['id', 'name', 'latlng']);
+
+        $stationLatLng = $station?->latlng ? trim((string) $station->latlng) : null;
+        $agentLatLng = $coordonnees ? trim((string) $coordonnees) : null;
+
+        $stationPoint = $this->parseLatLng($stationLatLng);
+        $agentPoint = $this->parseLatLng($agentLatLng);
+
+        $distanceMeters = null;
+        $isOnStation = null;
+
+        if ($stationPoint && $agentPoint) {
+            $distanceMeters = $this->calculateDistanceMeters(
+                $agentPoint['lat'],
+                $agentPoint['lng'],
+                $stationPoint['lat'],
+                $stationPoint['lng']
+            );
+            $isOnStation = $distanceMeters <= 500;
+        }
+
+        return [
+            'station_latlng' => $stationLatLng,
+            'agent_latlng' => $agentLatLng,
+            'distance_meters' => $distanceMeters,
+            'is_on_station' => $isOnStation,
+        ];
+    }
+
+    private function buildGenericCommentLine(string $phase, array $geo): string
+    {
+        if ($geo['distance_meters'] === null) {
+            return $phase . " distance: inconnue";
+        }
+
+        $line = $phase . ' distance: ' . $geo['distance_meters'] . ' m';
+        if ($geo['is_on_station'] !== null) {
+            $line .= ', sur station: ' . ($geo['is_on_station'] ? 'oui' : 'non');
+        }
+        return $line;
     }
 
     private function handleMidCheckConfirmation(Agent $agent, Carbon $dateReference, Carbon $now): JsonResponse
@@ -427,19 +501,19 @@ class PresenceController extends Controller
         $debutOnStation = null;
         $finOnStation = null;
 
-        if (preg_match('/Debut\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+        if (preg_match('/(?:Debut|Check-in)\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
             $debutDistance = (int) $m[1];
         }
 
-        if (preg_match('/Fin\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+        if (preg_match('/(?:Fin|Check-out)\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
             $finDistance = (int) $m[1];
         }
 
-        if (preg_match('/Debut\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+        if (preg_match('/(?:Debut|Check-in)\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
             $debutOnStation = strtolower($m[1]) === 'oui';
         }
 
-        if (preg_match('/Fin\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
+        if (preg_match('/(?:Fin|Check-out)\\s+distance:[^\\n]*sur\\s+station:\\s*(oui|non)/i', $text, $m)) {
             $finOnStation = strtolower($m[1]) === 'oui';
         }
 
@@ -481,7 +555,7 @@ class PresenceController extends Controller
         ];
     }
 
-    private function normalizePunchPhoto(mixed $value): ?string
+    private function normalizePunchPhoto(mixed $value, string $directoryName = 'presences'): ?string
     {
         if ($value === null) {
             return null;
@@ -493,15 +567,51 @@ class PresenceController extends Controller
         }
 
         if ($value instanceof \Illuminate\Http\UploadedFile) {
-            $directory = public_path('uploads/punches');
-            if (!is_dir($directory)) {
-                @mkdir($directory, 0777, true);
+            if (!$value->isValid()) {
+                Log::warning('Punch photo upload invalid', [
+                    'name' => $value->getClientOriginalName(),
+                    'error' => $value->getError(),
+                ]);
+
+                return null;
             }
 
-            $filename = 'punch_' . time() . '_' . uniqid() . '.' . $value->getClientOriginalExtension();
-            $value->move($directory, $filename);
+            $safeDirectory = preg_replace('/[^a-z0-9_-]/i', '', $directoryName) ?: 'presences';
+            $directory = public_path('punches/' . $safeDirectory);
+            if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+                Log::error('Unable to create punch photo directory', [
+                    'directory' => $directory,
+                ]);
 
-            return url('uploads/punches/' . $filename);
+                return null;
+            }
+
+            $extension = strtolower($value->getClientOriginalExtension() ?: $value->extension() ?: 'jpg');
+            $filename = 'punch_' . now()->format('Ymd_His_u') . '_' . uniqid('', true) . '.' . $extension;
+
+            try {
+                $value->move($directory, $filename);
+            } catch (\Throwable $e) {
+                Log::error('Punch photo storage failed', [
+                    'name' => $value->getClientOriginalName(),
+                    'directory' => $directory,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return null;
+            }
+
+            if (!is_file($directory . DIRECTORY_SEPARATOR . $filename)) {
+                Log::error('Punch photo move did not create expected file', [
+                    'name' => $value->getClientOriginalName(),
+                    'directory' => $directory,
+                    'filename' => $filename,
+                ]);
+
+                return null;
+            }
+
+            return url('punches/' . $safeDirectory . '/' . $filename);
         }
 
         return null;
@@ -573,10 +683,10 @@ class PresenceController extends Controller
             ->first();
     }
 
-    private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire 
-    { 
-        $date = $now->toDateString(); 
-        $yesterday = $now->copy()->subDay()->toDateString(); 
+    private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire
+    {
+        $date = $now->toDateString();
+        $yesterday = $now->copy()->subDay()->toDateString();
 
         // Resolve active group assignment for a given date (prefer assignments; fallback to agent.groupe_id).
         $groupIdFor = function (string $d) use ($agent): ?int {
@@ -593,78 +703,78 @@ class PresenceController extends Controller
                 return (int) $a->agent_group_id;
             }
 
-            return $agent->groupe_id ? (int) $agent->groupe_id : null; 
-        }; 
- 
-        $groupById = function (?int $gid): ?AgentGroup { 
-            if (!$gid) { 
-                return null; 
-            } 
-            return AgentGroup::query()->find($gid, ['id', 'horaire_id']); 
-        }; 
- 
-        $gidToday = $groupIdFor($date); 
-        $groupToday = $groupById($gidToday); 
-        $isFlexibleToday = $groupToday && empty($groupToday->horaire_id); 
- 
-        $gidYesterday = $groupIdFor($yesterday); 
-        $groupYesterday = $groupById($gidYesterday); 
-        $isFlexibleYesterday = $groupYesterday && empty($groupYesterday->horaire_id); 
- 
-        $planningFor = function (string $d) use ($agent, $groupIdFor) { 
-            $gid = $groupIdFor($d); 
-            return AgentGroupPlanning::query() 
-                ->where('agent_id', $agent->id) 
-                ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid)) 
-                ->whereDate('date', $d) 
-                ->where('is_rest_day', false) 
-                ->first(); 
-        }; 
- 
-        // Night shifts: between 00:00 and the shift end time, the reference schedule can be yesterday's planning. 
-        $planningYesterday = $planningFor($yesterday); 
-        if ($planningYesterday?->horaire_id) { 
-            $h = PresenceHoraire::find($planningYesterday->horaire_id); 
-            if ($h) { 
-                try { 
-                    $heureDebut = Carbon::createFromTimeString($h->started_at); 
-                    $heureFin = Carbon::createFromTimeString($h->ended_at); 
-                    if ($heureFin->lt($heureDebut)) { 
-                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at); 
-                        if ($now->lt($limiteFin)) { 
-                            return $h; 
-                        } 
-                    } 
-                } catch (\Throwable $_) { 
-                } 
-            } 
-        } 
- 
+            return $agent->groupe_id ? (int) $agent->groupe_id : null;
+        };
+
+        $groupById = function (?int $gid): ?AgentGroup {
+            if (!$gid) {
+                return null;
+            }
+            return AgentGroup::query()->find($gid, ['id', 'horaire_id']);
+        };
+
+        $gidToday = $groupIdFor($date);
+        $groupToday = $groupById($gidToday);
+        $isFlexibleToday = $groupToday && empty($groupToday->horaire_id);
+
+        $gidYesterday = $groupIdFor($yesterday);
+        $groupYesterday = $groupById($gidYesterday);
+        $isFlexibleYesterday = $groupYesterday && empty($groupYesterday->horaire_id);
+
+        $planningFor = function (string $d) use ($agent, $groupIdFor) {
+            $gid = $groupIdFor($d);
+            return AgentGroupPlanning::query()
+                ->where('agent_id', $agent->id)
+                ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
+                ->whereDate('date', $d)
+                ->where('is_rest_day', false)
+                ->first();
+        };
+
+        // Night shifts: between 00:00 and the shift end time, the reference schedule can be yesterday's planning.
+        $planningYesterday = $planningFor($yesterday);
+        if ($planningYesterday?->horaire_id) {
+            $h = PresenceHoraire::find($planningYesterday->horaire_id);
+            if ($h) {
+                try {
+                    $heureDebut = Carbon::createFromTimeString($h->started_at);
+                    $heureFin = Carbon::createFromTimeString($h->ended_at);
+                    if ($heureFin->lt($heureDebut)) {
+                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at);
+                        if ($now->lt($limiteFin)) {
+                            return $h;
+                        }
+                    }
+                } catch (\Throwable $_) {
+                }
+            }
+        }
+
         // For flexible groups, do not fallback to agent/group/station defaults: the planning row is the source of truth.
-        if ($isFlexibleYesterday && $planningYesterday && empty($planningYesterday->horaire_id)) { 
-            return null; 
-        } 
- 
-        $planning = $planningFor($date); 
-        if ($planning?->horaire_id) { 
-            return PresenceHoraire::find($planning->horaire_id); 
-        } 
- 
-        if ($isFlexibleToday) { 
-            return null; 
-        } 
- 
+        if ($isFlexibleYesterday && $planningYesterday && empty($planningYesterday->horaire_id)) {
+            return null;
+        }
+
+        $planning = $planningFor($date);
+        if ($planning?->horaire_id) {
+            return PresenceHoraire::find($planning->horaire_id);
+        }
+
+        if ($isFlexibleToday) {
+            return null;
+        }
+
         // Default schedule from the active group (if any)
-        if ($gidToday) { 
-            $group = AgentGroup::query()->with('horaire')->find($gidToday); 
-            if ($group?->horaire_id) { 
-                return $group->horaire ?? PresenceHoraire::find($group->horaire_id); 
-            } 
-        } 
- 
-        if ($agent->horaire_id) { 
-            return PresenceHoraire::find($agent->horaire_id); 
-        } 
+        if ($gidToday) {
+            $group = AgentGroup::query()->with('horaire')->find($gidToday);
+            if ($group?->horaire_id) {
+                return $group->horaire ?? PresenceHoraire::find($group->horaire_id);
+            }
+        }
+
+        if ($agent->horaire_id) {
+            return PresenceHoraire::find($agent->horaire_id);
+        }
 
         if ($agent->site_id) {
             return PresenceHoraire::query()->where('site_id', $agent->site_id)->orderBy('started_at')->first();
@@ -718,13 +828,24 @@ class PresenceController extends Controller
             $query->where('site_id', (int) $stationId);
         }
 
+        $presences = $query
+            ->orderByDesc('date_reference')
+            ->orderByDesc('started_at')
+            ->get();
+
+        $presences->each(fn($p) => $this->attachPresenceDistanceMeta($p));
+
         return response()->json([
             'status' => 'success',
-            'presences' => $query
-                ->orderByDesc('date_reference')
-                ->orderByDesc('started_at')
-                ->get(),
+            'presences' => $presences,
         ]);
+    }
+
+    private function attachPresenceDistanceMeta(PresenceAgents $presence): void
+    {
+        $meta = $this->extractMaintenanceMeta($presence->commentaires);
+        $presence->setAttribute('distance_label', $meta['distance_label']);
+        $presence->setAttribute('is_on_station', $meta['is_on_station']);
     }
 
     public function getAllHoraires(Request $request): JsonResponse
@@ -1027,6 +1148,7 @@ class PresenceController extends Controller
             ->orderByDesc('started_at')
             ->paginate($perPage);
 
+        $presences->getCollection()->each(fn($p) => $this->attachPresenceDistanceMeta($p));
         $this->attachPresenceMotifs($presences->getCollection(), $date);
 
         return response()->json([
@@ -1084,6 +1206,7 @@ class PresenceController extends Controller
             'station_id' => 'nullable|integer|exists:sites,id',
             'agent_id' => 'nullable|integer|exists:agents,id',
             'per_page' => 'nullable|integer|min:1|max:500',
+            'only_active' => 'nullable|boolean',
         ]);
 
         $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
@@ -1095,8 +1218,11 @@ class PresenceController extends Controller
         }
 
         $baseQuery = MaintenanceAgent::query()
-            ->whereDate('date_maintenance', '>=', $start->toDateString())
-            ->whereDate('date_maintenance', '<=', $end->toDateString())
+            ->when(!empty($data['only_active']), fn($q) => $q->whereNull('end_at'))
+            ->when(empty($data['only_active']), function($q) use ($start, $end) {
+                $q->whereDate('date_maintenance', '>=', $start->toDateString())
+                  ->whereDate('date_maintenance', '<=', $end->toDateString());
+            })
             ->when(!empty($data['station_id']), fn ($q) => $q->where('station_id', (int) $data['station_id']))
             ->when(!empty($data['agent_id']), fn ($q) => $q->where('agent_id', (int) $data['agent_id']));
 
@@ -1232,7 +1358,7 @@ class PresenceController extends Controller
 
         $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
         $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->endOfDay();
         if ($start->gt($end)) {
             [$start, $end] = [$end, $start];
         }
@@ -1369,6 +1495,7 @@ class PresenceController extends Controller
         $perPage = (int) ($data['per_page'] ?? 15);
 
         $page = $query->paginate($perPage);
+        $page->getCollection()->each(fn($p) => $this->attachPresenceDistanceMeta($p));
         $page->getCollection()->transform(function (PresenceAgents $p) {
             // Keep original fields (incl. formatted casts) but add ISO values for front-end logic.
             $p->date_reference_iso = $p->getRawOriginal('date_reference');
@@ -1510,11 +1637,16 @@ class PresenceController extends Controller
     {
         $data = $request->validate([
             'station_id' => 'required|integer|exists:sites,id',
+            'latlng' => 'nullable|string',
         ]);
 
-        $station = Station::query()->find((int) $data['station_id']);
+        $station = Station::query()->withoutGlobalScopes()->find((int) $data['station_id']);
         if (!$station) {
             return response()->json(['errors' => ['Station introuvable.']]);
+        }
+
+        if (!empty($data['latlng'])) {
+            $station->update(['latlng' => $data['latlng']]);
         }
 
         return response()->json([

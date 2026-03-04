@@ -525,6 +525,12 @@ class AdminController extends Controller
             return $maintenance;
         });
 
+        $maintenanceProgression = $this->buildMaintenanceProgression(
+            from: $from->copy()->startOfDay(),
+            to: $to->copy()->startOfDay(),
+            mode: (string) $request->query('mode', 'custom'),
+        );
+
         return response()->json([
             'status' => 'success',
             'count' => [
@@ -566,8 +572,194 @@ class AdminController extends Controller
                     'off_station' => $maintenanceOffStation,
                 ],
                 'latest' => $latestMaintenances,
+                'progression' => $maintenanceProgression,
             ],
         ]);
+    }
+
+    private function buildMaintenanceProgression(Carbon $from, Carbon $to, string $mode = 'custom'): array
+    {
+        $granularity = $this->resolveMaintenanceGranularity($from, $to, $mode);
+        $buckets = $this->buildMaintenanceBuckets($from, $to, $granularity);
+
+        $bucketIndexes = [];
+        foreach ($buckets as $index => $bucket) {
+            $bucketIndexes[(string) $bucket['key']] = $index;
+        }
+
+        $rows = MaintenanceAgent::query()
+            ->whereDate('date_maintenance', '>=', $from->toDateString())
+            ->whereDate('date_maintenance', '<=', $to->toDateString())
+            ->get(['station_id', 'date_maintenance']);
+
+        $stationIds = $rows->pluck('station_id')
+            ->filter(fn ($id) => $id !== null)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $stationNamesById = [];
+        if (!empty($stationIds)) {
+            $stationNamesById = Station::query()
+                ->whereIn('id', $stationIds)
+                ->pluck('name', 'id')
+                ->all();
+        }
+
+        $seriesByStation = [];
+        foreach ($rows as $row) {
+            try {
+                $date = Carbon::parse((string) $row->date_maintenance);
+            } catch (\Throwable $_) {
+                continue;
+            }
+
+            $bucketKey = $this->resolveMaintenanceBucketKey($date, $granularity);
+            if (!array_key_exists($bucketKey, $bucketIndexes)) {
+                continue;
+            }
+
+            $stationId = $row->station_id !== null ? (int) $row->station_id : null;
+            $stationKey = $stationId !== null ? (string) $stationId : 'none';
+
+            if (!isset($seriesByStation[$stationKey])) {
+                $stationName = $stationId !== null
+                    ? (string) ($stationNamesById[$stationId] ?? ('Station ' . $stationId))
+                    : 'Sans station';
+
+                $seriesByStation[$stationKey] = [
+                    'station_id' => $stationId,
+                    'station_name' => $stationName,
+                    'data' => array_fill(0, count($buckets), 0),
+                    'total' => 0,
+                ];
+            }
+
+            $bucketIndex = $bucketIndexes[$bucketKey];
+            $seriesByStation[$stationKey]['data'][$bucketIndex] += 1;
+            $seriesByStation[$stationKey]['total'] += 1;
+        }
+
+        $series = array_values($seriesByStation);
+        usort($series, fn ($a, $b) => (int) $b['total'] <=> (int) $a['total']);
+
+        $maxSeries = 6;
+        if (count($series) > $maxSeries) {
+            $others = array_slice($series, $maxSeries);
+            $series = array_slice($series, 0, $maxSeries);
+
+            $othersData = array_fill(0, count($buckets), 0);
+            $othersTotal = 0;
+            foreach ($others as $item) {
+                $othersTotal += (int) ($item['total'] ?? 0);
+                foreach (($item['data'] ?? []) as $idx => $value) {
+                    $othersData[$idx] += (int) $value;
+                }
+            }
+
+            if ($othersTotal > 0) {
+                $series[] = [
+                    'station_id' => null,
+                    'station_name' => 'Autres stations',
+                    'data' => $othersData,
+                    'total' => $othersTotal,
+                ];
+            }
+        }
+
+        return [
+            'granularity' => $granularity,
+            'labels' => array_map(fn ($b) => (string) $b['label'], $buckets),
+            'series' => array_map(function (array $item) {
+                return [
+                    'station_id' => $item['station_id'],
+                    'name' => (string) $item['station_name'],
+                    'data' => array_map(fn ($v) => (int) $v, $item['data'] ?? []),
+                    'total' => (int) ($item['total'] ?? 0),
+                ];
+            }, $series),
+        ];
+    }
+
+    private function resolveMaintenanceGranularity(Carbon $from, Carbon $to, string $mode): string
+    {
+        if ($mode === 'week' || $mode === 'today') {
+            return 'day';
+        }
+
+        if ($mode === 'month') {
+            return 'week';
+        }
+
+        if ($mode === 'year') {
+            return 'month';
+        }
+
+        $days = max($from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1, 1);
+        if ($days <= 31) {
+            return 'day';
+        }
+        if ($days <= 120) {
+            return 'week';
+        }
+
+        return 'month';
+    }
+
+    private function buildMaintenanceBuckets(Carbon $from, Carbon $to, string $granularity): array
+    {
+        $buckets = [];
+        $cursor = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+
+        while ($cursor->lte($end)) {
+            $key = $this->resolveMaintenanceBucketKey($cursor, $granularity);
+            if (!isset($buckets[$key])) {
+                $buckets[$key] = [
+                    'key' => $key,
+                    'label' => $this->resolveMaintenanceBucketLabel($cursor, $granularity),
+                ];
+            }
+
+            $cursor->addDay();
+        }
+
+        if (empty($buckets)) {
+            $fallbackKey = $this->resolveMaintenanceBucketKey($from, $granularity);
+            $buckets[$fallbackKey] = [
+                'key' => $fallbackKey,
+                'label' => $this->resolveMaintenanceBucketLabel($from, $granularity),
+            ];
+        }
+
+        return array_values($buckets);
+    }
+
+    private function resolveMaintenanceBucketKey(Carbon $date, string $granularity): string
+    {
+        if ($granularity === 'month') {
+            return $date->format('Y-m');
+        }
+
+        if ($granularity === 'week') {
+            return $date->isoWeekYear . '-W' . str_pad((string) $date->isoWeek(), 2, '0', STR_PAD_LEFT);
+        }
+
+        return $date->format('Y-m-d');
+    }
+
+    private function resolveMaintenanceBucketLabel(Carbon $date, string $granularity): string
+    {
+        if ($granularity === 'month') {
+            return $date->format('m/Y');
+        }
+
+        if ($granularity === 'week') {
+            return 'S' . $date->isoWeek() . ' ' . $date->isoWeekYear;
+        }
+
+        return $date->format('d/m');
     }
 
     private function extractMaintenanceMeta(?string $commentaire): array
