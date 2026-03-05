@@ -23,7 +23,7 @@
                 <p class="text-muted mb-0">Supervisez en temps réel le déroulement des interventions de maintenance sur l'ensemble des stations.</p>
             </div>
             <div class="card-body p-0">
-                <div id="map" style="height: 700px; width: 100%; border-radius: 8px;"></div>
+                <div id="map" style="height: 700px; width: 100%; border-radius: 0px;"></div>
             </div>
         </div>
 
@@ -119,16 +119,23 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid #cbd5e1;
+            background: rgba(51, 136, 255, 0.95); /* Couleur bleue par défaut */
+            border: 1px solid #3388ff;
             border-radius: 4px;
             padding: 2px 8px;
             font-weight: 700;
             font-size: 11px;
-            color: #1e293b;
+            color: #ffffff;
             white-space: nowrap;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            pointer-events: none; /* Ne pas bloquer le clic sur le marqueur */
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        /* Label en maintenance */
+        .station-label.in-maintenance {
+            background: rgba(239, 68, 68, 0.95); /* Couleur rouge */
+            border-color: #ef4444;
         }
 
         /* Animation Pulse */

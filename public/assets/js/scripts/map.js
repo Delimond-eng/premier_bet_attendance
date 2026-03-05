@@ -17,6 +17,10 @@ new Vue({
     },
 
     computed: {
+        /**
+         * Mapping réactif : ID Station -> Objet Maintenance
+         * Permet un accès instantané O(1) pour le watcher et les clics
+         */
         maintenanceMap() {
             const map = {};
             this.activeMaintenances.forEach(m => {
@@ -27,6 +31,10 @@ new Vue({
     },
 
     watch: {
+        /**
+         * Watcher fluide : Se déclenche dès que la liste des maintenances change.
+         * Il synchronise l'UI de chaque marqueur sans recréer les objets Leaflet.
+         */
         maintenanceMap: {
             handler(newMap) {
                 this.syncMarkersUI(newMap);
@@ -138,7 +146,7 @@ new Vue({
                         <div class="station-marker"></div>
                         <div class="station-label">${station.name}</div>
                       </div>`,
-                iconSize: [24, 24], // Agrandissement du pin
+                iconSize: [24, 24],
                 iconAnchor: [12, 12]
             });
 
@@ -151,7 +159,6 @@ new Vue({
 
             marker.on('click', () => {
                 const maintenance = this.maintenanceMap[station.id];
-                // N'afficher la sidebar QUE si une maintenance est en cours
                 if (maintenance) {
                     this.showSidebar(station, maintenance);
                 }
@@ -176,11 +183,13 @@ new Vue({
                 if (!markerElement) return;
 
                 const dot = markerElement.querySelector('.station-marker');
+                const label = markerElement.querySelector('.station-label');
                 const isMaintenance = !!maintenanceMap[stationId];
                 const hasPulse = !!markerElement.querySelector('.pulse-animation');
 
                 if (isMaintenance) {
                     dot.classList.add('in-maintenance');
+                    if (label) label.classList.add('in-maintenance');
                     if (!hasPulse) {
                         const pulse = document.createElement('div');
                         pulse.className = 'pulse-animation';
@@ -188,6 +197,7 @@ new Vue({
                     }
                 } else {
                     dot.classList.remove('in-maintenance');
+                    if (label) label.classList.remove('in-maintenance');
                     if (hasPulse) {
                         const pulseEl = markerElement.querySelector('.pulse-animation');
                         if (pulseEl) pulseEl.remove();
