@@ -14,7 +14,7 @@ class Station extends Model
 
     protected $table = 'sites';
     protected $fillable = [
-        "name", "code", "latlng", "adresse", "phone", "emails",
+        "name", "type", "code", "latlng", "adresse", "phone", "emails",
         "presence", "status"
     ];
 

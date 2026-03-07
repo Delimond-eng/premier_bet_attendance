@@ -11,9 +11,9 @@ function destroyDatatable(tableEl) {
     }
 }
 
-function initOrRefreshDatatable(tableEl) {
+function initOrRefreshDatatable(tableEl, options = {}) {
     const $ = window.$;
-    if (!$ || !$.fn || !$.fn.DataTable) return;
+    if (!$ || !$.fn || !$.fn.DataTable || !tableEl) return;
 
     destroyDatatable(tableEl);
 
@@ -22,6 +22,7 @@ function initOrRefreshDatatable(tableEl) {
         ordering: true,
         order: [[0, "desc"]],
         info: true,
+        scrollX: false,
         language: {
             search: " ",
             sLengthMenu: "Lignes par page _MENU_",
@@ -32,6 +33,7 @@ function initOrRefreshDatatable(tableEl) {
                 previous: '<i class="ti ti-chevron-left"></i> ',
             },
         },
+        ...options,
     });
 }
 
@@ -55,23 +57,102 @@ function computeSummary(matrix, agentsByKey = {}) {
             const s = days[d]?.status;
             if (s === "present") acc.present += 1;
             else if (s === "retard") {
-                acc.present += 1; // retard = présent (arrivé tard)
+                acc.present += 1;
                 acc.retard += 1;
             } else if (s === "retard_justifie") {
-                acc.present += 1; // retard justifié = présent
+                acc.present += 1;
                 acc.retard += 1;
                 acc.retard_justifie += 1;
-            }
-            else if (s === "absent") acc.absent += 1;
+            } else if (s === "absent") acc.absent += 1;
             else if (s === "conge") acc.conge += 1;
             else if (s === "autorisation") acc.autorisation += 1;
             else if (s === "absence_justifiee") acc.absence_justifiee += 1;
         });
 
-        // Total presté après justification des absences.
         acc.total_preste = acc.present + acc.absence_justifiee;
         rows.push(acc);
     });
+    return rows;
+}
+
+function mapDayStatus(status) {
+    switch (status) {
+    case "present":
+        return { code: "1", cellClass: "bg-success-subtle", bucket: "presence" };
+    case "retard":
+    case "retard_justifie":
+        return { code: "1-R", cellClass: "bg-info text-white", bucket: "retard" };
+    case "absent":
+        return { code: "A", cellClass: "bg-danger text-white", bucket: "absence" };
+    case "absence_justifiee":
+        return { code: "A", cellClass: "bg-warning text-dark", bucket: "absence" };
+    case "off":
+        return { code: "OFF", cellClass: "bg-secondary text-white", bucket: "off" };
+    case "conge":
+        return { code: "C", cellClass: "bg-primary text-white", bucket: "conge" };
+    case "autorisation":
+        return { code: "AS", cellClass: "bg-dark text-white", bucket: "autorisation" };
+    case "future":
+        return { code: "--", cellClass: "bg-light text-muted", bucket: null };
+    case "unplanned":
+        return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
+    default:
+        return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
+    }
+}
+
+function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
+    const rows = [];
+
+    Object.keys(matrix || {}).forEach((agent) => {
+        const days = matrix[agent] || {};
+        const row = {
+            agent_key: agent,
+            agent: agentsByKey[agent] || { fullname: agent, matricule: "", photo: null },
+            day_codes: {},
+            day_classes: {},
+            total_count: 0,
+            total_presences: 0,
+            total_absences: 0,
+            total_retards: 0,
+            total_autorisations: 0,
+            total_conges: 0,
+            total_off: 0,
+            total_others: 0,
+        };
+
+        dayKeys.forEach((day) => {
+            const status = days[day]?.status ?? "future";
+            const mapped = mapDayStatus(status);
+
+            row.day_codes[day] = mapped.code;
+            row.day_classes[day] = mapped.cellClass;
+
+            if (!mapped.bucket) return;
+
+            row.total_count += 1;
+
+            if (mapped.bucket === "presence") {
+                row.total_presences += 1;
+            } else if (mapped.bucket === "retard") {
+                row.total_presences += 1;
+                row.total_retards += 1;
+            } else if (mapped.bucket === "absence") {
+                row.total_absences += 1;
+            } else if (mapped.bucket === "autorisation") {
+                row.total_autorisations += 1;
+            } else if (mapped.bucket === "conge") {
+                row.total_conges += 1;
+            } else if (mapped.bucket === "off") {
+                row.total_off += 1;
+            } else {
+                row.total_others += 1;
+            }
+        });
+
+        rows.push(row);
+    });
+
     return rows;
 }
 
@@ -95,6 +176,7 @@ new Vue({
 
         return {
             isLoading: false,
+            activeTab: "brut",
             sites: [],
             filters: {
                 month: Number.isFinite(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : mm,
@@ -103,6 +185,7 @@ new Vue({
             },
             matrix: {},
             rows: [],
+            detailedRows: [],
         };
     },
 
@@ -129,6 +212,28 @@ new Vue({
             await this.load();
         },
 
+        switchTab(tab) {
+            if (this.activeTab === tab) return;
+            this.activeTab = tab;
+            this.$nextTick(() => setTimeout(() => this.refreshActiveTable(), 0));
+        },
+
+        refreshActiveTable() {
+            if (this.activeTab === "details") {
+                destroyDatatable(this.$refs.tableRaw);
+                initOrRefreshDatatable(this.$refs.tableDetails, {
+                    order: [[1, "asc"]],
+                    scrollX: true,
+                });
+                return;
+            }
+
+            destroyDatatable(this.$refs.tableDetails);
+            initOrRefreshDatatable(this.$refs.tableRaw, {
+                order: [[0, "desc"]],
+            });
+        },
+
         async load() {
             if (this.isLoading) return;
             this.isLoading = true;
@@ -138,7 +243,8 @@ new Vue({
                     String(this.filters.station_id || "");
                 this.filters.station_id = stationId;
 
-                destroyDatatable(this.$refs.table);
+                destroyDatatable(this.$refs.tableRaw);
+                destroyDatatable(this.$refs.tableDetails);
 
                 const params = new URLSearchParams();
                 params.set("month", String(this.filters.month));
@@ -148,17 +254,26 @@ new Vue({
                 const { data } = await get(`/reports/monthly?${params.toString()}`);
                 this.matrix = data?.data ?? {};
                 const agentsByKey = data?.agents ?? {};
+
                 let rows = computeSummary(this.matrix, agentsByKey);
+                let detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.monthDays);
+
                 if (stationId) {
                     rows = rows.filter(
                         (r) => String(r?.agent?.station_id ?? "") === String(stationId)
                     );
+                    detailedRows = detailedRows.filter(
+                        (r) => String(r?.agent?.station_id ?? "") === String(stationId)
+                    );
                 }
+
                 this.rows = rows;
-                this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
+                this.detailedRows = detailedRows;
+                this.$nextTick(() => setTimeout(() => this.refreshActiveTable(), 0));
             } catch (e) {
                 this.matrix = {};
                 this.rows = [];
+                this.detailedRows = [];
             } finally {
                 this.isLoading = false;
             }
@@ -169,17 +284,17 @@ new Vue({
         monthOptions() {
             return [
                 { value: 1, label: "Janvier" },
-                { value: 2, label: "Février" },
+                { value: 2, label: "Fevrier" },
                 { value: 3, label: "Mars" },
                 { value: 4, label: "Avril" },
                 { value: 5, label: "Mai" },
                 { value: 6, label: "Juin" },
                 { value: 7, label: "Juillet" },
-                { value: 8, label: "Août" },
+                { value: 8, label: "Aout" },
                 { value: 9, label: "Septembre" },
                 { value: 10, label: "Octobre" },
                 { value: 11, label: "Novembre" },
-                { value: 12, label: "Décembre" },
+                { value: 12, label: "Decembre" },
             ];
         },
 
@@ -193,10 +308,22 @@ new Vue({
             return years;
         },
 
+        monthDays() {
+            const month = Number(this.filters.month) || 1;
+            const year = Number(this.filters.year) || new Date().getFullYear();
+            const numberOfDays = new Date(year, month, 0).getDate();
+            const days = [];
+            for (let i = 1; i <= numberOfDays; i += 1) {
+                days.push(String(i).padStart(2, "0"));
+            }
+            return days;
+        },
+
         exportPdfUrl() {
             const params = new URLSearchParams();
             params.set("month", String(this.filters.month));
             params.set("year", String(this.filters.year));
+            params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             return `/reports/monthly/export/pdf?${params.toString()}`;
         },
@@ -205,6 +332,7 @@ new Vue({
             const params = new URLSearchParams();
             params.set("month", String(this.filters.month));
             params.set("year", String(this.filters.year));
+            params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             return `/reports/monthly/export/excel?${params.toString()}`;
         },

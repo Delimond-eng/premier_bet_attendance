@@ -22,27 +22,35 @@
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
                 @can('agents.export')
-                    <div class="me-2 mb-2"> 
-                        <div class="dropdown"> 
-                            <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown"> 
-                                <i class="ti ti-file-export me-1"></i>Exporter 
-                            </a> 
-                            <ul class="dropdown-menu  dropdown-menu-end p-3"> 
-                                <li> 
-                                    <a :href="exportPdfUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a> 
-                                </li> 
-                                <li> 
-                                    <a :href="exportExcelUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel</a> 
-                                </li> 
-                            </ul> 
-                        </div> 
-                    </div> 
+                    <div class="me-2 mb-2">
+                        <div class="dropdown">
+                            <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
+                                <i class="ti ti-file-export me-1"></i>Exporter
+                            </a>
+                            <ul class="dropdown-menu  dropdown-menu-end p-3">
+                                <li>
+                                    <a :href="exportPdfUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-pdf me-1"></i>Exporter en PDF</a>
+                                </li>
+                                <li>
+                                    <a :href="exportExcelUrl" target="_blank" class="dropdown-item rounded-1"><i class="ti ti-file-type-xls me-1"></i>Exporter en Excel</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
                 @endcan
 
                 @can('agents.create')
-                    <div class="mb-2"> 
-                        <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="resetCreateForm(); openEmployeeModal()"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a> 
-                    </div> 
+                    <div class="mb-2">
+                        <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="resetCreateForm(); openEmployeeModal()"><i class="ti ti-circle-plus me-2"></i>Ajout agent</a>
+                    </div>
+                @endcan
+
+                @can('agents.import')
+                    <div class="ms-2 mb-2">
+                        <a href="javascript:void(0);" class="btn btn-white d-flex align-items-center border" @click="resetImportForm(); openImportModal()">
+                            <i class="ti ti-file-import me-2"></i>Importer Excel
+                        </a>
+                    </div>
                 @endcan
 
             </div>
@@ -217,24 +225,24 @@
                                             <i class="ti ti-point-filled me-1"></i>Inactif
                                         </span>
                                     </td>
-                                    <td> 
-                                        <div class="d-inline-flex"> 
+                                    <td>
+                                        <div class="d-inline-flex">
                                             @canany(['agents.update','agents.delete'])
-                                                <div class="action-icon d-inline-flex me-2"> 
+                                                <div class="action-icon d-inline-flex me-2">
                                                     @can('agents.update')
-                                                        <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a> 
+                                                        <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a>
                                                     @endcan
                                                     @can('agents.delete')
-                                                        <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a> 
+                                                        <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a>
                                                     @endcan
-                                                </div> 
+                                                </div>
                                             @endcanany
                                             @can('agents.view')
-                                                <a class="btn btn-xs btn-info" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-calendar-time me-1"></i> Infos</a> 
+                                                <a class="btn btn-outline-secondary rounded-pill btn-sm" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-arrow-up-circle me-1"></i>Voir détails</a>
                                             @endcan
-                                        </div> 
-                                    </td> 
-                                </tr> 
+                                        </div>
+                                    </td>
+                                </tr>
                         </tbody>
                     </table>
                 </div>
@@ -362,6 +370,54 @@
                 </div>
             </div>
         </div>
+
+        @can('agents.import')
+            <div class="modal fade" id="import_agents_excel" aria-modal="true" role="dialog">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Importer la liste des agents (Excel)</h5>
+                            <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                <i class="ti ti-x"></i>
+                            </button>
+                        </div>
+                        <form @submit.prevent="importAgentsExcel">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Station d'affectation <span class="text-danger">*</span></label>
+                                    <select class="form-select" v-model="importForm.station_id" required>
+                                        <option value="">Selectionner station</option>
+                                        <option v-for="s in sites" :key="'import-station-' + s.id" :value="String(s.id)">@{{ s.name }}</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Groupe d'horaire <span class="text-danger">*</span></label>
+                                    <select class="form-select" v-model="importForm.groupe_id" required>
+                                        <option value="">Selectionner groupe</option>
+                                        <option v-for="g in filteredImportGroups" :key="'import-group-' + g.id" :value="String(g.id)">
+                                            @{{ g.libelle }}@{{ g.horaire?.libelle ? ' - ' + g.horaire.libelle : '' }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Fichier Excel <span class="text-danger">*</span></label>
+                                    <input type="file" class="form-control" ref="importFileInput" accept=".xlsx,.xls,.csv" @change="onImportFileChange" required>
+                                </div>
+                                <div class="text-muted fs-12">
+                                    Colonnes requises: <strong>matricule</strong>, <strong>nom et postnom</strong>, <strong>fonction</strong>.
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-light border me-2" data-bs-dismiss="modal">Annuler</button>
+                                <button type="submit" class="btn btn-primary" :disabled="isImporting">
+                                    @{{ isImporting ? 'Import en cours...' : 'Importer la liste' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endcan
     </div>
 @endsection
 

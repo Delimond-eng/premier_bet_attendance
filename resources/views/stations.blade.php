@@ -20,11 +20,21 @@
                 </nav>
             </div>
 
-            @can('stations.create')
-                <a href="#" data-bs-target="#add_station" data-bs-toggle="modal" class="btn btn-primary-gradient">
-                    <i class="ti ti-plus"></i> Nouvelle station
-                </a>
-            @endcan
+            <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-3 mb-2">
+                @can('stations.create')
+                    <a href="#" data-bs-target="#add_station" data-bs-toggle="modal" class="btn btn-primary-gradient">
+                        <i class="ti ti-plus"></i> Nouvelle station
+                    </a>
+                @endcan
+
+                @canany(['stations.import','stations.create','stations.update'])
+                    <button class="btn btn-info" @click="resetImportForm(); openImportModal()">
+                        <i class="ti ti-file-import me-1"></i> Importer Excel
+                    </button>
+                @endcanany
+            </div>
+
+
         </div>
         <!-- /Breadcrumb -->
 
@@ -36,6 +46,7 @@
                         <div class="d-flex align-items-center gap-2">
                             <input type="date" class="form-control" v-model="filters.date" style="max-width: 180px;">
                             <button class="btn btn-white border" @click="load">Actualiser</button>
+
                             <div class="dropdown">
                                 <a href="javascript:void(0);" class="dropdown-toggle btn btn-light rounded-pill text-dark dropdown-icon-none" data-bs-toggle="dropdown">
                                     <i class="ti ti-qrcode fs-16"></i>
@@ -57,6 +68,7 @@
                                 <thead class="bg-light-gray">
                                 <tr>
                                     <th class="fw-bold bg-white px-2 ps-0">Station</th>
+                                    <th class="fw-normal bg-white px-2">Type</th>
                                     <th class="fw-normal bg-white px-2">Agents affectés</th>
                                     <th class="fw-normal bg-white px-2">Agents présents</th>
                                     <th class="fw-normal bg-white px-2">Agents absents</th>
@@ -73,6 +85,9 @@
                                                 <span class="fs-13 d-inline-flex align-items-center">@{{ s.adresse ?? '' }}</span>
                                             </div>
                                         </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark me-1" v-if="s.type">@{{ s.type }}</span>
                                     </td>
                                     <td>
                                         <div class="badge bg-info fs-13 rounded-xxl py-2">@{{ s.agents_count ?? 0 }}</div>
@@ -129,6 +144,13 @@
 
                                 <div class="col-md-12">
                                     <div class="mb-3">
+                                        <label class="form-label">Type</label>
+                                        <input type="text" class="form-control" v-model="form.type" placeholder="ex: Bureau / Depot / Site client">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <div class="mb-3">
                                         <label class="form-label">Code<span class="text-danger"> *</span></label>
                                         <div class="input-group">
                                             <input type="text" class="form-control" v-model="form.code" @input="onCodeInput" placeholder="ex: DG001">
@@ -158,6 +180,38 @@
                     </form>
                 </div>
             </div>
+            </div>
+        @endcanany
+
+        @canany(['stations.import','stations.create','stations.update'])
+            <div class="modal fade" id="import_stations_excel" aria-modal="true" role="dialog">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h4 class="modal-title">Importer les stations (Excel)</h4>
+                            <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                <i class="ti ti-x"></i>
+                            </button>
+                        </div>
+                        <form @submit.prevent="importStationsExcel">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Fichier Excel <span class="text-danger">*</span></label>
+                                    <input type="file" class="form-control" ref="importStationsFileInput" accept=".xlsx,.xls,.csv" @change="onImportStationsFileChange" required>
+                                </div>
+                                <div class="text-muted fs-12">
+                                    Format attendu (entete): <strong>NOM,TYPE</strong>. Le code station est genere automatiquement.
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Annuler</button>
+                                <button type="submit" class="btn btn-primary" :disabled="isImporting">
+                                    @{{ isImporting ? 'Import en cours...' : 'Importer les stations' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         @endcanany
     </div>

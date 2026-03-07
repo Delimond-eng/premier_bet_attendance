@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
+use App\Models\MaintenanceAgent;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
@@ -185,6 +186,37 @@ class ExportController extends Controller
             metaLines: $meta,
             headers: $headers,
             rows: $table,
+        );
+    }
+
+    public function agentAttendancesPdf(Request $request): Response
+    {
+        $payload = $this->buildAgentAttendancesExportPayload(
+            $this->validateAgentAttendancesExportRequest($request)
+        );
+
+        $pdf = Pdf::loadView('pdf.exports.agent_attendances', [
+            'title' => $payload['title'],
+            'metaLines' => $payload['meta'],
+            'headers' => $payload['headers'],
+            'rows' => $payload['table'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function agentAttendancesExcel(Request $request): StreamedResponse
+    {
+        $payload = $this->buildAgentAttendancesExportPayload(
+            $this->validateAgentAttendancesExportRequest($request)
+        );
+
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
         );
     }
 
@@ -665,14 +697,35 @@ class ExportController extends Controller
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'tab' => 'nullable|string|in:brut,details',
         ]);
 
         $month = (int) ($data['month'] ?? Carbon::now()->month);
         $year = (int) ($data['year'] ?? Carbon::now()->year);
         $stationId = $data['station_id'] ?? null;
+        $tab = (string) ($data['tab'] ?? 'brut');
         $station = $stationId ? Station::find($stationId) : null;
 
         $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
+        if ($tab === 'details') {
+            $rows = $this->summarizeMonthlyDetailsMatrix(
+                $matrix['data'],
+                $matrix['agents'],
+                $matrix['days'] ?? []
+            );
+
+            $pdf = Pdf::loadView('pdf.exports.presences_monthly_details', [
+                'title' => 'Rapport des presences (mensuel - details)',
+                'month' => $month,
+                'year' => $year,
+                'station' => $station,
+                'days' => $matrix['days'] ?? [],
+                'rows' => $rows,
+            ])->setPaper('a3', 'landscape');
+
+            return $pdf->download('presences_mensuel_details_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.pdf');
+        }
+
         $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
 
         $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
@@ -692,14 +745,70 @@ class ExportController extends Controller
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'tab' => 'nullable|string|in:brut,details',
         ]);
 
         $month = (int) ($data['month'] ?? Carbon::now()->month);
         $year = (int) ($data['year'] ?? Carbon::now()->year);
         $stationId = $data['station_id'] ?? null;
+        $tab = (string) ($data['tab'] ?? 'brut');
         $station = $stationId ? Station::find($stationId) : null;
 
         $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
+        if ($tab === 'details') {
+            $days = $matrix['days'] ?? [];
+            $rows = $this->summarizeMonthlyDetailsMatrix(
+                $matrix['data'],
+                $matrix['agents'],
+                $days
+            );
+
+            $headers = array_merge(
+                ['Matricule', 'Nom complet agent', 'Station'],
+                $days,
+                ['Total', 'Tot presences', 'Tot absences', 'Tot retard', 'Tot autorisation', 'Tot conge', 'Tot OFF', 'Tot autres']
+            );
+
+            $table = [];
+            foreach ($rows as $r) {
+                $a = $r['agent'] ?? [];
+                $line = [
+                    (string) ($a['matricule'] ?? ''),
+                    (string) ($a['fullname'] ?? ''),
+                    (string) ($a['station_name'] ?? ''),
+                ];
+
+                foreach ($days as $day) {
+                    $line[] = (string) ($r['day_codes'][$day] ?? '--');
+                }
+
+                $line[] = (int) ($r['total_count'] ?? 0);
+                $line[] = (int) ($r['total_presences'] ?? 0);
+                $line[] = (int) ($r['total_absences'] ?? 0);
+                $line[] = (int) ($r['total_retards'] ?? 0);
+                $line[] = (int) ($r['total_autorisations'] ?? 0);
+                $line[] = (int) ($r['total_conges'] ?? 0);
+                $line[] = (int) ($r['total_off'] ?? 0);
+                $line[] = (int) ($r['total_others'] ?? 0);
+                $table[] = $line;
+            }
+
+            $meta = [
+                'Mois: ' . sprintf('%02d', $month) . '/' . $year,
+                'Station: ' . ($station?->name ?? 'Toutes'),
+                'Format: Details',
+                'Lignes: ' . count($table),
+            ];
+
+            return $this->downloadXlsx(
+                filename: 'presences_mensuel_details_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.xlsx',
+                sheetTitle: 'Mensuel details',
+                metaLines: $meta,
+                headers: $headers,
+                rows: $table,
+            );
+        }
+
         $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
 
         $headers = ['Agent', 'Matricule', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Justif retard', 'Justif absence', 'Total preste'];
@@ -791,6 +900,92 @@ class ExportController extends Controller
         usort($rows, fn ($a, $b) => strcmp((string) ($a['agent']['fullname'] ?? ''), (string) ($b['agent']['fullname'] ?? '')));
 
         return $rows;
+    }
+
+    private function summarizeMonthlyDetailsMatrix(array $matrix, $agentsCollection, array $dayKeys): array
+    {
+        $agentsByKey = [];
+        foreach ($agentsCollection as $a) {
+            $key = $a->fullname . ' (' . $a->matricule . ')';
+            $agentsByKey[$key] = [
+                'id' => $a->id,
+                'fullname' => $a->fullname,
+                'matricule' => $a->matricule,
+                'photo' => $a->photo,
+                'station_id' => $a->site_id,
+                'station_name' => $a->station?->name,
+            ];
+        }
+
+        $rows = [];
+        foreach ($matrix as $agentKey => $days) {
+            $acc = [
+                'agent_key' => $agentKey,
+                'agent' => $agentsByKey[$agentKey] ?? ['fullname' => $agentKey, 'matricule' => '', 'station_name' => null],
+                'day_codes' => [],
+                'day_buckets' => [],
+                'total_count' => 0,
+                'total_presences' => 0,
+                'total_absences' => 0,
+                'total_retards' => 0,
+                'total_autorisations' => 0,
+                'total_conges' => 0,
+                'total_off' => 0,
+                'total_others' => 0,
+            ];
+
+            foreach ($dayKeys as $day) {
+                $status = $days[$day]['status'] ?? 'future';
+                $mapped = $this->mapMonthlyDetailStatus($status);
+                $bucket = $mapped['bucket'];
+
+                $acc['day_codes'][$day] = $mapped['code'];
+                $acc['day_buckets'][$day] = $bucket;
+
+                if ($bucket === null) {
+                    continue;
+                }
+
+                $acc['total_count'] += 1;
+
+                if ($bucket === 'presence') {
+                    $acc['total_presences'] += 1;
+                } elseif ($bucket === 'retard') {
+                    $acc['total_presences'] += 1;
+                    $acc['total_retards'] += 1;
+                } elseif ($bucket === 'absence') {
+                    $acc['total_absences'] += 1;
+                } elseif ($bucket === 'autorisation') {
+                    $acc['total_autorisations'] += 1;
+                } elseif ($bucket === 'conge') {
+                    $acc['total_conges'] += 1;
+                } elseif ($bucket === 'off') {
+                    $acc['total_off'] += 1;
+                } else {
+                    $acc['total_others'] += 1;
+                }
+            }
+
+            $rows[] = $acc;
+        }
+
+        usort($rows, fn ($a, $b) => strcmp((string) ($a['agent']['fullname'] ?? ''), (string) ($b['agent']['fullname'] ?? '')));
+
+        return $rows;
+    }
+
+    private function mapMonthlyDetailStatus(?string $status): array
+    {
+        return match ($status) {
+            'present' => ['code' => '1', 'bucket' => 'presence'],
+            'retard', 'retard_justifie' => ['code' => '1-R', 'bucket' => 'retard'],
+            'absent', 'absence_justifiee' => ['code' => 'A', 'bucket' => 'absence'],
+            'off' => ['code' => 'OFF', 'bucket' => 'off'],
+            'conge' => ['code' => 'C', 'bucket' => 'conge'],
+            'autorisation' => ['code' => 'AS', 'bucket' => 'autorisation'],
+            'future' => ['code' => '--', 'bucket' => null],
+            default => ['code' => 'AUT', 'bucket' => 'other'],
+        };
     }
 
     private function summarizeStationFromMatrix(Station $station, array $matrix, Collection $agents): array
@@ -925,6 +1120,193 @@ class ExportController extends Controller
         }
     }
 
+    private function validateAgentAttendancesExportRequest(Request $request): array
+    {
+        return $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'dataset' => 'required|string|in:presences,maintenances',
+            'scope' => 'nullable|string|in:global,filtered',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'status' => 'nullable|string|in:present,absent,late',
+        ]);
+    }
+
+    private function buildAgentAttendancesExportPayload(array $data): array
+    {
+        $agent = Agent::query()->with('station')->findOrFail((int) $data['agent_id']);
+        $dataset = (string) $data['dataset'];
+        $scope = (string) ($data['scope'] ?? 'filtered');
+        $applyFilters = $scope === 'filtered';
+        $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        if ($dataset === 'presences') {
+            $query = PresenceAgents::query()
+                ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
+                ->where('agent_id', (int) $agent->id);
+
+            if ($applyFilters) {
+                if (!empty($data['from'])) {
+                    $query->whereDate('date_reference', '>=', $data['from']);
+                }
+                if (!empty($data['to'])) {
+                    $query->whereDate('date_reference', '<=', $data['to']);
+                }
+                if ($stationId !== null) {
+                    $query->where(function ($q) use ($stationId) {
+                        $q->where('site_id', $stationId)
+                            ->orWhere('station_check_in_id', $stationId)
+                            ->orWhere('station_check_out_id', $stationId);
+                    });
+                }
+
+                $status = (string) ($data['status'] ?? '');
+                if ($status === 'present') {
+                    $query->whereNotNull('started_at');
+                } elseif ($status === 'absent') {
+                    $query->whereNull('started_at');
+                } elseif ($status === 'late') {
+                    $query->where('retard', 'oui');
+                }
+            }
+
+            $rows = $query
+                ->orderByDesc('date_reference')
+                ->orderByDesc('started_at')
+                ->get();
+
+            $headers = [
+                'Date',
+                'Station affectation',
+                'Check-in',
+                'Check-out',
+                'Heure entree',
+                'Controle intermediaire',
+                'Heure sortie',
+                'Retard',
+                'Total heures',
+                'Photo debut',
+                'Photo fin',
+            ];
+
+            $table = [];
+            foreach ($rows as $p) {
+                $table[] = [
+                    (string) ($p->getRawOriginal('date_reference') ?? ''),
+                    (string) ($p->assignedStation?->name ?? ''),
+                    (string) ($p->stationCheckIn?->name ?? ''),
+                    (string) ($p->stationCheckOut?->name ?? ''),
+                    $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
+                    $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
+                    $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                    (string) ($p->retard ?? 'non'),
+                    (string) ($p->duree ?? ''),
+                    (string) ($p->photos_debut ?? ''),
+                    (string) ($p->photos_fin ?? ''),
+                ];
+            }
+
+            $statusMap = [
+                'present' => 'Present',
+                'absent' => 'Absent',
+                'late' => 'Retard',
+            ];
+            $statusCode = (string) ($data['status'] ?? '');
+            $statusLabel = $statusMap[$statusCode] ?? 'Tous';
+
+            $meta = [
+                'Agent: ' . $agent->fullname . ' (' . $agent->matricule . ')',
+                'Jeu de donnees: Presences',
+                'Portee: ' . ($applyFilters ? 'Filtres actifs' : 'Globale'),
+                'Station filtre: ' . ($applyFilters ? ($station?->name ?? 'Toutes') : 'N/A'),
+                'Periode: ' . ($applyFilters ? (($data['from'] ?? '...') . ' -> ' . ($data['to'] ?? '...')) : 'N/A'),
+                'Statut filtre: ' . ($applyFilters ? $statusLabel : 'N/A'),
+                'Lignes: ' . count($table),
+            ];
+
+            return [
+                'title' => 'Historique agent - Presences',
+                'sheet_title' => 'Presences agent',
+                'filename_base' => 'agent_' . ($agent->matricule ?: $agent->id) . '_presences_' . $scope,
+                'dataset' => 'presences',
+                'meta' => $meta,
+                'headers' => $headers,
+                'table' => $table,
+                'rows' => $rows,
+            ];
+        }
+
+        $query = MaintenanceAgent::query()
+            ->with(['agent.station', 'station'])
+            ->where('agent_id', (int) $agent->id);
+
+        if ($applyFilters) {
+            if (!empty($data['from'])) {
+                $query->whereDate('date_maintenance', '>=', $data['from']);
+            }
+            if (!empty($data['to'])) {
+                $query->whereDate('date_maintenance', '<=', $data['to']);
+            }
+            if ($stationId !== null) {
+                $query->where('station_id', $stationId);
+            }
+        }
+
+        $rows = $query
+            ->orderByDesc('date_maintenance')
+            ->orderByDesc('started_at')
+            ->get();
+
+        $headers = [
+            'Date',
+            'Station',
+            'Heure debut',
+            'Heure fin',
+            'Distance',
+            'Photo debut',
+            'Photo fin',
+            'Statut',
+            'Commentaire',
+        ];
+
+        $table = [];
+        foreach ($rows as $m) {
+            $table[] = [
+                (string) ($m->getRawOriginal('date_maintenance') ?? ''),
+                (string) ($m->station?->name ?? ''),
+                $m->started_at ? Carbon::parse($m->started_at)->format('H:i') : '',
+                $m->end_at ? Carbon::parse($m->end_at)->format('H:i') : '',
+                $this->extractMaintenanceDistanceLabel((string) ($m->commentaire ?? '')),
+                (string) ($m->photo_debut ?? ''),
+                (string) ($m->photo_fin ?? ''),
+                $m->end_at ? 'Cloturee' : 'En cours',
+                (string) ($m->commentaire ?? ''),
+            ];
+        }
+
+        $meta = [
+            'Agent: ' . $agent->fullname . ' (' . $agent->matricule . ')',
+            'Jeu de donnees: Maintenances',
+            'Portee: ' . ($applyFilters ? 'Filtres actifs' : 'Globale'),
+            'Station filtre: ' . ($applyFilters ? ($station?->name ?? 'Toutes') : 'N/A'),
+            'Periode: ' . ($applyFilters ? (($data['from'] ?? '...') . ' -> ' . ($data['to'] ?? '...')) : 'N/A'),
+            'Lignes: ' . count($table),
+        ];
+
+        return [
+            'title' => 'Historique agent - Maintenances',
+            'sheet_title' => 'Maintenances agent',
+            'filename_base' => 'agent_' . ($agent->matricule ?: $agent->id) . '_maintenances_' . $scope,
+            'dataset' => 'maintenances',
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'rows' => $rows,
+        ];
+    }
+
     private function downloadXlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows): StreamedResponse
     {
         return new StreamedResponse(function () use ($sheetTitle, $metaLines, $headers, $rows) {
@@ -1002,5 +1384,23 @@ class ExportController extends Controller
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Cache-Control' => 'max-age=0',
         ]);
+    }
+
+    private function extractMaintenanceDistanceLabel(?string $commentaire): string
+    {
+        $text = (string) ($commentaire ?? '');
+        $debutDistance = null;
+        $finDistance = null;
+
+        if (preg_match('/Debut\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $debutDistance = (int) $m[1];
+        }
+
+        if (preg_match('/Fin\\s+distance:\\s*(\\d+)\\s*m/i', $text, $m)) {
+            $finDistance = (int) $m[1];
+        }
+
+        $distance = $finDistance ?? $debutDistance;
+        return $distance !== null ? ($distance . ' m') : 'Distance indisponible';
     }
 }

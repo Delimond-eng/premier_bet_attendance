@@ -27,7 +27,7 @@ return [
     'stations' => [
         'entity' => 'stations',
         'label'  => 'Stations',
-        'actions' => ['view', 'create', 'update', 'delete', 'export'],
+        'actions' => ['view', 'create', 'update', 'delete', 'export', 'import'],
     ],
 
     'horaires' => [
@@ -148,4 +148,3 @@ return [
         'actions' => ['view'],
     ],
 ];
-

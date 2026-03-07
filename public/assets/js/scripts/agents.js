@@ -41,6 +41,7 @@ new Vue({
         return {
             isLoading: false,
             isSaving: false,
+            isImporting: false,
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
             groups: [],
             agents: [],
@@ -66,6 +67,11 @@ new Vue({
                 existing_photo_url: "",
                 photo_preview_url: "",
             },
+            importForm: {
+                station_id: "",
+                groupe_id: "",
+                file: null,
+            },
         };
     },
 
@@ -88,6 +94,7 @@ new Vue({
             this.$refs.table.addEventListener("click", this.onTableClick, true);
         }
 
+        this.resetImportForm();
         this.loadGroups();
         this.load();
     },
@@ -124,6 +131,34 @@ new Vue({
 
         closeEmployeeModal() {
             const modal = this.getEmployeeModal();
+            if (modal) modal.hide();
+        },
+
+        getImportModal() {
+            const el = document.getElementById("import_agents_excel");
+            if (!el) return null;
+
+            if (window.bootstrap && window.bootstrap.Modal) {
+                return window.bootstrap.Modal.getOrCreateInstance(el);
+            }
+
+            if (window.$ && window.$.fn && window.$.fn.modal) {
+                return {
+                    show: () => window.$(el).modal("show"),
+                    hide: () => window.$(el).modal("hide"),
+                };
+            }
+
+            return null;
+        },
+
+        openImportModal() {
+            const modal = this.getImportModal();
+            if (modal) modal.show();
+        },
+
+        closeImportModal() {
+            const modal = this.getImportModal();
             if (modal) modal.hide();
         },
 
@@ -208,6 +243,23 @@ new Vue({
             if (input) input.value = "";
         },
 
+        resetImportForm() {
+            const defaultStation = String(this.filters.station_id || this.sites?.[0]?.id || "");
+            this.importForm = {
+                station_id: defaultStation,
+                groupe_id: "",
+                file: null,
+            };
+            if (this.$refs.importFileInput) {
+                this.$refs.importFileInput.value = "";
+            }
+        },
+
+        onImportFileChange(e) {
+            const file = e?.target?.files?.[0] ?? null;
+            this.importForm.file = file instanceof File ? file : null;
+        },
+
         resetCreateForm() {
             this.createForm = {
                 id: "",
@@ -262,6 +314,61 @@ new Vue({
             }
         },
 
+        async importAgentsExcel() {
+            if (this.isImporting) return;
+
+            if (!this.importForm.station_id) {
+                alert("Veuillez selectionner une station.");
+                return;
+            }
+
+            if (!this.importForm.groupe_id) {
+                alert("Veuillez selectionner un groupe d'horaire.");
+                return;
+            }
+
+            if (!(this.importForm.file instanceof File)) {
+                alert("Veuillez selectionner un fichier Excel.");
+                return;
+            }
+
+            this.isImporting = true;
+            try {
+                const formData = new FormData();
+                formData.append("station_id", String(this.importForm.station_id));
+                formData.append("groupe_id", String(this.importForm.groupe_id));
+                formData.append("file", this.importForm.file);
+
+                const { data, status } = await post("/agents/import/excel", formData);
+                if (status >= 400 || data?.status !== "success") {
+                    alert((data?.errors || ["Erreur lors de l'import."]).join("\n"));
+                    return;
+                }
+
+                const stats = data?.stats || {};
+                let summary = [
+                    "Import termine.",
+                    `Crees: ${stats.created ?? 0}`,
+                    `Mis a jour: ${stats.updated ?? 0}`,
+                    `Ignores: ${stats.skipped ?? 0}`,
+                ].join("\n");
+
+                if (Array.isArray(data?.errors) && data.errors.length > 0) {
+                    const preview = data.errors.slice(0, 5).join("\n");
+                    summary += `\n\nErreurs detectees (${data.errors.length}) :\n${preview}`;
+                }
+
+                alert(summary);
+                this.closeImportModal();
+                this.resetImportForm();
+                await this.load(true);
+            } catch (e) {
+                alert("Erreur lors de l'import Excel.");
+            } finally {
+                this.isImporting = false;
+            }
+        },
+
         async saveAgent() {
             this.isSaving = true;
             try {
@@ -304,6 +411,21 @@ new Vue({
                 (g) => String(g?.horaire?.site_id ?? "") === stationId
             );
         },
+        filteredImportGroups() {
+            const stationId = String(this.importForm.station_id || "");
+            if (!stationId) {
+                return this.groups;
+            }
+
+            return this.groups.filter((g) => {
+                const groupStationId = g?.horaire?.site_id;
+                if (groupStationId === null || groupStationId === undefined || groupStationId === "") {
+                    return true;
+                }
+
+                return String(groupStationId) === stationId;
+            });
+        },
         exportPdfUrl() {
             const params = new URLSearchParams();
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
@@ -318,6 +440,15 @@ new Vue({
     },
 
     watch: {
+        "importForm.station_id"() {
+            if (!this.importForm.groupe_id) return;
+            const keep = this.filteredImportGroups.some(
+                (g) => String(g.id) === String(this.importForm.groupe_id)
+            );
+            if (!keep) {
+                this.importForm.groupe_id = "";
+            }
+        },
         "createForm.site_id"(value) {
             if (!value || !this.createForm.groupe_id) return;
             const keep = this.groups.some(

@@ -51,6 +51,7 @@
             font-weight: 800;
             margin: 0;
             text-transform: uppercase;
+            font-family: Arial, sans-serif;
             letter-spacing: 1.5px;
         }
 

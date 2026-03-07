@@ -23,6 +23,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\Csv as CsvReader;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class AdminController extends Controller
@@ -33,6 +35,7 @@ class AdminController extends Controller
             $data = $request->validate([
                 'id' => 'nullable|integer',
                 'name' => 'required|string',
+                'type' => 'nullable|string|max:255',
                 'code' => 'nullable|string|unique:sites,code,' . ($request->id ?? 'NULL'),
                 'adresse' => 'required|string',
             ]);
@@ -120,7 +123,7 @@ class AdminController extends Controller
 
         $stations = Station::query()
             ->withoutGlobalScopes()
-            ->select(['id', 'name', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'created_at'])
+            ->select(['id', 'name', 'type', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'created_at'])
             ->withCount([
                 'agents',
                 'agents as assigned_agents_count',
@@ -233,6 +236,157 @@ class AdminController extends Controller
         ]);
     }
 
+    public function importStationsExcel(Request $request): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            ]);
+
+            $managerStationId = ManagerStationContext::stationId();
+            $uploaded = $request->file('file');
+            if (!$uploaded) {
+                return response()->json(['errors' => ['Fichier manquant.']], 422);
+            }
+
+            $path = $uploaded->getPathname();
+            $ext = strtolower((string) $uploaded->getClientOriginalExtension());
+
+            if (in_array($ext, ['csv', 'txt'], true)) {
+                $reader = new CsvReader();
+                $reader->setDelimiter($this->sniffCsvDelimiter($path));
+                $reader->setEnclosure('"');
+                $reader->setEscapeCharacter('\\');
+                $reader->setInputEncoding('UTF-8');
+                $spreadsheet = $reader->load($path);
+            } else {
+                $spreadsheet = IOFactory::load($path);
+            }
+
+            $sheet = $spreadsheet->getActiveSheet();
+            $rows = $sheet->toArray(null, true, true, true);
+            if (count($rows) < 2) {
+                return response()->json(['errors' => ['Fichier Excel vide.']], 422);
+            }
+
+            $headerMap = $this->buildImportHeaderMap($rows[1] ?? []);
+            $nameCol = $this->findImportHeaderColumn($headerMap, ['NOM', 'NAME', 'STATION']);
+            $typeCol = $this->findImportHeaderColumn($headerMap, ['TYPE', 'CATEGORIE', 'CATEGORY']);
+
+            if (!$nameCol || !$typeCol) {
+                return response()->json([
+                    'errors' => ['Entete invalide. Colonnes requises: NOM, TYPE.'],
+                    'found' => array_values($headerMap),
+                ], 422);
+            }
+
+            $stats = [
+                'rows_total' => max(count($rows) - 1, 0),
+                'processed' => 0,
+                'created' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'duplicates_in_file' => 0,
+            ];
+
+            $errors = [];
+            $seenNames = [];
+
+            DB::beginTransaction();
+
+            foreach ($rows as $rowIndex => $row) {
+                if ($rowIndex === 1) {
+                    continue;
+                }
+
+                $name = $this->normalizeImportedCell($row[$nameCol] ?? null, false);
+                $type = $this->normalizeImportedCell($row[$typeCol] ?? null, false);
+
+                $isEmptyLine = $name === '' && $type === '';
+                if ($isEmptyLine) {
+                    continue;
+                }
+
+                if ($name === '') {
+                    $stats['skipped'] += 1;
+                    if (count($errors) < 50) {
+                        $errors[] = "Ligne {$rowIndex}: nom manquant.";
+                    }
+                    continue;
+                }
+
+                if ($type === '') {
+                    $stats['skipped'] += 1;
+                    if (count($errors) < 50) {
+                        $errors[] = "Ligne {$rowIndex}: type manquant.";
+                    }
+                    continue;
+                }
+
+                $nameKey = strtoupper(Str::of($name)->ascii()->trim()->toString());
+                if (isset($seenNames[$nameKey])) {
+                    $stats['duplicates_in_file'] += 1;
+                    $stats['skipped'] += 1;
+                    continue;
+                }
+                $seenNames[$nameKey] = true;
+
+                $stats['processed'] += 1;
+
+                $station = Station::query()
+                    ->withoutGlobalScopes()
+                    ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+                    ->first();
+
+                if ($managerStationId !== null) {
+                    if (!$station || (int) $station->id !== $managerStationId) {
+                        $stats['skipped'] += 1;
+                        if (count($errors) < 50) {
+                            $errors[] = "Ligne {$rowIndex}: import hors station manager non autorise.";
+                        }
+                        continue;
+                    }
+                }
+
+                if ($station) {
+                    $station->update([
+                        'name' => $name,
+                        'type' => $type,
+                    ]);
+                    $stats['updated'] += 1;
+                    continue;
+                }
+
+                $created = Station::query()->withoutGlobalScopes()->create([
+                    'name' => $name,
+                    'type' => $type,
+                    'code' => $this->generateUniqueStationCode($name),
+                    'adresse' => $name,
+                    'presence' => 1,
+                    'status' => 'actif',
+                ]);
+
+                $this->createDefaultSchedules((int) $created->id);
+                $stats['created'] += 1;
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Import des stations termine.',
+                'stats' => $stats,
+                'errors' => $errors,
+            ]);
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            Log::error('importStationsExcel failed', ['error' => $e->getMessage()]);
+            return response()->json(['errors' => [$e->getMessage()]], 500);
+        }
+    }
+
     public function createAgent(Request $request): JsonResponse
     {
         try {
@@ -278,6 +432,285 @@ class AdminController extends Controller
             Log::error('createAgent failed', ['error' => $e->getMessage()]);
             return response()->json(['errors' => [$e->getMessage()]], 500);
         }
+    }
+
+    public function importAgentsExcel(Request $request): JsonResponse
+    {
+        try {
+            $data = $request->validate([
+                'station_id' => 'required|integer|exists:sites,id',
+                'groupe_id' => 'required|integer|exists:agent_groups,id',
+                'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            ]);
+
+            $stationId = (int) $data['station_id'];
+            $groupId = (int) $data['groupe_id'];
+            $managerStationId = ManagerStationContext::stationId();
+            if ($managerStationId !== null && $stationId !== $managerStationId) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ['Un manager ne peut importer que sur sa propre station.'],
+                ], 403);
+            }
+
+            $group = AgentGroup::query()
+                ->with('horaire:id,site_id,libelle')
+                ->find($groupId);
+            if (!$group) {
+                return response()->json(['errors' => ['Groupe horaire introuvable.']], 422);
+            }
+
+            $groupStationId = $group->horaire?->site_id !== null ? (int) $group->horaire?->site_id : null;
+            $groupHoraireId = $group->horaire_id !== null ? (int) $group->horaire_id : null;
+            if ($groupStationId !== null && $groupStationId !== $stationId) {
+                return response()->json([
+                    'errors' => ['Le groupe horaire selectionne ne correspond pas a la station choisie.'],
+                ], 422);
+            }
+
+            $uploaded = $request->file('file');
+            if (!$uploaded) {
+                return response()->json(['errors' => ['Fichier manquant.']], 422);
+            }
+
+            $path = $uploaded->getPathname();
+            $ext = strtolower((string) $uploaded->getClientOriginalExtension());
+
+            if (in_array($ext, ['csv', 'txt'], true)) {
+                $reader = new CsvReader();
+                $reader->setDelimiter($this->sniffCsvDelimiter($path));
+                $reader->setEnclosure('"');
+                $reader->setEscapeCharacter('\\');
+                $reader->setInputEncoding('UTF-8');
+                $spreadsheet = $reader->load($path);
+            } else {
+                $spreadsheet = IOFactory::load($path);
+            }
+
+            $sheet = $spreadsheet->getActiveSheet();
+
+            $rows = $sheet->toArray(null, true, true, true);
+            if (count($rows) < 2) {
+                return response()->json(['errors' => ['Fichier Excel vide.']], 422);
+            }
+
+            $headerMap = $this->buildImportHeaderMap($rows[1] ?? []);
+            $matriculeCol = $this->findImportHeaderColumn($headerMap, ['MATRICULE', 'MAT', 'MATR', 'EMPLOYEE ID']);
+            $fullnameCol = $this->findImportHeaderColumn($headerMap, ['NOM ET POSTNOM', 'NOMS', 'NOM', 'NOMS ET PRENOMS', 'NOM COMPLET', 'FULLNAME', 'AGENT']);
+            $fonctionCol = $this->findImportHeaderColumn($headerMap, ['FONCTION', 'POSTE', 'ROLE']);
+
+            if (!$matriculeCol || !$fullnameCol) {
+                return response()->json([
+                    'errors' => ['Entete invalide. Colonnes requises: matricule, nom et postnom, fonction.'],
+                    'found' => array_values($headerMap),
+                ], 422);
+            }
+
+            $stats = [
+                'station_id' => $stationId,
+                'groupe_id' => $groupId,
+                'rows_total' => max(count($rows) - 1, 0),
+                'processed' => 0,
+                'created' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'duplicates_in_file' => 0,
+            ];
+
+            $errors = [];
+            $seenMatricules = [];
+
+            DB::beginTransaction();
+
+            foreach ($rows as $rowIndex => $row) {
+                if ($rowIndex === 1) {
+                    continue;
+                }
+
+                $matricule = $this->normalizeImportedCell($row[$matriculeCol] ?? null, true);
+                $fullname = $this->normalizeImportedCell($row[$fullnameCol] ?? null, false);
+                $fonction = $fonctionCol ? $this->normalizeImportedCell($row[$fonctionCol] ?? null, false) : '';
+
+                $isEmptyLine = $matricule === '' && $fullname === '' && $fonction === '';
+                if ($isEmptyLine) {
+                    continue;
+                }
+
+                if ($matricule === '') {
+                    $stats['skipped'] += 1;
+                    if (count($errors) < 50) {
+                        $errors[] = "Ligne {$rowIndex}: matricule manquant.";
+                    }
+                    continue;
+                }
+
+                if ($fullname === '') {
+                    $stats['skipped'] += 1;
+                    if (count($errors) < 50) {
+                        $errors[] = "Ligne {$rowIndex}: noms manquants.";
+                    }
+                    continue;
+                }
+
+                $matriculeKey = strtoupper($matricule);
+                if (isset($seenMatricules[$matriculeKey])) {
+                    $stats['duplicates_in_file'] += 1;
+                    $stats['skipped'] += 1;
+                    continue;
+                }
+                $seenMatricules[$matriculeKey] = true;
+
+                $stats['processed'] += 1;
+
+                $agent = Agent::withoutGlobalScopes()
+                    ->where('matricule', $matricule)
+                    ->first();
+
+                if ($agent) {
+                    $beforeSiteId = $agent->site_id !== null ? (int) $agent->site_id : null;
+                    if ($managerStationId !== null && $beforeSiteId !== null && $beforeSiteId !== $managerStationId) {
+                        $stats['skipped'] += 1;
+                        if (count($errors) < 50) {
+                            $errors[] = "Ligne {$rowIndex}: matricule {$matricule} appartient a une autre station.";
+                        }
+                        continue;
+                    }
+
+                    $agent->update([
+                        'fullname' => $fullname,
+                        'fonction' => $fonction !== '' ? $fonction : null,
+                        'site_id' => $stationId,
+                        'groupe_id' => $groupId,
+                        'horaire_id' => $groupHoraireId,
+                    ]);
+
+                    if ($beforeSiteId !== null && $beforeSiteId !== $stationId) {
+                        AgentHistory::create([
+                            'date' => Carbon::now(),
+                            'agent_id' => $agent->id,
+                            'site_id' => $stationId,
+                            'site_provenance_id' => $beforeSiteId,
+                            'status' => 'mutation',
+                        ]);
+                    }
+
+                    $stats['updated'] += 1;
+                    continue;
+                }
+
+                Agent::create([
+                    'matricule' => $matricule,
+                    'fullname' => $fullname,
+                    'fonction' => $fonction !== '' ? $fonction : null,
+                    'password' => bcrypt('salama123'),
+                    'role' => 'agent',
+                    'site_id' => $stationId,
+                    'groupe_id' => $groupId,
+                    'horaire_id' => $groupHoraireId,
+                    'status' => 'actif',
+                ]);
+
+                $stats['created'] += 1;
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Import termine.',
+                'stats' => $stats,
+                'errors' => $errors,
+            ]);
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            Log::error('importAgentsExcel failed', ['error' => $e->getMessage()]);
+            return response()->json(['errors' => [$e->getMessage()]], 500);
+        }
+    }
+
+    private function buildImportHeaderMap(array $row): array
+    {
+        $map = [];
+        foreach ($row as $col => $val) {
+            if (!is_string($col)) {
+                continue;
+            }
+            $h = strtoupper(trim((string) $val));
+            $h = preg_replace('/\s+/', ' ', $h);
+            if ($h === '') {
+                continue;
+            }
+            $map[$col] = $h;
+        }
+
+        return $map;
+    }
+
+    private function findImportHeaderColumn(array $headerMap, array $needles): ?string
+    {
+        $normalizedNeedles = [];
+        foreach ($needles as $needle) {
+            $normalizedNeedles[] = strtoupper(trim((string) $needle));
+        }
+
+        foreach ($headerMap as $col => $header) {
+            foreach ($normalizedNeedles as $needle) {
+                if ($header === $needle) {
+                    return (string) $col;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeImportedCell(mixed $value, bool $removeAllSpaces = false): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_float($value) || is_int($value)) {
+            $value = rtrim(rtrim(number_format((float) $value, 10, '.', ''), '0'), '.');
+        }
+
+        $normalized = trim((string) $value);
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+
+        if ($removeAllSpaces) {
+            $normalized = preg_replace('/\s+/', '', $normalized) ?? $normalized;
+        }
+
+        return $normalized;
+    }
+
+    private function sniffCsvDelimiter(string $path): string
+    {
+        $firstLine = '';
+
+        try {
+            $fh = fopen($path, 'rb');
+            if (is_resource($fh)) {
+                $firstLine = (string) fgets($fh);
+                fclose($fh);
+            }
+        } catch (\Throwable $_) {
+        }
+
+        $candidates = [',', ';', "\t", '|'];
+        $best = ';';
+        $bestCount = -1;
+        foreach ($candidates as $candidate) {
+            $count = substr_count($firstLine, $candidate);
+            if ($count > $bestCount) {
+                $bestCount = $count;
+                $best = $candidate;
+            }
+        }
+
+        return $best;
     }
 
     public function getDashboardData(Request $request): JsonResponse

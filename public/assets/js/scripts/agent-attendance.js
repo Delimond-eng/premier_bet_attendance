@@ -84,6 +84,7 @@ new Vue({
                 presences: 0,
                 retards: 0,
             },
+            exportScope: "filtered",
         };
     },
 
@@ -199,6 +200,30 @@ new Vue({
             await this.loadSummary();
             await this.load();
             await this.loadMaintenance();
+        },
+
+        openExport(format = "excel") {
+            if (!this.agentId) return;
+            const normalizedFormat = format === "pdf" ? "pdf" : "excel";
+            const normalizedDataset = this.activeTab === "maintenances" ? "maintenances" : "presences";
+            const normalizedScope = this.exportScope === "global" ? "global" : "filtered";
+
+            const params = new URLSearchParams();
+            params.set("agent_id", String(this.agentId));
+            params.set("dataset", normalizedDataset);
+            params.set("scope", normalizedScope);
+
+            if (normalizedScope === "filtered") {
+                if (this.filters.from) params.set("from", this.filters.from);
+                if (this.filters.to) params.set("to", this.filters.to);
+                if (this.filters.station_id) params.set("station_id", String(this.filters.station_id));
+                if (normalizedDataset === "presences" && this.filters.status) {
+                    params.set("status", this.filters.status);
+                }
+            }
+
+            const url = `/agents/attendances/export/${normalizedFormat}?${params.toString()}`;
+            window.open(url, "_blank");
         },
 
         async load() {
@@ -424,6 +449,14 @@ new Vue({
             const total = this.rows.length || 1;
             const present = this.rows.filter((r) => !!r.started_at).length;
             return Math.min(Math.max(Math.round((present / total) * 100), 0), 100);
+        },
+
+        exportScopeLabel() {
+            return this.exportScope === "global" ? "Globale" : "Filtres actifs";
+        },
+
+        exportDatasetLabel() {
+            return this.activeTab === "maintenances" ? "Maintenances" : "Presences";
         },
     },
 

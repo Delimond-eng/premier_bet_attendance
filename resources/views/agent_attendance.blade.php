@@ -175,6 +175,35 @@
                             </div>
 
                             <button class="btn btn-info-light" @click="refreshAll">Actualiser</button>
+                            @can('agents.export')
+                                <div class="dropdown ms-2">
+                                    <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
+                                        Portee: @{{ exportScopeLabel }}
+                                    </a>
+                                    <ul class="dropdown-menu dropdown-menu-end p-3">
+                                        <li>
+                                            <a href="javascript:void(0);" class="dropdown-item rounded-1" @click.prevent="exportScope = 'filtered'">Filtres actifs</a>
+                                        </li>
+                                        <li>
+                                            <a href="javascript:void(0);" class="dropdown-item rounded-1" @click.prevent="exportScope = 'global'">Globale</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="dropdown ms-2">
+                                    <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown">
+                                        <i class="ti ti-file-export me-1"></i>Exporter
+                                    </a>
+                                    <ul class="dropdown-menu dropdown-menu-end p-3">
+                                        <li>
+                                            <a href="javascript:void(0);" class="dropdown-item rounded-1" @click.prevent="openExport('excel')">Exporter en Excel</a>
+                                        </li>
+                                        <li>
+                                            <a href="javascript:void(0);" class="dropdown-item rounded-1" @click.prevent="openExport('pdf')">Exporter en PDF</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <span class="badge badge-info-transparent ms-2">Jeu: @{{ exportDatasetLabel }}</span>
+                            @endcan
                             <span class="text-muted ms-2" v-if="isLoading">Chargement...</span>
                         </div>
                     </div>

@@ -1,4 +1,4 @@
-import { get, postJson } from "../modules/http.js";
+import { get, post, postJson } from "../modules/http.js";
 
 function destroyDatatable(tableEl) {
     const $ = window.$;
@@ -44,6 +44,7 @@ new Vue({
 
         return {
             isLoading: false,
+            isImporting: false,
             sites: [],
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
@@ -52,8 +53,12 @@ new Vue({
             form: {
                 id: "",
                 name: "",
+                type: "",
                 code: "",
                 adresse: "",
+            },
+            importForm: {
+                file: null,
             },
         };
     },
@@ -72,6 +77,7 @@ new Vue({
         if (this.$refs.table) {
             this.$refs.table.addEventListener("click", this.onTableClick, true);
         }
+        this.resetImportForm();
         this.load();
     },
 
@@ -158,6 +164,34 @@ new Vue({
             if (modal) modal.hide();
         },
 
+        getImportModal() {
+            const el = document.getElementById("import_stations_excel");
+            if (!el) return null;
+
+            if (window.bootstrap && window.bootstrap.Modal) {
+                return window.bootstrap.Modal.getOrCreateInstance(el);
+            }
+
+            if (window.$ && window.$.fn && window.$.fn.modal) {
+                return {
+                    show: () => window.$(el).modal("show"),
+                    hide: () => window.$(el).modal("hide"),
+                };
+            }
+
+            return null;
+        },
+
+        openImportModal() {
+            const modal = this.getImportModal();
+            if (modal) modal.show();
+        },
+
+        closeImportModal() {
+            const modal = this.getImportModal();
+            if (modal) modal.hide();
+        },
+
         onTableClick(e) {
             const target = e?.target;
             if (!target || typeof target.closest !== "function") return;
@@ -196,6 +230,7 @@ new Vue({
             this.form = {
                 id: site.id,
                 name: site.name ?? "",
+                type: site.type ?? "",
                 code: site.code ?? "",
                 adresse: site.adresse ?? "",
             };
@@ -207,10 +242,26 @@ new Vue({
             this.form = {
                 id: "",
                 name: "",
+                type: "",
                 code: "",
                 adresse: "",
             };
             this.codeManuallyEdited = false;
+        },
+
+        resetImportForm() {
+            this.importForm = {
+                file: null,
+            };
+
+            if (this.$refs.importStationsFileInput) {
+                this.$refs.importStationsFileInput.value = "";
+            }
+        },
+
+        onImportStationsFileChange(e) {
+            const file = e?.target?.files?.[0] ?? null;
+            this.importForm.file = file instanceof File ? file : null;
         },
 
         async save() {
@@ -225,6 +276,48 @@ new Vue({
                 await this.load();
             } finally {
                 this.isLoading = false;
+            }
+        },
+
+        async importStationsExcel() {
+            if (this.isImporting) return;
+
+            if (!(this.importForm.file instanceof File)) {
+                alert("Veuillez selectionner un fichier Excel.");
+                return;
+            }
+
+            this.isImporting = true;
+            try {
+                const formData = new FormData();
+                formData.append("file", this.importForm.file);
+
+                const { data, status } = await post("/stations/import/excel", formData);
+                if (status >= 400 || data?.status !== "success") {
+                    alert((data?.errors || ["Erreur lors de l'import."]).join("\n"));
+                    return;
+                }
+
+                const stats = data?.stats || {};
+                let summary = [
+                    "Import termine.",
+                    `Creees: ${stats.created ?? 0}`,
+                    `Mises a jour: ${stats.updated ?? 0}`,
+                    `Ignorees: ${stats.skipped ?? 0}`,
+                ].join("\n");
+
+                if (Array.isArray(data?.errors) && data.errors.length > 0) {
+                    summary += `\n\nErreurs detectees (${data.errors.length})`;
+                }
+
+                alert(summary);
+                this.closeImportModal();
+                this.resetImportForm();
+                await this.load();
+            } catch (e) {
+                alert("Erreur lors de l'import des stations.");
+            } finally {
+                this.isImporting = false;
             }
         },
 

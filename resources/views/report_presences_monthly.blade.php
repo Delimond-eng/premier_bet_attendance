@@ -4,7 +4,7 @@
     <div class="content" id="App" v-cloak>
         <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
             <div class="my-auto mb-2">
-                <h2 class="mb-1">Rapport des présences (mensuel)</h2>
+                <h2 class="mb-1">Rapport des presences (mensuel)</h2>
                 <nav>
                     <ol class="breadcrumb mb-0">
                         <li class="breadcrumb-item">
@@ -33,7 +33,7 @@
 
         <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <h5>Synthèse agents</h5>
+                <h5>Synthese agents</h5>
                 <div class="d-flex align-items-center gap-2">
                     <select class="form-select" v-model.number="filters.month" style="max-width: 200px;">
                         <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
@@ -48,20 +48,32 @@
                         </select>
                     </div>
                     <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
-
                 </div>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table" ref="table">
+                <ul class="nav nav-tabs nav-tabs-solid mb-3">
+                    <li class="nav-item">
+                        <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'brut' }" @click="switchTab('brut')">
+                            Presences mensuelles brutes
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'details' }" @click="switchTab('details')">
+                            Presences mensuelles details
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="table-responsive" v-show="activeTab === 'brut'">
+                    <table class="table" ref="tableRaw">
                         <thead class="thead-light">
                         <tr>
                             <th>Agent</th>
                             <th>Station</th>
-                            <th>Présent</th>
+                            <th>Present</th>
                             <th>Retard</th>
                             <th>Absent</th>
-                            <th>Congé</th>
+                            <th>Conge</th>
                             <th>Autorisation</th>
                             <th>Justif retard</th>
                             <th>Justif absence</th>
@@ -83,17 +95,68 @@
                                 </div>
                             </td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
-                            <td>
-                                @{{ r.present }}
-
-                            </td>
+                            <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>
                             <td>@{{ r.absent }}</td>
                             <td>@{{ r.conge }}</td>
                             <td>@{{ r.autorisation }}</td>
                             <td>@{{ r.retard_justifie }}</td>
                             <td>@{{ r.absence_justifiee }}</td>
-                            <td><span class="badge badge-info ms-2">Total presté : @{{ r.total_preste }}</span></td>
+                            <td><span class="badge badge-info ms-2">Total preste : @{{ r.total_preste }}</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-responsive" v-show="activeTab === 'details'">
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="badge text-bg-success">1 = Presence</span>
+                        <span class="badge text-bg-info">1-R = Presence avec retard</span>
+                        <span class="badge text-bg-danger">A = Absence</span>
+                        <span class="badge text-bg-warning text-dark">A = Absence justifiee</span>
+                        <span class="badge text-bg-secondary">OFF = Repos</span>
+                        <span class="badge text-bg-primary">C = Conge</span>
+                        <span class="badge text-bg-dark">AS = Autorisation speciale</span>
+                        <span class="badge bg-warning-subtle text-dark border">AUT = Autres</span>
+                    </div>
+                    <table class="table table-bordered table-sm align-middle" ref="tableDetails">
+                        <thead class="thead-light">
+                        <tr>
+                            <th>Matricule</th>
+                            <th>Nom complet agent</th>
+                            <th>Station</th>
+                            <th v-for="d in monthDays" :key="'head-' + d" class="text-center">@{{ d }}</th>
+                            <th>Total</th>
+                            <th>Tot presences</th>
+                            <th>Tot absences</th>
+                            <th>Tot retard</th>
+                            <th>Tot autorisation</th>
+                            <th>Tot conge</th>
+                            <th>Tot OFF</th>
+                            <th>Tot autres</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="r in detailedRows" :key="'d-' + r.agent_key">
+                            <td>@{{ r.agent?.matricule ?? '' }}</td>
+                            <td>@{{ r.agent?.fullname ?? '-' }}</td>
+                            <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
+                            <td
+                                v-for="d in monthDays"
+                                :key="'cell-' + r.agent_key + '-' + d"
+                                class="text-center attendance-day-cell"
+                                :class="r.day_classes[d]"
+                            >
+                                @{{ r.day_codes[d] }}
+                            </td>
+                            <td class="fw-semibold">@{{ r.total_count }}</td>
+                            <td>@{{ r.total_presences }}</td>
+                            <td>@{{ r.total_absences }}</td>
+                            <td>@{{ r.total_retards }}</td>
+                            <td>@{{ r.total_autorisations }}</td>
+                            <td>@{{ r.total_conges }}</td>
+                            <td>@{{ r.total_off }}</td>
+                            <td>@{{ r.total_others }}</td>
                         </tr>
                         </tbody>
                     </table>
@@ -102,6 +165,15 @@
         </div>
     </div>
 @endsection
+
+@push("styles")
+    <style>
+        .attendance-day-cell {
+            min-width: 52px;
+            font-weight: 600;
+        }
+    </style>
+@endpush
 
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}"></script>

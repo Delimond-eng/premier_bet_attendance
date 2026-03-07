@@ -54,6 +54,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/store', [AdminController::class, 'createAgencieSite'])
             ->name('create')
             ->middleware('canany:stations.create,stations.update');
+        Route::post('/import/excel', [AdminController::class, 'importStationsExcel'])
+            ->name('import.excel')
+            ->middleware('canany:stations.import,stations.create,stations.update');
         Route::get('/qrcodes', [AdminController::class, 'generateSiteQrcodes'])
             ->name('qrcode')
             ->middleware('can:stations.export');
@@ -78,6 +81,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/store', [AdminController::class, 'createAgent'])
             ->name('store')
             ->middleware('canany:agents.create,agents.update');
+        Route::post('/import/excel', [AdminController::class, 'importAgentsExcel'])
+            ->name('import.excel')
+            ->middleware('can:agents.import');
         Route::get('/attendances/summary', [PresenceController::class, 'agentAttendanceSummary'])
             ->name('attendances.summary')
             ->middleware('can:agents.view');
@@ -87,6 +93,12 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/attendances/maintenance-history', [PresenceController::class, 'agentMaintenanceHistory'])
             ->name('attendances.maintenance_history')
             ->middleware('can:agents.view');
+        Route::get('/attendances/export/excel', [ExportController::class, 'agentAttendancesExcel'])
+            ->name('attendances.export.excel')
+            ->middleware('can:agents.export');
+        Route::get('/attendances/export/pdf', [ExportController::class, 'agentAttendancesPdf'])
+            ->name('attendances.export.pdf')
+            ->middleware('can:agents.export');
         Route::get('/export/pdf', [ExportController::class, 'agentsPdf'])
             ->name('export.pdf')
             ->middleware('can:agents.export');
