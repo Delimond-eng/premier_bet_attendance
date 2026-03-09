@@ -91,11 +91,11 @@
 
                 <li class="menu-title"><span>ALERTES</span></li>
                 @php
-                    $alertMenuCounts = ['absences' => 0, 'retards' => 0];
+                    $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
                     try {
                         $alertMenuCounts = app(\App\Services\CumulativeAlertService::class)->getSidebarCounts(3);
                     } catch (\Throwable $e) {
-                        $alertMenuCounts = ['absences' => 0, 'retards' => 0];
+                        $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
                     }
                 @endphp
 
@@ -114,6 +114,14 @@
                                 <i class="ti ti-calendar-stats"></i>
                                 <span>Alerte des retards</span>
                                 <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['retards'] ?? 0) }}</span>
+                            </a>
+                        </li>
+
+                        <li>
+                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type') === 'departs' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'departs']) }}">
+                                <i class="ti ti-calendar-clock"></i>
+                                <span>Departs anticipés</span>
+                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['departs'] ?? 0) }}</span>
                             </a>
                         </li>
                     </ul>
@@ -178,6 +186,7 @@
                                 <li><a class="@active(['reports.weekly.view'])" href="{{ route('reports.weekly.view') }}">Presences hebdomadaire</a></li>
                                 <li><a class="@active(['reports.monthly.view'])" href="{{ route('reports.monthly.view') }}">Presences mensuelles</a></li>
                                 <li><a class="@active(['reports.maintenance.view'])" href="{{ route('reports.maintenance.view') }}">Rapport de maintenance</a></li>
+
                                 @endcan
                                 @can('rapport_absences.view')
                                 <li><a class="@active(['reports.absences.daily.view'])" href="{{ route('reports.absences.daily.view') }}">Absences journalieres</a></li>

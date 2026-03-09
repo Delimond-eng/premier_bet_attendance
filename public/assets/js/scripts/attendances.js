@@ -108,13 +108,7 @@ new Vue({
                 if (stationId) params.set("station_id", stationId);
 
                 const { data } = await get(`/presences/data?${params.toString()}`);
-                let presences = data?.presences ?? [];
-                if (stationId) {
-                    presences = presences.filter(
-                        (p) => String(p?.site_id ?? "") === String(stationId)
-                    );
-                }
-                this.presences = presences;
+                this.presences = data?.presences ?? [];
                 this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0));
             } catch (e) {
                 this.presences = [];

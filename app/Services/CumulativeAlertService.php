@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\PresenceAgents;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -61,7 +62,8 @@ class CumulativeAlertService
     /**
      * @return array{
      *   absences:array<int,array<string,mixed>>,
-     *   retards:array<int,array<string,mixed>>
+     *   retards:array<int,array<string,mixed>>,
+     *   departs:array<int,array<string,mixed>>
      * }
      */
     public function buildAlerts(Carbon $start, Carbon $end, ?int $stationId = null, int $threshold = 3): array
@@ -77,6 +79,7 @@ class CumulativeAlertService
 
         $absenceAlerts = [];
         $lateAlerts = [];
+        $earlyDepartureAlerts = [];
 
         foreach ($months as $monthStart) {
             $matrix = $this->attendanceService->buildMonthlyMatrix(
@@ -127,6 +130,41 @@ class CumulativeAlertService
                     $lateAlerts[] = $this->buildAlertRow($agent, $monthStart, $lateCount, $threshold, 'retards');
                 }
             }
+
+            $earlyDepartureStats = $this->buildEarlyDepartureStatsForMonth(
+                monthStart: $monthStart,
+                globalStart: $start,
+                globalEnd: $end,
+                stationId: $stationId,
+            );
+
+            foreach (($earlyDepartureStats['counts'] ?? []) as $agentId => $count) {
+                $count = (int) $count;
+                if ($count < $threshold) {
+                    continue;
+                }
+
+                $agent = $earlyDepartureStats['agents'][$agentId] ?? [
+                    'id' => (int) $agentId,
+                    'fullname' => 'Agent ' . $agentId,
+                    'matricule' => '',
+                    'photo' => null,
+                    'station_id' => null,
+                    'station_name' => null,
+                    'group_id' => null,
+                    'group_name' => null,
+                    'schedule_id' => null,
+                    'schedule_label' => null,
+                ];
+
+                $earlyDepartureAlerts[] = $this->buildAlertRow(
+                    $agent,
+                    $monthStart,
+                    $count,
+                    $threshold,
+                    'departs'
+                );
+            }
         }
 
         $sortFn = function (array $a, array $b): int {
@@ -145,17 +183,19 @@ class CumulativeAlertService
 
         usort($absenceAlerts, $sortFn);
         usort($lateAlerts, $sortFn);
+        usort($earlyDepartureAlerts, $sortFn);
 
         return [
             'absences' => $absenceAlerts,
             'retards' => $lateAlerts,
+            'departs' => $earlyDepartureAlerts,
         ];
     }
 
     /**
      * Counts for current month badges in sidebar.
      *
-     * @return array{absences:int,retards:int}
+     * @return array{absences:int,retards:int,departs:int}
      */
     public function getSidebarCounts(int $threshold = 3): array
     {
@@ -167,6 +207,7 @@ class CumulativeAlertService
         return [
             'absences' => count($alerts['absences'] ?? []),
             'retards' => count($alerts['retards'] ?? []),
+            'departs' => count($alerts['departs'] ?? []),
         ];
     }
 
@@ -240,6 +281,11 @@ class CumulativeAlertService
      */
     private function buildAlertRow(array $agent, Carbon $monthStart, int $count, int $threshold, string $type): array
     {
+        $actionLabel = "Lettre d'explication requise";
+        if ($type === 'departs') {
+            $actionLabel = "Lettre d'explication requise (depart anticipe)";
+        }
+
         return [
             'key' => $type . '|' . (string) ($agent['id'] ?? 'unknown') . '|' . $monthStart->format('Y-m'),
             'type' => $type,
@@ -248,9 +294,139 @@ class CumulativeAlertService
             'count' => $count,
             'threshold' => $threshold,
             'letter_required' => true,
-            'action_label' => "Lettre d'explication requise",
+            'action_label' => $actionLabel,
             'agent' => $agent,
         ];
+    }
+
+    /**
+     * @return array{counts:array<int,int>,agents:array<int,array<string,mixed>>}
+     */
+    private function buildEarlyDepartureStatsForMonth(Carbon $monthStart, Carbon $globalStart, Carbon $globalEnd, ?int $stationId): array
+    {
+        $monthFrom = $monthStart->copy()->startOfMonth()->startOfDay();
+        $monthTo = $monthStart->copy()->endOfMonth()->startOfDay();
+
+        $from = $globalStart->gt($monthFrom) ? $globalStart->copy() : $monthFrom->copy();
+        $to = $globalEnd->lt($monthTo) ? $globalEnd->copy() : $monthTo->copy();
+
+        if ($from->gt($to)) {
+            return ['counts' => [], 'agents' => []];
+        }
+
+        $rows = PresenceAgents::query()
+            ->with(['agent.station', 'agent.groupe.horaire', 'agent.horaire', 'horaire'])
+            ->whereBetween('date_reference', [$from->toDateString(), $to->toDateString()])
+            ->whereNotNull('ended_at')
+            ->when($stationId !== null, function ($q) use ($stationId) {
+                $q->where(function ($qq) use ($stationId) {
+                    $qq->where('site_id', (int) $stationId)
+                        ->orWhere('station_check_in_id', (int) $stationId)
+                        ->orWhere('station_check_out_id', (int) $stationId);
+                });
+            })
+            ->get();
+
+        $counts = [];
+        $agents = [];
+
+        foreach ($rows as $presence) {
+            $agent = $presence->agent;
+            if (!$agent || !$agent->id) {
+                continue;
+            }
+
+            $schedule = $presence->horaire ?: ($agent->groupe?->horaire ?: $agent->horaire);
+            $expectedEnd = $this->resolveExpectedEndDateTime($presence, $schedule);
+            if (!$expectedEnd) {
+                continue;
+            }
+
+            $actualEndRaw = (string) ($presence->getRawOriginal('ended_at') ?? '');
+            if ($actualEndRaw === '') {
+                continue;
+            }
+
+            $actualEnd = Carbon::parse($actualEndRaw);
+            if (!$actualEnd->lt($expectedEnd)) {
+                continue;
+            }
+
+            $agentId = (int) $agent->id;
+            $counts[$agentId] = (int) ($counts[$agentId] ?? 0) + 1;
+
+            if (!isset($agents[$agentId])) {
+                $agents[$agentId] = [
+                    'id' => $agentId,
+                    'fullname' => $agent->fullname,
+                    'matricule' => $agent->matricule,
+                    'photo' => $agent->photo,
+                    'station_id' => $agent->site_id,
+                    'station_name' => $agent->station?->name,
+                    'group_id' => $agent->groupe?->id,
+                    'group_name' => $agent->groupe?->libelle,
+                    'schedule_id' => $schedule?->id,
+                    'schedule_label' => $schedule?->libelle,
+                ];
+            }
+        }
+
+        return [
+            'counts' => $counts,
+            'agents' => $agents,
+        ];
+    }
+
+    private function resolveExpectedEndDateTime(PresenceAgents $presence, ?object $schedule): ?Carbon
+    {
+        if (!$schedule) {
+            return null;
+        }
+
+        $rawEnd = (string) ($schedule->getRawOriginal('ended_at') ?? $schedule->ended_at ?? '');
+        if ($rawEnd === '') {
+            return null;
+        }
+
+        $rawDateReference = (string) ($presence->getRawOriginal('date_reference') ?? '');
+        if ($rawDateReference === '') {
+            return null;
+        }
+
+        $dateRef = Carbon::parse($rawDateReference)->startOfDay();
+        $expectedEnd = Carbon::parse($dateRef->toDateString() . ' ' . $this->normalizeTimeForDateTime($rawEnd));
+
+        $rawStart = (string) ($schedule->getRawOriginal('started_at') ?? $schedule->started_at ?? '');
+        if ($rawStart !== '') {
+            try {
+                $scheduleStart = Carbon::createFromTimeString($this->normalizeTimeForDateTime($rawStart));
+                $scheduleEnd = Carbon::createFromTimeString($this->normalizeTimeForDateTime($rawEnd));
+                if ($scheduleEnd->lt($scheduleStart)) {
+                    $expectedEnd->addDay();
+                }
+            } catch (\Throwable $_) {
+            }
+        }
+
+        return $expectedEnd;
+    }
+
+    private function normalizeTimeForDateTime(string $time): string
+    {
+        $trim = trim($time);
+        if ($trim === '') {
+            return '00:00:00';
+        }
+
+        if (preg_match('/^\d{2}:\d{2}$/', $trim)) {
+            return $trim . ':00';
+        }
+
+        if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $trim)) {
+            return $trim;
+        }
+
+        return substr($trim, 0, 8);
     }
 
     private function monthLabelFr(Carbon $date): string

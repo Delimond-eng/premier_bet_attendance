@@ -49,7 +49,9 @@ new Vue({
         const dd = String(today.getDate()).padStart(2, "0");
         const d = `${yyyy}-${mm}-${dd}`;
         const qType = getQueryParam("type");
-        const activeTab = qType === "retards" ? "retards" : "absences";
+        const activeTab = qType === "retards"
+            ? "retards"
+            : (qType === "departs" ? "departs" : "absences");
 
         return {
             isLoading: false,
@@ -65,9 +67,11 @@ new Vue({
             range: { from: "", to: "", label: "" },
             absencesRows: [],
             retardsRows: [],
+            departsRows: [],
             counts: {
                 absences: 0,
                 retards: 0,
+                departs: 0,
             },
         };
     },
@@ -110,11 +114,20 @@ new Vue({
         refreshActiveTable() {
             if (this.activeTab === "retards") {
                 destroyDatatable(this.$refs.tableAbsences);
+                destroyDatatable(this.$refs.tableDeparts);
                 initOrRefreshDatatable(this.$refs.tableRetards);
                 return;
             }
 
+            if (this.activeTab === "departs") {
+                destroyDatatable(this.$refs.tableAbsences);
+                destroyDatatable(this.$refs.tableRetards);
+                initOrRefreshDatatable(this.$refs.tableDeparts);
+                return;
+            }
+
             destroyDatatable(this.$refs.tableRetards);
+            destroyDatatable(this.$refs.tableDeparts);
             initOrRefreshDatatable(this.$refs.tableAbsences);
         },
 
@@ -130,6 +143,7 @@ new Vue({
             try {
                 destroyDatatable(this.$refs.tableAbsences);
                 destroyDatatable(this.$refs.tableRetards);
+                destroyDatatable(this.$refs.tableDeparts);
 
                 const params = new URLSearchParams();
                 params.set("period", String(this.filters.period || "daily"));
@@ -147,9 +161,11 @@ new Vue({
                 };
                 this.absencesRows = data?.absences ?? [];
                 this.retardsRows = data?.retards ?? [];
+                this.departsRows = data?.departs ?? [];
                 this.counts = {
                     absences: data?.counts?.absences ?? this.absencesRows.length,
                     retards: data?.counts?.retards ?? this.retardsRows.length,
+                    departs: data?.counts?.departs ?? this.departsRows.length,
                 };
 
                 this.$nextTick(() => setTimeout(() => this.refreshActiveTable(), 0));
@@ -157,7 +173,8 @@ new Vue({
                 this.range = { from: "", to: "", label: "" };
                 this.absencesRows = [];
                 this.retardsRows = [];
-                this.counts = { absences: 0, retards: 0 };
+                this.departsRows = [];
+                this.counts = { absences: 0, retards: 0, departs: 0 };
             } finally {
                 this.isLoading = false;
             }

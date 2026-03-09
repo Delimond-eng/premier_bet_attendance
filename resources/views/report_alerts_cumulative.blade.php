@@ -68,6 +68,12 @@
                             <span class="badge badge-danger fs-10 fw-medium text-white p-1 ms-1">@{{ counts.retards }}</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'departs' }" @click="switchTab('departs')">
+                            Alerte de depart anticipe
+                            <span class="badge badge-danger fs-10 fw-medium text-white p-1 ms-1">@{{ counts.departs }}</span>
+                        </a>
+                    </li>
                 </ul>
 
                 <div class="table-responsive" v-show="activeTab === 'absences'">
@@ -123,6 +129,44 @@
                         </thead>
                         <tbody>
                         <tr v-for="r in retardsRows" :key="'r-' + r.key">
+                            <td>@{{ r.month_label }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="avatar avatar-sm me-2">
+                                        <img v-if="r.agent?.photo" :src="r.agent?.photo" :data-zoom="r.agent?.photo" class="rounded-circle" alt="img">
+                                        <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="img">
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-0">@{{ r.agent?.fullname ?? '-' }}</h6>
+                                        <small class="text-muted">@{{ r.agent?.matricule ?? '' }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
+                            <td>@{{ r.agent?.group_name ?? '-' }}</td>
+                            <td><span class="badge badge-danger fs-10 fw-medium text-white p-1">@{{ r.count }}</span></td>
+                            <td>@{{ r.threshold }}</td>
+                            <td><span class="badge badge-warning text-dark">@{{ r.action_label }}</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-responsive" v-show="activeTab === 'departs'">
+                    <table class="table table-bordered table-sm align-middle" ref="tableDeparts">
+                        <thead class="thead-light">
+                        <tr>
+                            <th>Mois</th>
+                            <th>Agent</th>
+                            <th>Station</th>
+                            <th>Groupe</th>
+                            <th>Cumul departs anticipes</th>
+                            <th>Seuil</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="r in departsRows" :key="'d-' + r.key">
                             <td>@{{ r.month_label }}</td>
                             <td>
                                 <div class="d-flex align-items-center">

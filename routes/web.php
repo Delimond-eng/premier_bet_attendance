@@ -253,7 +253,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:rapport_retards.view');
         Route::get('/alerts/cumulative/view', fn () => view('report_alerts_cumulative'))
             ->name('reports.alerts.view')
-            ->middleware('canany:rapport_absences.view,rapport_retards.view');
+            ->middleware('canany:rapport_absences.view,rapport_retards.view,rapport_presences.view');
         Route::get('/weekly', fn () => view('report_presences_weekly'))
             ->name('reports.weekly.view')
             ->middleware('can:rapport_presences.view');
@@ -281,7 +281,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:rapport_retards.view');
         Route::get('/alerts/cumulative/data', [PresenceController::class, 'cumulativeAlertsReport'])
             ->name('reports.alerts.data')
-            ->middleware('canany:rapport_absences.view,rapport_retards.view');
+            ->middleware('canany:rapport_absences.view,rapport_retards.view,rapport_presences.view');
         Route::get('/weekly/data', [PresenceController::class, 'weeklyReport'])
             ->name('reports.weekly.data')
             ->middleware('can:rapport_presences.view');
@@ -309,10 +309,10 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:rapport_retards.export');
         Route::get('/alerts/cumulative/export/pdf', [ExportController::class, 'cumulativeAlertsPdf'])
             ->name('reports.alerts.export.pdf')
-            ->middleware('canany:rapport_absences.export,rapport_retards.export');
+            ->middleware('canany:rapport_absences.export,rapport_retards.export,rapport_presences.export');
         Route::get('/alerts/cumulative/export/excel', [ExportController::class, 'cumulativeAlertsExcel'])
             ->name('reports.alerts.export.excel')
-            ->middleware('canany:rapport_absences.export,rapport_retards.export');
+            ->middleware('canany:rapport_absences.export,rapport_retards.export,rapport_presences.export');
         Route::get('/weekly/export/pdf', [ExportController::class, 'weeklyPresenceSummaryPdf'])
             ->name('reports.weekly.export.pdf')
             ->middleware('can:rapport_presences.export');

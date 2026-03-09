@@ -1,4 +1,5 @@
 import { get, post } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
 
 new Vue({
     el: "#App",
@@ -8,6 +9,8 @@ new Vue({
             isLoading: false,
             map: null,
             markers: {},
+            stations: [],
+            selectedStationId: "",
             activeMaintenances: [],
             activeMaintenanceId: null,
             sidebar: null,
@@ -40,6 +43,11 @@ new Vue({
                 this.syncMarkersUI(newMap);
             },
             deep: true
+        },
+        selectedStationId(newVal) {
+            if (newVal) {
+                this.zoomToStation(newVal);
+            }
         }
     },
 
@@ -56,11 +64,15 @@ new Vue({
                 // Initialisation sur Kinshasa par défaut
                 this.map = L.map('map', {
                     center: [-4.4419, 15.2663],
-                    zoom: 12
+                    zoom: 12,
+                    minZoom: 2,
+                    maxZoom: 19
                 });
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; Salama Group LTD'
+                    attribution: '&copy; Salama Group LTD',
+                    maxZoom: 19,
+                    maxNativeZoom: 19
                 }).addTo(this.map);
 
                 // Forcer le rendu initial
@@ -94,23 +106,24 @@ new Vue({
 
                 if (resData && resData.status === 'success' && resData.sites) {
                     let markersAdded = 0;
+                    const stationsWithCoords = [];
 
                     resData.sites.forEach(station => {
-                        if (station.latlng && station.latlng.trim() !== "") {
-                            const cleanLatLng = station.latlng.replace(/[\(\) ]/g, '');
-                            const parts = cleanLatLng.split(',');
-
-                            if (parts.length === 2) {
-                                const lat = parseFloat(parts[0]);
-                                const lng = parseFloat(parts[1]);
-
-                                if (!isNaN(lat) && !isNaN(lng)) {
-                                    this.addStationMarker(station, [lat, lng]);
-                                    markersAdded++;
-                                }
-                            }
+                        const coords = this.parseLatLng(station.latlng);
+                        if (coords) {
+                            this.addStationMarker(station, coords);
+                            stationsWithCoords.push({
+                                id: station.id,
+                                name: station.name
+                            });
+                            markersAdded++;
                         }
                     });
+
+                    this.stations = stationsWithCoords.sort((a, b) =>
+                        String(a.name || "").localeCompare(String(b.name || ""))
+                    );
+                    this.$nextTick(() => this.initStationZoomSelect());
 
                     if (markersAdded > 0) {
                         setTimeout(() => {
@@ -132,11 +145,53 @@ new Vue({
 
             if (markerArray.length === 1) {
                 const target = markerArray[0].getLatLng();
-                this.map.setView(target, 16);
+                this.map.setView(target, this.getMaxMapZoom(), { animate: true });
             } else {
                 const group = new L.featureGroup(markerArray);
-                this.map.fitBounds(group.getBounds(), { padding: [50, 50] });
+                this.map.fitBounds(group.getBounds(), {
+                    padding: [50, 50],
+                    maxZoom: this.getMaxMapZoom()
+                });
             }
+        },
+
+        parseLatLng(latlng) {
+            if (!latlng || String(latlng).trim() === "") return null;
+            const cleanLatLng = String(latlng).replace(/[\(\) ]/g, '');
+            const parts = cleanLatLng.split(',');
+            if (parts.length !== 2) return null;
+
+            const lat = parseFloat(parts[0]);
+            const lng = parseFloat(parts[1]);
+            if (isNaN(lat) || isNaN(lng)) return null;
+
+            return [lat, lng];
+        },
+
+        getMaxMapZoom() {
+            const z = Number(this.map?.getMaxZoom?.());
+            return Number.isFinite(z) && z > 0 ? z : 19;
+        },
+
+        initStationZoomSelect() {
+            initSelect2ForVue(this.$refs.stationZoomSelect, {
+                placeholder: "Zoomer sur une station...",
+                getValue: () => this.selectedStationId,
+                setValue: (v) => {
+                    this.selectedStationId = v;
+                }
+            });
+        },
+
+        zoomToStation(stationId) {
+            const id = Number(stationId);
+            if (!id || !this.map) return;
+
+            const stationEntry = this.markers[id];
+            if (!stationEntry?.marker) return;
+
+            const latlng = stationEntry.marker.getLatLng();
+            this.map.flyTo(latlng, this.getMaxMapZoom(), { duration: 0.7 });
         },
 
         addStationMarker(station, coords) {

@@ -34,12 +34,16 @@ class ExportController extends Controller
         $stationId = $data['station_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
-        $query = PresenceAgents::query()
+        $query = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
         if ($stationId !== null) {
-            $query->where('site_id', (int) $stationId);
+            $query->where(function ($q) use ($stationId) {
+                $q->where('site_id', (int) $stationId)
+                    ->orWhere('station_check_in_id', (int) $stationId)
+                    ->orWhere('station_check_out_id', (int) $stationId);
+            });
         }
 
         $rows = $query
@@ -68,12 +72,16 @@ class ExportController extends Controller
         $stationId = $data['station_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
-        $query = PresenceAgents::query()
+        $query = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
         if ($stationId !== null) {
-            $query->where('site_id', (int) $stationId);
+            $query->where(function ($q) use ($stationId) {
+                $q->where('site_id', (int) $stationId)
+                    ->orWhere('station_check_in_id', (int) $stationId)
+                    ->orWhere('station_check_out_id', (int) $stationId);
+            });
         }
 
         $rows = $query
@@ -719,7 +727,7 @@ class ExportController extends Controller
     public function cumulativeAlertsPdf(Request $request, CumulativeAlertService $service): Response
     {
         $data = $request->validate([
-            'type' => 'nullable|string|in:absences,retards',
+            'type' => 'nullable|string|in:absences,retards,departs',
             'period' => 'nullable|string|in:daily,weekly,monthly',
             'from' => 'nullable|date',
             'to' => 'nullable|date',
@@ -738,6 +746,9 @@ class ExportController extends Controller
         if ($type === 'retards' && !optional($request->user())->can('rapport_retards.export')) {
             abort(403, 'Acces refuse.');
         }
+        if ($type === 'departs' && !optional($request->user())->can('rapport_presences.export')) {
+            abort(403, 'Acces refuse.');
+        }
 
         $range = $service->resolveRange($data);
         $alerts = $service->buildAlerts(
@@ -746,8 +757,12 @@ class ExportController extends Controller
             stationId: $stationId,
             threshold: $threshold,
         );
-        $rows = $type === 'retards' ? ($alerts['retards'] ?? []) : ($alerts['absences'] ?? []);
-        $typeLabel = $type === 'retards' ? 'Alertes retards' : 'Alertes absences';
+        $rows = $type === 'retards'
+            ? ($alerts['retards'] ?? [])
+            : ($type === 'departs' ? ($alerts['departs'] ?? []) : ($alerts['absences'] ?? []));
+        $typeLabel = $type === 'retards'
+            ? 'Alertes retards'
+            : ($type === 'departs' ? 'Alertes departs anticipes' : 'Alertes absences');
 
         $pdf = Pdf::loadView('pdf.exports.alerts_cumulative', [
             'title' => $typeLabel,
@@ -765,7 +780,7 @@ class ExportController extends Controller
     public function cumulativeAlertsExcel(Request $request, CumulativeAlertService $service): StreamedResponse
     {
         $data = $request->validate([
-            'type' => 'nullable|string|in:absences,retards',
+            'type' => 'nullable|string|in:absences,retards,departs',
             'period' => 'nullable|string|in:daily,weekly,monthly',
             'from' => 'nullable|date',
             'to' => 'nullable|date',
@@ -784,6 +799,9 @@ class ExportController extends Controller
         if ($type === 'retards' && !optional($request->user())->can('rapport_retards.export')) {
             abort(403, 'Acces refuse.');
         }
+        if ($type === 'departs' && !optional($request->user())->can('rapport_presences.export')) {
+            abort(403, 'Acces refuse.');
+        }
 
         $range = $service->resolveRange($data);
         $alerts = $service->buildAlerts(
@@ -792,8 +810,12 @@ class ExportController extends Controller
             stationId: $stationId,
             threshold: $threshold,
         );
-        $rows = $type === 'retards' ? ($alerts['retards'] ?? []) : ($alerts['absences'] ?? []);
-        $typeLabel = $type === 'retards' ? 'Alertes retards' : 'Alertes absences';
+        $rows = $type === 'retards'
+            ? ($alerts['retards'] ?? [])
+            : ($type === 'departs' ? ($alerts['departs'] ?? []) : ($alerts['absences'] ?? []));
+        $typeLabel = $type === 'retards'
+            ? 'Alertes retards'
+            : ($type === 'departs' ? 'Alertes departs anticipes' : 'Alertes absences');
 
         $headers = ['Mois', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Cumul', 'Seuil', 'Action'];
         $table = [];
@@ -821,7 +843,7 @@ class ExportController extends Controller
 
         return $this->downloadXlsx(
             filename: 'alertes_' . $type . '_' . str_replace('-', '', $range['start']->toDateString()) . '_' . str_replace('-', '', $range['end']->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Alertes ' . ($type === 'retards' ? 'retards' : 'absences'),
+            sheetTitle: 'Alertes ' . ($type === 'retards' ? 'retards' : ($type === 'departs' ? 'departs' : 'absences')),
             metaLines: $meta,
             headers: $headers,
             rows: $table,

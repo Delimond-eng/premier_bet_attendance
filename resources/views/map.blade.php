@@ -18,9 +18,19 @@
         </div>
 
         <div class="card border-0 shadow-sm">
-            <div class="card-header border-bottom">
-                <h5 class="card-title mb-1">Localisation & Suivi Live</h5>
-                <p class="text-muted mb-0">Supervisez en temps réel le déroulement des interventions de maintenance sur l'ensemble des stations.</p>
+            <div class="card-header border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h5 class="card-title mb-1">Localisation & Suivi Live</h5>
+                    <p class="text-muted mb-0">Supervisez en temps réel le déroulement des interventions de maintenance sur l'ensemble des stations.</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="flex-fill" style="width: 320px;">
+                        <select class="form-select" v-model="selectedStationId" ref="stationZoomSelect">
+                            <option value="">Zoomer sur une station...</option>
+                            <option v-for="s in stations" :key="s.id" :value="String(s.id)">@{{ s.name }}</option>
+                        </select>
+                    </div>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div id="map" style="height: 700px; width: 100%; border-radius: 0px;"></div>
@@ -166,3 +176,4 @@
 @push("scripts")
     <script src="{{ asset('assets/js/scripts/map.js') }}" type="module"></script>
 @endpush
+

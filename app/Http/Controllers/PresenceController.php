@@ -822,12 +822,16 @@ class PresenceController extends Controller
         $date = $data['date'] ?? Carbon::today()->toDateString();
         $stationId = $data['station_id'] ?? null;
 
-        $query = PresenceAgents::query()
+        $query = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
         if ($stationId !== null) {
-            $query->where('site_id', (int) $stationId);
+            $query->where(function ($q) use ($stationId) {
+                $q->where('site_id', (int) $stationId)
+                    ->orWhere('station_check_in_id', (int) $stationId)
+                    ->orWhere('station_check_out_id', (int) $stationId);
+            });
         }
 
         $presences = $query
@@ -1466,8 +1470,10 @@ class PresenceController extends Controller
 
         $canAbsences = (bool) optional($request->user())->can('rapport_absences.view');
         $canRetards = (bool) optional($request->user())->can('rapport_retards.view');
+        $canDeparts = (bool) optional($request->user())->can('rapport_presences.view');
         $absences = $canAbsences ? ($alerts['absences'] ?? []) : [];
         $retards = $canRetards ? ($alerts['retards'] ?? []) : [];
+        $departs = $canDeparts ? ($alerts['departs'] ?? []) : [];
 
         return response()->json([
             'status' => 'success',
@@ -1478,9 +1484,11 @@ class PresenceController extends Controller
             'threshold' => $threshold,
             'absences' => $absences,
             'retards' => $retards,
+            'departs' => $departs,
             'counts' => [
                 'absences' => count($absences),
                 'retards' => count($retards),
+                'departs' => count($departs),
             ],
         ]);
     }
