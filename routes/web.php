@@ -248,6 +248,12 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/absences/daily', fn () => view('report_absences_daily'))
             ->name('reports.absences.daily.view')
             ->middleware('can:rapport_absences.view');
+        Route::get('/retards/daily', fn () => view('report_retards_daily'))
+            ->name('reports.retards.daily.view')
+            ->middleware('can:rapport_retards.view');
+        Route::get('/alerts/cumulative/view', fn () => view('report_alerts_cumulative'))
+            ->name('reports.alerts.view')
+            ->middleware('canany:rapport_absences.view,rapport_retards.view');
         Route::get('/weekly', fn () => view('report_presences_weekly'))
             ->name('reports.weekly.view')
             ->middleware('can:rapport_presences.view');
@@ -270,6 +276,12 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/absences/daily/data', [PresenceController::class, 'dailyAbsenceReport'])
             ->name('reports.absences.daily.data')
             ->middleware('can:rapport_absences.view');
+        Route::get('/retards/daily/data', [PresenceController::class, 'dailyLateReport'])
+            ->name('reports.retards.daily.data')
+            ->middleware('can:rapport_retards.view');
+        Route::get('/alerts/cumulative/data', [PresenceController::class, 'cumulativeAlertsReport'])
+            ->name('reports.alerts.data')
+            ->middleware('canany:rapport_absences.view,rapport_retards.view');
         Route::get('/weekly/data', [PresenceController::class, 'weeklyReport'])
             ->name('reports.weekly.data')
             ->middleware('can:rapport_presences.view');
@@ -289,6 +301,18 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/absences/daily/export/excel', [ExportController::class, 'absencesDailyExcel'])
             ->name('reports.absences.daily.export.excel')
             ->middleware('can:rapport_absences.export');
+        Route::get('/retards/daily/export/pdf', [ExportController::class, 'latesDailyPdf'])
+            ->name('reports.retards.daily.export.pdf')
+            ->middleware('can:rapport_retards.export');
+        Route::get('/retards/daily/export/excel', [ExportController::class, 'latesDailyExcel'])
+            ->name('reports.retards.daily.export.excel')
+            ->middleware('can:rapport_retards.export');
+        Route::get('/alerts/cumulative/export/pdf', [ExportController::class, 'cumulativeAlertsPdf'])
+            ->name('reports.alerts.export.pdf')
+            ->middleware('canany:rapport_absences.export,rapport_retards.export');
+        Route::get('/alerts/cumulative/export/excel', [ExportController::class, 'cumulativeAlertsExcel'])
+            ->name('reports.alerts.export.excel')
+            ->middleware('canany:rapport_absences.export,rapport_retards.export');
         Route::get('/weekly/export/pdf', [ExportController::class, 'weeklyPresenceSummaryPdf'])
             ->name('reports.weekly.export.pdf')
             ->middleware('can:rapport_presences.export');

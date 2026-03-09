@@ -15,6 +15,8 @@ use App\Models\PresenceHoraire;
 use App\Models\Station;
 use App\Services\AttendanceReportService;
 use App\Services\AbsenceReportService;
+use App\Services\CumulativeAlertService;
+use App\Services\LateReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -1386,6 +1388,100 @@ class PresenceController extends Controller
             'from' => $start->toDateString(),
             'to' => $end->toDateString(),
             'absences' => $paginator,
+        ]);
+    }
+
+    public function dailyLateReport(Request $request, LateReportService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'per_page' => 'nullable|integer|min:1|max:2000',
+            'page' => 'nullable|integer|min:1',
+        ]);
+
+        $period = (string) ($data['period'] ?? 'daily');
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+        if ($period === 'weekly') {
+            $start = $start->copy()->startOfWeek(Carbon::MONDAY);
+            $end = $end->copy()->endOfWeek(Carbon::MONDAY)->startOfDay();
+        } elseif ($period === 'monthly') {
+            $start = $start->copy()->startOfMonth();
+            $end = $end->copy()->endOfMonth()->startOfDay();
+        }
+
+        $stationId = $data['station_id'] ?? null;
+        $rows = $service->buildLateRows($start, $end, $stationId ? (int) $stationId : null);
+
+        $perPage = (int) ($data['per_page'] ?? 500);
+        $page = (int) ($data['page'] ?? 1);
+        $total = count($rows);
+        $slice = array_slice($rows, max(($page - 1) * $perPage, 0), $perPage);
+        $paginator = new LengthAwarePaginator(
+            $slice,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'period' => $period,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'retards' => $paginator,
+        ]);
+    }
+
+    public function cumulativeAlertsReport(Request $request, CumulativeAlertService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'threshold' => 'nullable|integer|min:1|max:31',
+        ]);
+
+        $range = $service->resolveRange($data);
+        $threshold = (int) ($data['threshold'] ?? 3);
+        $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
+
+        $alerts = $service->buildAlerts(
+            start: $range['start'],
+            end: $range['end'],
+            stationId: $stationId,
+            threshold: $threshold,
+        );
+
+        $canAbsences = (bool) optional($request->user())->can('rapport_absences.view');
+        $canRetards = (bool) optional($request->user())->can('rapport_retards.view');
+        $absences = $canAbsences ? ($alerts['absences'] ?? []) : [];
+        $retards = $canRetards ? ($alerts['retards'] ?? []) : [];
+
+        return response()->json([
+            'status' => 'success',
+            'period' => $range['period'],
+            'period_label' => $range['label'],
+            'from' => $range['start']->toDateString(),
+            'to' => $range['end']->toDateString(),
+            'threshold' => $threshold,
+            'absences' => $absences,
+            'retards' => $retards,
+            'counts' => [
+                'absences' => count($absences),
+                'retards' => count($retards),
+            ],
         ]);
     }
 

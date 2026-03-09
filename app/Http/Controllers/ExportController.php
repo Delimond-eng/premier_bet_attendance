@@ -12,6 +12,8 @@ use App\Models\PresenceHoraire;
 use App\Models\Station;
 use App\Services\AbsenceReportService;
 use App\Services\AttendanceReportService;
+use App\Services\CumulativeAlertService;
+use App\Services\LateReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -608,6 +610,218 @@ class ExportController extends Controller
         return $this->downloadXlsx(
             filename: 'absences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
             sheetTitle: 'Absences',
+            metaLines: $meta,
+            headers: $headers,
+            rows: $table,
+        );
+    }
+
+    public function latesDailyPdf(Request $request, LateReportService $service): Response
+    {
+        $data = $request->validate([
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $period = (string) ($data['period'] ?? 'daily');
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+        if ($period === 'weekly') {
+            $start = $start->copy()->startOfWeek(Carbon::MONDAY);
+            $end = $end->copy()->endOfWeek(Carbon::MONDAY)->startOfDay();
+        } elseif ($period === 'monthly') {
+            $start = $start->copy()->startOfMonth();
+            $end = $end->copy()->endOfMonth()->startOfDay();
+        }
+
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $rows = $service->buildLateRows($start, $end, $stationId ? (int) $stationId : null);
+
+        $pdf = Pdf::loadView('pdf.exports.retards_daily', [
+            'title' => 'Rapport des retards',
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'station' => $station,
+            'rows' => $rows,
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('retards_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.pdf');
+    }
+
+    public function latesDailyExcel(Request $request, LateReportService $service): StreamedResponse
+    {
+        $data = $request->validate([
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $period = (string) ($data['period'] ?? 'daily');
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
+        if ($start->gt($end)) {
+            [$start, $end] = [$end, $start];
+        }
+        if ($period === 'weekly') {
+            $start = $start->copy()->startOfWeek(Carbon::MONDAY);
+            $end = $end->copy()->endOfWeek(Carbon::MONDAY)->startOfDay();
+        } elseif ($period === 'monthly') {
+            $start = $start->copy()->startOfMonth();
+            $end = $end->copy()->endOfMonth()->startOfDay();
+        }
+
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $rows = $service->buildLateRows($start, $end, $stationId ? (int) $stationId : null);
+
+        $headers = ['Date', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Horaire', 'Heure prevue', 'Heure arrivee', 'Retard (min)', 'Justificatif'];
+        $table = [];
+        foreach ($rows as $r) {
+            $a = $r['agent'] ?? [];
+            $table[] = [
+                (string) ($r['date'] ?? ''),
+                (string) ($a['matricule'] ?? ''),
+                (string) ($a['fullname'] ?? ''),
+                (string) ($a['station_name'] ?? ''),
+                (string) ($a['group_name'] ?? ''),
+                (string) ($a['schedule_label'] ?? ''),
+                (string) ($r['expected_time'] ?? ''),
+                (string) ($r['arrival_time'] ?? ''),
+                (int) ($r['late_minutes'] ?? 0),
+                (string) ($r['justificatif'] ?? ''),
+            ];
+        }
+
+        $meta = [
+            'Periode: ' . $start->toDateString() . ' -> ' . $end->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return $this->downloadXlsx(
+            filename: 'retards_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
+            sheetTitle: 'Retards',
+            metaLines: $meta,
+            headers: $headers,
+            rows: $table,
+        );
+    }
+
+    public function cumulativeAlertsPdf(Request $request, CumulativeAlertService $service): Response
+    {
+        $data = $request->validate([
+            'type' => 'nullable|string|in:absences,retards',
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'threshold' => 'nullable|integer|min:1|max:31',
+        ]);
+
+        $type = (string) ($data['type'] ?? 'absences');
+        $threshold = (int) ($data['threshold'] ?? 3);
+        $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        if ($type === 'absences' && !optional($request->user())->can('rapport_absences.export')) {
+            abort(403, 'Acces refuse.');
+        }
+        if ($type === 'retards' && !optional($request->user())->can('rapport_retards.export')) {
+            abort(403, 'Acces refuse.');
+        }
+
+        $range = $service->resolveRange($data);
+        $alerts = $service->buildAlerts(
+            start: $range['start'],
+            end: $range['end'],
+            stationId: $stationId,
+            threshold: $threshold,
+        );
+        $rows = $type === 'retards' ? ($alerts['retards'] ?? []) : ($alerts['absences'] ?? []);
+        $typeLabel = $type === 'retards' ? 'Alertes retards' : 'Alertes absences';
+
+        $pdf = Pdf::loadView('pdf.exports.alerts_cumulative', [
+            'title' => $typeLabel,
+            'typeLabel' => $typeLabel,
+            'from' => $range['start']->toDateString(),
+            'to' => $range['end']->toDateString(),
+            'station' => $station,
+            'threshold' => $threshold,
+            'rows' => $rows,
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('alertes_' . $type . '_' . str_replace('-', '', $range['start']->toDateString()) . '_' . str_replace('-', '', $range['end']->toDateString()) . ($station ? ('_' . $station->id) : '') . '.pdf');
+    }
+
+    public function cumulativeAlertsExcel(Request $request, CumulativeAlertService $service): StreamedResponse
+    {
+        $data = $request->validate([
+            'type' => 'nullable|string|in:absences,retards',
+            'period' => 'nullable|string|in:daily,weekly,monthly',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'threshold' => 'nullable|integer|min:1|max:31',
+        ]);
+
+        $type = (string) ($data['type'] ?? 'absences');
+        $threshold = (int) ($data['threshold'] ?? 3);
+        $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        if ($type === 'absences' && !optional($request->user())->can('rapport_absences.export')) {
+            abort(403, 'Acces refuse.');
+        }
+        if ($type === 'retards' && !optional($request->user())->can('rapport_retards.export')) {
+            abort(403, 'Acces refuse.');
+        }
+
+        $range = $service->resolveRange($data);
+        $alerts = $service->buildAlerts(
+            start: $range['start'],
+            end: $range['end'],
+            stationId: $stationId,
+            threshold: $threshold,
+        );
+        $rows = $type === 'retards' ? ($alerts['retards'] ?? []) : ($alerts['absences'] ?? []);
+        $typeLabel = $type === 'retards' ? 'Alertes retards' : 'Alertes absences';
+
+        $headers = ['Mois', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Cumul', 'Seuil', 'Action'];
+        $table = [];
+        foreach ($rows as $r) {
+            $a = $r['agent'] ?? [];
+            $table[] = [
+                (string) ($r['month_label'] ?? ''),
+                (string) ($a['matricule'] ?? ''),
+                (string) ($a['fullname'] ?? ''),
+                (string) ($a['station_name'] ?? ''),
+                (string) ($a['group_name'] ?? ''),
+                (int) ($r['count'] ?? 0),
+                (int) ($r['threshold'] ?? $threshold),
+                (string) ($r['action_label'] ?? "Lettre d'explication requise"),
+            ];
+        }
+
+        $meta = [
+            'Type: ' . $typeLabel,
+            'Periode: ' . $range['start']->toDateString() . ' -> ' . $range['end']->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Seuil: >= ' . $threshold,
+            'Lignes: ' . count($table),
+        ];
+
+        return $this->downloadXlsx(
+            filename: 'alertes_' . $type . '_' . str_replace('-', '', $range['start']->toDateString()) . '_' . str_replace('-', '', $range['end']->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
+            sheetTitle: 'Alertes ' . ($type === 'retards' ? 'retards' : 'absences'),
             metaLines: $meta,
             headers: $headers,
             rows: $table,

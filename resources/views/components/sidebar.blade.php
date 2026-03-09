@@ -89,7 +89,38 @@
                     </ul>
                 </li>
 
+                <li class="menu-title"><span>ALERTES</span></li>
+                @php
+                    $alertMenuCounts = ['absences' => 0, 'retards' => 0];
+                    try {
+                        $alertMenuCounts = app(\App\Services\CumulativeAlertService::class)->getSidebarCounts(3);
+                    } catch (\Throwable $e) {
+                        $alertMenuCounts = ['absences' => 0, 'retards' => 0];
+                    }
+                @endphp
+
+                <li>
+
+                    <ul>
+                        <li>
+                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type', 'absences') === 'absences' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'absences']) }}">
+                                <i class="ti ti-calendar-off"></i>
+                                <span>Alerte des absences</span>
+                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['absences'] ?? 0) }}</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type') === 'retards' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'retards']) }}">
+                                <i class="ti ti-calendar-stats"></i>
+                                <span>Alerte des retards</span>
+                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['retards'] ?? 0) }}</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 <li class="menu-title"><span>RH</span></li>
+
                 <li>
                     <ul>
                         @canany(['horaires.view', 'groupes.view', 'plannings.view'])
@@ -134,7 +165,8 @@
                         </li>
                         @endcan
 
-                        @canany(['rapport_presences.view', 'rapport_absences.view'])
+
+                        @canany(['rapport_presences.view', 'rapport_absences.view', 'rapport_retards.view'])
                         <li class="submenu">
                             <a href="javascript:void(0);" class="@active(['reports.*'])">
                                 <i class="ti ti-report"></i><span>Rapports</span>
@@ -149,6 +181,9 @@
                                 @endcan
                                 @can('rapport_absences.view')
                                 <li><a class="@active(['reports.absences.daily.view'])" href="{{ route('reports.absences.daily.view') }}">Absences journalieres</a></li>
+                                @endcan
+                                @can('rapport_retards.view')
+                                <li><a class="@active(['reports.retards.daily.view'])" href="{{ route('reports.retards.daily.view') }}">Rapport des retards</a></li>
                                 @endcan
                             </ul>
                         </li>

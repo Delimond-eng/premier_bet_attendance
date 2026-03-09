@@ -274,7 +274,7 @@
                                         <div class="profile-upload">
                                             <div class="mb-2">
                                                 <h6 class="mb-1">Charger une photo</h6>
-                                                <p class="fs-12"><sma>(facultatif)</sma></p>
+                                                <p class="fs-12"><small>(facultatif)</small></p>
                                             </div>
                                             <div class="profile-uploader d-flex align-items-center">
                                                 <div class="drag-upload-btn btn btn-sm btn-info me-2">

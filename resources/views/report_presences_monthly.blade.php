@@ -119,19 +119,19 @@
                         <span class="badge text-bg-dark">AS = Autorisation speciale</span>
                         <span class="badge bg-warning-subtle text-dark border">AUT = Autres</span>
                     </div>
-                    <table class="table table-bordered table-sm align-middle" ref="tableDetails">
+                    <table class="table table-bordered table-sm align-middle attendance-details-table" ref="tableDetails">
                         <thead class="thead-light">
                         <tr>
                             <th>Matricule</th>
                             <th>Nom complet agent</th>
                             <th>Station</th>
-                            <th v-for="d in monthDays" :key="'head-' + d" class="text-center">@{{ d }}</th>
+                            <th v-for="d in monthDays" :key="'head-' + d" class="text-center attendance-day-head">@{{ d }}</th>
                             <th>Total</th>
                             <th>Tot presences</th>
                             <th>Tot absences</th>
                             <th>Tot retard</th>
                             <th>Tot autorisation</th>
-                            <th>Tot conge</th>
+                            <th>Tot congé</th>
                             <th>Tot OFF</th>
                             <th>Tot autres</th>
                         </tr>
@@ -145,9 +145,8 @@
                                 v-for="d in monthDays"
                                 :key="'cell-' + r.agent_key + '-' + d"
                                 class="text-center attendance-day-cell"
-                                :class="r.day_classes[d]"
                             >
-                                @{{ r.day_codes[d] }}
+                                <span class="badge" :class="r.day_classes[d]">@{{ r.day_codes[d] }}</span>
                             </td>
                             <td class="fw-semibold">@{{ r.total_count }}</td>
                             <td>@{{ r.total_presences }}</td>
@@ -168,9 +167,23 @@
 
 @push("styles")
     <style>
-        .attendance-day-cell {
-            min-width: 52px;
+        .attendance-details-table th.attendance-day-head,
+        .attendance-details-table td.attendance-day-cell {
+            min-width: 34px;
+            width: 34px;
+            max-width: 30px;
+            padding: .2rem .15rem;
+            text-align: center;
+            line-height: 1.1;
+        }
+
+        .attendance-details-table td.attendance-day-cell {
             font-weight: 600;
+            font-size: 10px;
+        }
+
+        .attendance-details-table th.attendance-day-head {
+            font-size: 11px;
         }
     </style>
 @endpush
