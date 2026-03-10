@@ -737,6 +737,7 @@ class ExportController extends Controller
 
         $type = (string) ($data['type'] ?? 'absences');
         $threshold = (int) ($data['threshold'] ?? 3);
+        $displayThreshold = $type === 'departs' ? null : $threshold;
         $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
         $station = $stationId ? Station::find($stationId) : null;
 
@@ -770,7 +771,8 @@ class ExportController extends Controller
             'from' => $range['start']->toDateString(),
             'to' => $range['end']->toDateString(),
             'station' => $station,
-            'threshold' => $threshold,
+            'threshold' => $displayThreshold,
+            'type' => $type,
             'rows' => $rows,
         ])->setPaper('a4', 'landscape');
 
@@ -790,6 +792,7 @@ class ExportController extends Controller
 
         $type = (string) ($data['type'] ?? 'absences');
         $threshold = (int) ($data['threshold'] ?? 3);
+        $displayThreshold = $type === 'departs' ? null : $threshold;
         $stationId = isset($data['station_id']) ? (int) $data['station_id'] : null;
         $station = $stationId ? Station::find($stationId) : null;
 
@@ -817,10 +820,32 @@ class ExportController extends Controller
             ? 'Alertes retards'
             : ($type === 'departs' ? 'Alertes departs anticipes' : 'Alertes absences');
 
-        $headers = ['Mois', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Cumul', 'Seuil', 'Action'];
+        $headers = $type === 'departs'
+            ? ['Mois', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Cumul', 'Date', 'Heure prevue', 'Heure depart', 'Regle', 'Action']
+            : ['Mois', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Cumul', 'Regle', 'Action'];
         $table = [];
         foreach ($rows as $r) {
             $a = $r['agent'] ?? [];
+            $ruleLabel = $type === 'departs'
+                ? 'Sans seuil'
+                : ('>= ' . (int) ($r['threshold'] ?? $threshold));
+            if ($type === 'departs') {
+                $table[] = [
+                    (string) ($r['month_label'] ?? ''),
+                    (string) ($a['matricule'] ?? ''),
+                    (string) ($a['fullname'] ?? ''),
+                    (string) ($a['station_name'] ?? ''),
+                    (string) ($a['group_name'] ?? ''),
+                    (int) ($r['count'] ?? 0),
+                    (string) ($r['departure_date'] ?? ''),
+                    (string) ($r['expected_departure_time'] ?? ''),
+                    (string) ($r['actual_departure_time'] ?? ''),
+                    $ruleLabel,
+                    (string) ($r['action_label'] ?? "Lettre d'explication requise"),
+                ];
+                continue;
+            }
+
             $table[] = [
                 (string) ($r['month_label'] ?? ''),
                 (string) ($a['matricule'] ?? ''),
@@ -828,7 +853,7 @@ class ExportController extends Controller
                 (string) ($a['station_name'] ?? ''),
                 (string) ($a['group_name'] ?? ''),
                 (int) ($r['count'] ?? 0),
-                (int) ($r['threshold'] ?? $threshold),
+                $ruleLabel,
                 (string) ($r['action_label'] ?? "Lettre d'explication requise"),
             ];
         }
@@ -837,7 +862,7 @@ class ExportController extends Controller
             'Type: ' . $typeLabel,
             'Periode: ' . $range['start']->toDateString() . ' -> ' . $range['end']->toDateString(),
             'Station: ' . ($station?->name ?? 'Toutes'),
-            'Seuil: >= ' . $threshold,
+            'Regle: ' . ($type === 'departs' ? 'Sans seuil' : ('Seuil >= ' . $displayThreshold)),
             'Lignes: ' . count($table),
         ];
 

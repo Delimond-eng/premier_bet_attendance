@@ -54,7 +54,11 @@ class ManagerStationContext
         if ($presenceId !== null && $presenceId !== '') {
             $isInManagerStation = PresenceAgents::withoutGlobalScopes()
                 ->whereKey((int) $presenceId)
-                ->where('site_id', $stationId)
+                ->where(function ($q) use ($stationId) {
+                    $q->where('site_id', $stationId)
+                        ->orWhere('station_check_in_id', $stationId)
+                        ->orWhere('station_check_out_id', $stationId);
+                })
                 ->exists();
 
             if (!$isInManagerStation) {

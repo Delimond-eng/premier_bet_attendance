@@ -150,7 +150,9 @@ new Vue({
                 if (this.filters.from) params.set("from", this.filters.from);
                 if (this.filters.to) params.set("to", this.filters.to);
                 if (stationId) params.set("station_id", stationId);
-                params.set("threshold", String(this.filters.threshold || 3));
+                if (this.activeTab !== "departs") {
+                    params.set("threshold", String(this.filters.threshold || 3));
+                }
 
                 const { data } = await get(`/reports/alerts/cumulative/data?${params.toString()}`);
 
@@ -189,7 +191,9 @@ new Vue({
             if (this.filters.from) params.set("from", this.filters.from);
             if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
-            params.set("threshold", String(this.filters.threshold || 3));
+            if (this.activeTab !== "departs") {
+                params.set("threshold", String(this.filters.threshold || 3));
+            }
             return `/reports/alerts/cumulative/export/pdf?${params.toString()}`;
         },
 
@@ -200,7 +204,9 @@ new Vue({
             if (this.filters.from) params.set("from", this.filters.from);
             if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
-            params.set("threshold", String(this.filters.threshold || 3));
+            if (this.activeTab !== "departs") {
+                params.set("threshold", String(this.filters.threshold || 3));
+            }
             return `/reports/alerts/cumulative/export/excel?${params.toString()}`;
         },
     },

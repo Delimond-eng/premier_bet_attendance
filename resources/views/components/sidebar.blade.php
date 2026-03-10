@@ -120,7 +120,7 @@
                         <li>
                             <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type') === 'departs' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'departs']) }}">
                                 <i class="ti ti-calendar-clock"></i>
-                                <span>Departs anticipés</span>
+                                <span>Departs anticipes</span>
                                 <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['departs'] ?? 0) }}</span>
                             </a>
                         </li>

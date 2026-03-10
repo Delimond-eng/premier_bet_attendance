@@ -78,7 +78,7 @@ function computeSummary(matrix, agentsByKey = {}) {
 function mapDayStatus(status) {
     switch (status) {
     case "present":
-        return { code: "1", cellClass: "bg-success-subtle", bucket: "presence" };
+        return { code: "1", cellClass: "badge-success", bucket: "presence" };
     case "retard":
     case "retard_justifie":
         return { code: "1-R", cellClass: "bg-info text-white", bucket: "retard" };

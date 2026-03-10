@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Models\Agent;
 use App\Models\PresenceAgents;
+use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class CumulativeAlertService
 {
+    private const EARLY_DEPARTURE_ALERT_THRESHOLD = 1;
+
     public function __construct(
         private readonly AttendanceReportService $attendanceService
     ) {
@@ -75,6 +78,7 @@ class CumulativeAlertService
         }
 
         $threshold = max(1, (int) $threshold);
+        $earlyDepartureThreshold = self::EARLY_DEPARTURE_ALERT_THRESHOLD;
         $months = $this->monthsInRange($start, $end);
 
         $absenceAlerts = [];
@@ -140,7 +144,7 @@ class CumulativeAlertService
 
             foreach (($earlyDepartureStats['counts'] ?? []) as $agentId => $count) {
                 $count = (int) $count;
-                if ($count < $threshold) {
+                if ($count < $earlyDepartureThreshold) {
                     continue;
                 }
 
@@ -157,12 +161,15 @@ class CumulativeAlertService
                     'schedule_label' => null,
                 ];
 
+                $departureDetails = $earlyDepartureStats['details'][$agentId] ?? [];
+
                 $earlyDepartureAlerts[] = $this->buildAlertRow(
                     $agent,
                     $monthStart,
                     $count,
-                    $threshold,
-                    'departs'
+                    $earlyDepartureThreshold,
+                    'departs',
+                    $departureDetails
                 );
             }
         }
@@ -201,8 +208,9 @@ class CumulativeAlertService
     {
         $start = Carbon::today()->startOfMonth();
         $end = Carbon::today()->endOfMonth()->startOfDay();
+        $stationId = ManagerStationContext::stationId();
 
-        $alerts = $this->buildAlerts($start, $end, null, $threshold);
+        $alerts = $this->buildAlerts($start, $end, $stationId, $threshold);
 
         return [
             'absences' => count($alerts['absences'] ?? []),
@@ -279,14 +287,21 @@ class CumulativeAlertService
      * @param array<string,mixed> $agent
      * @return array<string,mixed>
      */
-    private function buildAlertRow(array $agent, Carbon $monthStart, int $count, int $threshold, string $type): array
+    private function buildAlertRow(
+        array $agent,
+        Carbon $monthStart,
+        int $count,
+        int $threshold,
+        string $type,
+        array $extras = []
+    ): array
     {
         $actionLabel = "Lettre d'explication requise";
         if ($type === 'departs') {
             $actionLabel = "Lettre d'explication requise (depart anticipe)";
         }
 
-        return [
+        return array_merge([
             'key' => $type . '|' . (string) ($agent['id'] ?? 'unknown') . '|' . $monthStart->format('Y-m'),
             'type' => $type,
             'month' => $monthStart->format('Y-m'),
@@ -296,11 +311,15 @@ class CumulativeAlertService
             'letter_required' => true,
             'action_label' => $actionLabel,
             'agent' => $agent,
-        ];
+        ], $extras);
     }
 
     /**
-     * @return array{counts:array<int,int>,agents:array<int,array<string,mixed>>}
+     * @return array{
+     *   counts:array<int,int>,
+     *   agents:array<int,array<string,mixed>>,
+     *   details:array<int,array<string,mixed>>
+     * }
      */
     private function buildEarlyDepartureStatsForMonth(Carbon $monthStart, Carbon $globalStart, Carbon $globalEnd, ?int $stationId): array
     {
@@ -311,11 +330,17 @@ class CumulativeAlertService
         $to = $globalEnd->lt($monthTo) ? $globalEnd->copy() : $monthTo->copy();
 
         if ($from->gt($to)) {
-            return ['counts' => [], 'agents' => []];
+            return ['counts' => [], 'agents' => [], 'details' => []];
         }
 
-        $rows = PresenceAgents::query()
-            ->with(['agent.station', 'agent.groupe.horaire', 'agent.horaire', 'horaire'])
+        $rows = PresenceAgents::withoutGlobalScopes()
+            ->with([
+                'agent' => function ($query) {
+                    $query->withoutGlobalScopes()
+                        ->with(['station', 'groupe.horaire', 'horaire']);
+                },
+                'horaire',
+            ])
             ->whereBetween('date_reference', [$from->toDateString(), $to->toDateString()])
             ->whereNotNull('ended_at')
             ->when($stationId !== null, function ($q) use ($stationId) {
@@ -329,6 +354,8 @@ class CumulativeAlertService
 
         $counts = [];
         $agents = [];
+        $details = [];
+        $latestByAgent = [];
 
         foreach ($rows as $presence) {
             $agent = $presence->agent;
@@ -342,18 +369,31 @@ class CumulativeAlertService
                 continue;
             }
 
-            $actualEndRaw = (string) ($presence->getRawOriginal('ended_at') ?? '');
-            if ($actualEndRaw === '') {
+            $actualEnd = $this->resolveActualEndDateTime($presence, $schedule);
+            if (!$actualEnd) {
                 continue;
             }
-
-            $actualEnd = Carbon::parse($actualEndRaw);
             if (!$actualEnd->lt($expectedEnd)) {
                 continue;
             }
 
             $agentId = (int) $agent->id;
             $counts[$agentId] = (int) ($counts[$agentId] ?? 0) + 1;
+
+            $shouldReplaceDetail = !isset($latestByAgent[$agentId]) || $actualEnd->gt($latestByAgent[$agentId]);
+            if ($shouldReplaceDetail) {
+                $latestByAgent[$agentId] = $actualEnd->copy();
+                $rawDateReference = (string) ($presence->getRawOriginal('date_reference') ?? '');
+                $departureDate = $rawDateReference !== ''
+                    ? Carbon::parse($rawDateReference)->toDateString()
+                    : $actualEnd->toDateString();
+
+                $details[$agentId] = [
+                    'departure_date' => $departureDate,
+                    'expected_departure_time' => $expectedEnd->format('H:i'),
+                    'actual_departure_time' => $actualEnd->format('H:i'),
+                ];
+            }
 
             if (!isset($agents[$agentId])) {
                 $agents[$agentId] = [
@@ -374,7 +414,61 @@ class CumulativeAlertService
         return [
             'counts' => $counts,
             'agents' => $agents,
+            'details' => $details,
         ];
+    }
+
+    private function resolveActualEndDateTime(PresenceAgents $presence, ?object $schedule): ?Carbon
+    {
+        $rawEnd = trim((string) ($presence->getRawOriginal('ended_at') ?? $presence->ended_at ?? ''));
+        if ($rawEnd === '') {
+            return null;
+        }
+
+        try {
+            if (preg_match('/\d{4}-\d{2}-\d{2}/', $rawEnd)) {
+                return Carbon::parse($rawEnd);
+            }
+        } catch (\Throwable $_) {
+        }
+
+        $rawDateReference = trim((string) ($presence->getRawOriginal('date_reference') ?? ''));
+        if ($rawDateReference === '') {
+            return null;
+        }
+
+        $dateRef = Carbon::parse($rawDateReference)->startOfDay();
+        $endTime = $this->normalizeTimeForDateTime($rawEnd);
+        $actualEnd = Carbon::parse($dateRef->toDateString() . ' ' . $endTime);
+
+        $rawScheduleStart = trim((string) ($schedule?->getRawOriginal('started_at') ?? $schedule?->started_at ?? ''));
+        $rawScheduleEnd = trim((string) ($schedule?->getRawOriginal('ended_at') ?? $schedule?->ended_at ?? ''));
+        if ($rawScheduleStart !== '' && $rawScheduleEnd !== '') {
+            try {
+                $scheduleStart = Carbon::createFromTimeString($this->normalizeTimeForDateTime($rawScheduleStart));
+                $scheduleEnd = Carbon::createFromTimeString($this->normalizeTimeForDateTime($rawScheduleEnd));
+                $actualTime = Carbon::createFromTimeString($endTime);
+                if ($scheduleEnd->lt($scheduleStart) && $actualTime->lt($scheduleStart)) {
+                    $actualEnd->addDay();
+                }
+            } catch (\Throwable $_) {
+            }
+
+            return $actualEnd;
+        }
+
+        $rawStartedAt = trim((string) ($presence->getRawOriginal('started_at') ?? ''));
+        if ($rawStartedAt !== '') {
+            try {
+                $startedAt = Carbon::parse($rawStartedAt);
+                if ($actualEnd->lt($startedAt)) {
+                    $actualEnd->addDay();
+                }
+            } catch (\Throwable $_) {
+            }
+        }
+
+        return $actualEnd;
     }
 
     private function resolveExpectedEndDateTime(PresenceAgents $presence, ?object $schedule): ?Carbon

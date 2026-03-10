@@ -60,7 +60,7 @@
                         <tr>
                             <th>Date</th>
                             <th>Agent</th>
-                            <th>Station affectée</th>
+                            <th>Station de pointage</th>
                             <th>Groupe</th>
                             <th>Horaire</th>
                             <th>Heure prevue</th>

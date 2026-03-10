@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AttendanceJustification;
 use App\Models\PresenceAgents;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class LateReportService
 {
@@ -27,33 +28,52 @@ class LateReportService
             [$start, $end] = [$end, $start];
         }
 
-        $rows = PresenceAgents::query()
+        $rows = PresenceAgents::withoutGlobalScopes()
             ->with([
-                'agent.station',
-                'agent.groupe.horaire',
-                'agent.horaire',
+                'agent' => function ($query) {
+                    $query->withoutGlobalScopes()
+                        ->with(['station', 'groupe.horaire', 'horaire']);
+                },
                 'horaire',
                 'assignedStation',
+                'stationCheckIn',
+                'stationCheckOut',
             ])
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
             ->whereNotNull('started_at')
             ->where('retard', 'oui')
-            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->when($stationId !== null, function (Builder $query) use ($stationId) {
+                $this->applyPresenceStationFilter($query, (int) $stationId);
+            })
             ->orderByDesc('date_reference')
             ->orderByDesc('started_at')
             ->get();
 
         $agentIds = $rows->pluck('agent_id')->filter()->unique()->values()->all();
+        $presenceIds = $rows->pluck('id')->filter()->unique()->values()->all();
 
-        $justifications = collect();
-        if (!empty($agentIds)) {
-            $justifications = AttendanceJustification::query()
-                ->whereIn('agent_id', $agentIds)
+        $justificationsByPresence = collect();
+        $justificationsByAgentDate = collect();
+
+        if (!empty($presenceIds) || !empty($agentIds)) {
+            $justificationsQuery = AttendanceJustification::withoutGlobalScopes()
                 ->where('status', 'approved')
                 ->where('kind', 'retard')
-                ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
-                ->get()
-                ->groupBy(fn (AttendanceJustification $j) => $j->agent_id . '|' . Carbon::parse($j->date_reference)->toDateString());
+                ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()]);
+
+            if (!empty($presenceIds)) {
+                $justificationsByPresence = (clone $justificationsQuery)
+                    ->whereIn('presence_agent_id', $presenceIds)
+                    ->get()
+                    ->keyBy('presence_agent_id');
+            }
+
+            if (!empty($agentIds)) {
+                $justificationsByAgentDate = (clone $justificationsQuery)
+                ->whereIn('agent_id', $agentIds)
+                    ->get()
+                    ->groupBy(fn (AttendanceJustification $j) => $j->agent_id . '|' . Carbon::parse($j->date_reference)->toDateString());
+            }
         }
 
         $output = [];
@@ -78,11 +98,24 @@ class LateReportService
                 }
             }
 
-            $justif = optional($justifications->get(($presence->agent_id ?? 0) . '|' . $date))->first();
+            $justif = $justificationsByPresence->get((int) ($presence->id ?? 0));
+            if (!$justif) {
+                $justif = optional($justificationsByAgentDate->get(($presence->agent_id ?? 0) . '|' . $date))->first();
+            }
             $justifText = trim((string) ($justif?->justification ?? ''));
             $justificatif = $justif
                 ? ('justifie' . ($justifText !== '' ? (' : ' . $justifText) : ''))
                 : 'non justifie';
+
+            $effectiveStationName = $presence->stationCheckIn?->name
+                ?: $presence->stationCheckOut?->name
+                ?: $presence->assignedStation?->name
+                ?: $agent?->station?->name;
+
+            $effectiveStationId = $presence->station_check_in_id
+                ?: $presence->station_check_out_id
+                ?: $presence->site_id
+                ?: $agent?->site_id;
 
             $output[] = [
                 'key' => (string) $presence->id . '|' . $date,
@@ -92,8 +125,14 @@ class LateReportService
                     'fullname' => $agent?->fullname,
                     'matricule' => $agent?->matricule,
                     'photo' => $agent?->photo,
-                    'station_id' => $agent?->site_id,
-                    'station_name' => $agent?->station?->name ?: ($presence->assignedStation?->name ?? null),
+                    'station_id' => $effectiveStationId,
+                    'station_name' => $effectiveStationName,
+                    'assigned_station_id' => $agent?->site_id,
+                    'assigned_station_name' => $agent?->station?->name ?: ($presence->assignedStation?->name ?? null),
+                    'check_in_station_id' => $presence->station_check_in_id,
+                    'check_in_station_name' => $presence->stationCheckIn?->name,
+                    'check_out_station_id' => $presence->station_check_out_id,
+                    'check_out_station_name' => $presence->stationCheckOut?->name,
                     'group_id' => $agent?->groupe?->id,
                     'group_name' => $agent?->groupe?->libelle,
                     'schedule_id' => $horaire?->id,
@@ -107,5 +146,14 @@ class LateReportService
         }
 
         return $output;
+    }
+
+    private function applyPresenceStationFilter(Builder $query, int $stationId): void
+    {
+        $query->where(function (Builder $nested) use ($stationId) {
+            $nested->where('site_id', $stationId)
+                ->orWhere('station_check_in_id', $stationId)
+                ->orWhere('station_check_out_id', $stationId);
+        });
     }
 }

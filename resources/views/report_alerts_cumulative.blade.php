@@ -42,7 +42,7 @@
                     </select>
                     <input type="date" class="form-control" v-model="filters.from" style="max-width: 140px;">
                     <input type="date" class="form-control" v-model="filters.to" style="max-width: 140px;">
-                    <input type="number" min="1" max="31" class="form-control" v-model.number="filters.threshold" style="max-width: 140px;" placeholder="Seuil">
+                    <input v-if="activeTab !== 'departs'" type="number" min="1" max="31" class="form-control" v-model.number="filters.threshold" style="max-width: 140px;" placeholder="Seuil">
                     <div class="flex-fill" style="width: 320px;">
                         <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                             <option value="">Toutes les stations</option>
@@ -161,7 +161,10 @@
                             <th>Station</th>
                             <th>Groupe</th>
                             <th>Cumul departs anticipes</th>
-                            <th>Seuil</th>
+                            <th>Date</th>
+                            <th>Heure prevue</th>
+                            <th>Heure depart</th>
+                            <th>Regle</th>
                             <th>Action</th>
                         </tr>
                         </thead>
@@ -183,7 +186,10 @@
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
                             <td>@{{ r.agent?.group_name ?? '-' }}</td>
                             <td><span class="badge badge-danger fs-10 fw-medium text-white p-1">@{{ r.count }}</span></td>
-                            <td>@{{ r.threshold }}</td>
+                            <td>@{{ r.departure_date ?? '-' }}</td>
+                            <td><span class="badge badge-soft-warning">@{{ r.expected_departure_time ?? '--:--' }}</span></td>
+                            <td><span class="badge badge-soft-info">@{{ r.actual_departure_time ?? '--:--' }}</span></td>
+                            <td>Sans seuil</td>
                             <td><span class="badge badge-warning text-dark">@{{ r.action_label }}</span></td>
                         </tr>
                         </tbody>
