@@ -64,15 +64,15 @@ new Vue({
                 // Initialisation sur Kinshasa par défaut
                 this.map = L.map('map', {
                     center: [-4.4419, 15.2663],
-                    zoom: 12,
+                    zoom: 14,
                     minZoom: 2,
-                    maxZoom: 19
+                    maxZoom: 22
                 });
 
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; Salama Group LTD',
                     maxZoom: 19,
-                    maxNativeZoom: 19
+                    maxNativeZoom: 22
                 }).addTo(this.map);
 
                 // Forcer le rendu initial

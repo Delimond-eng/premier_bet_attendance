@@ -169,10 +169,10 @@
     <style>
         .attendance-details-table th.attendance-day-head,
         .attendance-details-table td.attendance-day-cell {
-            min-width: 34px;
-            width: 34px;
-            max-width: 30px;
-            padding: .2rem .15rem;
+            min-width: 22px;
+            width: 22px;
+            max-width: 22px;
+            padding: .1rem .08rem;
             text-align: center;
             line-height: 1.1;
         }
