@@ -23,6 +23,90 @@ use PhpOffice\PhpSpreadsheet\Reader\Csv as CsvReader;
 class PlanningController extends Controller
 {
     /**
+     * Retourne la liste des agents pour une station donnée (spécifique au modal planning).
+     */
+    public function getAgentsForStation(Request $request): JsonResponse
+    {
+        $stationId = $request->query('station_id');
+        if (!$stationId) {
+            return response()->json(['status' => 'success', 'agents' => []]);
+        }
+
+        $agents = Agent::withoutGlobalScopes()
+            ->where('site_id', (int) $stationId)
+            ->orderBy('fullname')
+            ->get(['id', 'fullname', 'matricule']);
+
+        return response()->json(['status' => 'success', 'agents' => $agents]);
+    }
+
+    /**
+     * Reconduit le planning de la semaine précédente à la semaine cible.
+     */
+    public function duplicatePreviousWeek(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'current_week_date' => 'required|date',
+        ]);
+
+        $tz = 'Africa/Kinshasa';
+        $currentWeekStart = Carbon::parse($data['current_week_date'], $tz)->startOfWeek(Carbon::MONDAY);
+        $prevWeekStart = $currentWeekStart->copy()->subWeek();
+        $prevWeekEnd = $prevWeekStart->copy()->addDays(6);
+
+        $stationId = $data['station_id'] ?? null;
+
+        // On récupère le planning de la semaine passée
+        $prevPlannings = AgentGroupPlanning::query()
+            ->when($stationId, function ($q) use ($stationId) {
+                $q->whereHas('agent', fn($sub) => $sub->where('site_id', (int)$stationId));
+            })
+            ->whereBetween('date', [$prevWeekStart->toDateString(), $prevWeekEnd->toDateString()])
+            ->get();
+
+        if ($prevPlannings->isEmpty()) {
+            return response()->json(['errors' => ['Aucun planning trouvé pour la semaine précédente.']], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Nettoyage de la semaine actuelle avant reconduction
+            AgentGroupPlanning::query()
+                ->when($stationId, function ($q) use ($stationId) {
+                    $q->whereHas('agent', fn($sub) => $sub->where('site_id', (int)$stationId));
+                })
+                ->whereBetween('date', [$currentWeekStart->toDateString(), $currentWeekStart->copy()->addDays(6)->toDateString()])
+                ->delete();
+
+            foreach ($prevPlannings as $p) {
+                $dateInPrevWeek = Carbon::parse($p->date);
+                $dayDiff = $prevWeekStart->diffInDays($dateInPrevWeek);
+                $targetDate = $currentWeekStart->copy()->addDays($dayDiff);
+
+                AgentGroupPlanning::create([
+                    'agent_id' => $p->agent_id,
+                    'agent_group_id' => $p->agent_group_id,
+                    'horaire_id' => $p->horaire_id,
+                    'date' => $targetDate->toDateString(),
+                    'is_rest_day' => $p->is_rest_day,
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Le planning de la semaine précédente a été reconduit avec succès.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['errors' => [$e->getMessage()]], 500);
+        }
+    }
+
+    /**
      * Import d'un planning hebdomadaire depuis Excel (vue par agent: MATRICULE + LUNDI..DIMANCHE).
      */
     public function importWeeklyPlanning(Request $request): JsonResponse
@@ -467,7 +551,6 @@ class PlanningController extends Controller
         $startOfWeek = Carbon::parse($data['start_date'])->startOfWeek(Carbon::MONDAY);
         $endOfWeek = $startOfWeek->copy()->addDays(6);
 
-        // On utilise le groupe actuel de l'agent, ou le premier groupe flexible
         $groupId = $agent->groupe_id ?? AgentGroup::query()->whereNull('horaire_id')->value('id');
 
         if (!$groupId) {
@@ -477,7 +560,6 @@ class PlanningController extends Controller
         try {
             DB::beginTransaction();
 
-            // Nettoyage de la semaine pour cet agent
             AgentGroupPlanning::query()
                 ->where('agent_id', $agent->id)
                 ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
@@ -498,6 +580,40 @@ class PlanningController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Planning de l\'agent mis à jour avec succès.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['errors' => [$e->getMessage()]], 500);
+        }
+    }
+
+    /**
+     * Supprime le planning hebdomadaire d'un seul agent pour la semaine donnée.
+     */
+    public function deleteAgentWeeklyPlanning(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'start_date' => 'required|date',
+        ]);
+
+        $agent = Agent::findOrFail($data['agent_id']);
+        $startOfWeek = Carbon::parse($data['start_date'])->startOfWeek(Carbon::MONDAY);
+        $endOfWeek = $startOfWeek->copy()->addDays(6);
+
+        try {
+            DB::beginTransaction();
+
+            AgentGroupPlanning::query()
+                ->where('agent_id', $agent->id)
+                ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Planning de l\'agent supprimé avec succès pour cette semaine.',
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();

@@ -151,6 +151,15 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/planning/agent/update', [PlanningController::class, 'updateAgentWeeklyPlanning'])
             ->name('planning.agent.update')
             ->middleware('can:plannings.update');
+        Route::post('/planning/agent/delete', [PlanningController::class, 'deleteAgentWeeklyPlanning'])
+            ->name('planning.agent.delete')
+            ->middleware('can:plannings.delete');
+        Route::post('/rh/planning/duplicate-week', [PlanningController::class, 'duplicatePreviousWeek'])
+            ->name('planning.duplicate_week')
+            ->middleware('can:plannings.create');
+        Route::get('/rh/agents-for-station', [PlanningController::class, 'getAgentsForStation'])
+            ->name('planning.agents_for_station')
+            ->middleware('can:plannings.view');
 
         // RH - Timesheet / Conges / Authorizations / Justifications / Attributions
         Route::get('/timesheet.view', fn () => view('rh_timesheet'))

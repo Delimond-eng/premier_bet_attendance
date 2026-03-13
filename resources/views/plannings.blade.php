@@ -63,10 +63,17 @@
 
                 <div class="btn-group" role="group" aria-label="navigation">
                     <button type="button" class="btn btn-white border" @click="goPrev" :disabled="isLoading || !canPrev">
-                        Semaines passées
+                        <i class="ti ti-chevron-left me-1"></i>Semaines passées
                     </button>
+
+
                     <button type="button" class="btn btn-white border" @click="goNext" :disabled="isLoading || !canNext">
-                        Semaines suivantes
+                        Semaines suivantes<i class="ti ti-chevron-right ms-1"></i>
+                    </button>
+
+
+                    <button type="button" class="btn btn-warning-light border" @click="duplicatePrevWeek" :disabled="isLoading || !canDuplicatePrev">
+                        <i class="ti ti-copy me-1"></i>Régénérer le planning
                     </button>
                 </div>
 
@@ -80,24 +87,25 @@
                             <tr>
                                 <th class="text-start">Agent</th>
                                 <th v-for="d in days" :key="d.date">@{{ d.label }}</th>
+                                <th style="width: 80px;">Action</th>
                             </tr>
                             </thead>
                             <tbody>
                             <tr v-if="isLoading">
-                                <td :colspan="days.length + 1" class="text-start text-muted p-3">
+                                <td :colspan="days.length + 2" class="text-start text-muted p-3">
                                     Chargement...
                                 </td>
                             </tr>
 
                             <tr v-else-if="stationGroups.length === 0">
-                                <td :colspan="days.length + 1" class="text-start text-muted p-3">
+                                <td :colspan="days.length + 2" class="text-start text-muted p-3">
                                     Aucun planning trouvé pour cette semaine.
                                 </td>
                             </tr>
 
                             <template v-for="g in stationGroups">
                                 <tr :key="'station-' + g.key" class="table-primary">
-                                    <td :colspan="days.length + 1" class="text-uppercase fw-bold fs-5 text-start">
+                                    <td :colspan="days.length + 2" class="text-uppercase fw-bold fs-5 text-start">
                                         <h5>@{{ g.station_name }}</h5>
                                     </td>
                                 </tr>
@@ -110,6 +118,11 @@
                                     <td v-for="d in days" :key="d.date">
                                         <span v-if="r.days[d.date] && r.days[d.date].status === 'off'" class="badge bg-danger">OFF</span>
                                         <span v-else>@{{ (r.days[d.date] && r.days[d.date].label) ? r.days[d.date].label : '--' }}</span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteAgentPlanning(r.agent)" title="Supprimer le planning de cet agent">
+                                            <i class="ti ti-trash"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             </template>
@@ -125,7 +138,7 @@
 
         <!-- Individual Agent Planning Modal -->
         <div class="modal fade" id="agentPlanningModal" tabindex="-1" aria-hidden="true" ref="modalEl">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-xl">
                 <div class="modal-content">
                     <div class="modal-header bg-info-transparent">
                         <h5 class="modal-title">Planning Individuel de l'Agent</h5>
@@ -152,27 +165,26 @@
                         <div v-if="modal.agentId" class="border rounded p-3 bg-light">
                             <h6 class="mb-3 border-bottom pb-2">Configuration de la semaine : <strong>@{{ weekDate }}</strong></h6>
                             <div class="table-responsive">
-                                <table class="table table-sm table-bordered bg-white">
+                                <table class="table table-sm table-bordered bg-white text-center">
                                     <thead class="table-light">
                                         <tr>
-                                            <th style="width: 30%;">Jour</th>
-                                            <th>Horaire de travail</th>
-                                            <th style="width: 15%;" class="text-center">Action</th>
+                                            <th v-for="d in days" :key="d.date" style="min-width: 140px;">
+                                                @{{ d.label }}<br>
+                                                <small class="text-muted">@{{ d.date }}</small>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="d in days" :key="d.date">
-                                            <td class="align-middle fw-medium">@{{ d.label }} <br><small class="text-muted">@{{ d.date }}</small></td>
-                                            <td class="align-middle">
-                                                <select class="form-select form-select-sm" v-model="modal.plannings[d.date]">
+                                        <tr>
+                                            <td v-for="d in days" :key="d.date" class="align-middle">
+                                                <select class="form-select form-select-sm mb-2" v-model="modal.plannings[d.date]">
                                                     <option :value="null">OFF / REPOS</option>
                                                     <option v-for="h in modal.horaires" :key="h.id" :value="h.id">
-                                                        @{{ h.libelle }} (@{{ h.started_at.substring(0,5) }} - @{{ h.ended_at.substring(0,5) }})
+                                                        @{{ h.libelle }}<br>
+                                                        (@{{ h.started_at.substring(0,5) }}-@{{ h.ended_at.substring(0,5) }})
                                                     </option>
                                                 </select>
-                                            </td>
-                                            <td class="align-middle text-center">
-                                                <button v-if="modal.plannings[d.date]" class="btn btn-xs btn-outline-danger" @click="modal.plannings[d.date] = null" title="Mettre en repos">
+                                                <button v-if="modal.plannings[d.date]" class="btn btn-xs btn-outline-danger w-100" @click="modal.plannings[d.date] = null">
                                                     <i class="ti ti-trash-x"></i> Vider
                                                 </button>
                                                 <span v-else class="badge bg-soft-danger text-danger">Repos</span>
@@ -228,6 +240,7 @@
                         isUploading: false,
                         canPrev: false,
                         canNext: false,
+                        canDuplicatePrev: false,
 
                         days: [
                             {date: 'lundi', label: 'Lundi'},
@@ -328,9 +341,10 @@
                     },
                     async loadModalAgents(siteId) {
                         try {
-                            const res = await fetch(`/agents/data?station_id=${siteId}&per_page=1000`, {credentials: 'same-origin'});
+                            // Appel au nouvel endpoint JSON dédié au lieu de /agents/data
+                            const res = await fetch(`/rh/agents-for-station?station_id=${siteId}`, {credentials: 'same-origin'});
                             const json = await res.json();
-                            this.modal.agents = json?.agents?.data ?? [];
+                            this.modal.agents = json?.agents ?? [];
                         } catch (e) { this.modal.agents = []; }
                     },
                     async loadModalHoraires(siteId) {
@@ -383,6 +397,44 @@
                             this.modal.isSaving = false;
                         }
                     },
+                    async deleteAgentPlanning(agent) {
+                        const result = await Swal.fire({
+                            title: 'Confirmation',
+                            text: `Voulez-vous supprimer tout le planning de la semaine pour ${agent.fullname} ?`,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor: '#d33',
+                            confirmButtonText: 'Oui, supprimer',
+                            cancelButtonText: 'Annuler'
+                        });
+
+                        if (!result.isConfirmed) return;
+
+                        this.isLoading = true;
+                        try {
+                            const res = await fetch('/rh/planning/agent/delete', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken(),
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    agent_id: agent.id,
+                                    start_date: this.weekDate
+                                }),
+                                credentials: 'same-origin'
+                            });
+
+                            if (!res.ok) throw new Error('Erreur lors de la suppression');
+
+                            Swal.fire({icon: 'success', title: 'Supprimé', text: 'Le planning a été effacé.'});
+                            await this.fetchPlanning();
+                        } catch (e) {
+                            Swal.fire({icon: 'error', title: 'Erreur', text: e.message});
+                        } finally {
+                            this.isLoading = false;
+                        }
+                    },
                     fetchPlanning: async function () {
                         this.isLoading = true;
                         try {
@@ -402,6 +454,7 @@
                             this.stationGroups = [];
                             this.canPrev = false;
                             this.canNext = false;
+                            this.canDuplicatePrev = false;
                         } finally {
                             this.isLoading = false;
                         }
@@ -430,6 +483,7 @@
                         if (!this.weekDate) {
                             this.canPrev = false;
                             this.canNext = false;
+                            this.canDuplicatePrev = false;
                             return;
                         }
                         const prevDate = this.addDaysIso(this.weekDate, -7);
@@ -440,6 +494,7 @@
                         ]);
                         this.canPrev = prevOk;
                         this.canNext = nextOk;
+                        this.canDuplicatePrev = prevOk; // Enabled only if prev week has planning
                     },
                     goPrev: async function () {
                         if (!this.canPrev) return;
@@ -450,6 +505,44 @@
                         if (!this.canNext) return;
                         this.weekDate = this.addDaysIso(this.weekDate, 7);
                         await this.fetchPlanning();
+                    },
+                    duplicatePrevWeek: async function () {
+                        const result = await Swal.fire({
+                            title: 'Confirmation',
+                            text: 'Voulez-vous reconduire le planning de la semaine passée sur cette semaine ? Cela écrasera les données actuelles de cette semaine.',
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonText: 'Oui, reconduire',
+                            cancelButtonText: 'Annuler'
+                        });
+
+                        if (!result.isConfirmed) return;
+
+                        this.isLoading = true;
+                        try {
+                            const res = await fetch('/rh/planning/duplicate-week', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken(),
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    station_id: this.stationId || null,
+                                    current_week_date: this.weekDate
+                                }),
+                                credentials: 'same-origin'
+                            });
+
+                            const json = await res.json();
+                            if (!res.ok) throw new Error(json.errors ? json.errors[0] : 'Erreur lors de la reconduction');
+
+                            Swal.fire({icon: 'success', title: 'Succès', text: 'Le planning a été reconduit.'});
+                            await this.fetchPlanning();
+                        } catch (e) {
+                            Swal.fire({icon: 'error', title: 'Erreur', text: e.message});
+                        } finally {
+                            this.isLoading = false;
+                        }
                     },
                     uploadPlanning: async function (file) {
                         if (!this.weekDate) {
