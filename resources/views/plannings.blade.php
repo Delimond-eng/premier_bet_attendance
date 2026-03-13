@@ -24,10 +24,6 @@
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
                 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-                    <button type="button" class="btn btn-info d-flex align-items-center me-2" @click="openModal">
-                        <i class="ti ti-user-edit me-2"></i> Planning Agent
-                    </button>
-
                     <div style="min-width: 260px;">
                         <select class="form-select" v-model="stationId" @change="fetchPlanning()">
                             <option value="">Toutes les stations</option>
@@ -50,6 +46,10 @@
                             <span v-else>Import...</span>
                         </button>
                     </div>
+
+                    <button type="button" class="btn btn-info d-flex align-items-center ms-2" @click="openModal">
+                        <i class="ti ti-user-edit me-2"></i> Planning Agent
+                    </button>
                 </div>
 
             </div>
@@ -263,6 +263,12 @@
                         }
                         this.$nextTick(() => {
                             $(this.$refs.modalAgentSelect).val('').trigger('change');
+                        });
+                    },
+                    'modal.agents': function() {
+                        // Re-sync Select2 options when agents list changes
+                        this.$nextTick(() => {
+                            $(this.$refs.modalAgentSelect).trigger('change');
                         });
                     },
                     'modal.agentId': function(newVal) {
