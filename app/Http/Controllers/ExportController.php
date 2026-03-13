@@ -23,7 +23,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExportController extends Controller
 {
-    public function attendancesPdf(Request $request): Response
+    public function attendancesPdf(Request $request, AttendanceReportService $service): Response
     {
         $data = $request->validate([
             'date' => 'nullable|date',
@@ -50,6 +50,14 @@ class ExportController extends Controller
             ->orderByDesc('started_at')
             ->get();
 
+        foreach ($rows as $row) {
+            $ot = $service->calculateOvertime($row, $row->horaire);
+            $norm = $service->calculateNormalHours($row, $ot);
+            $row->setAttribute('overtime_minutes', $ot);
+            $row->setAttribute('overtime_display', $service->formatOvertime($ot));
+            $row->setAttribute('normal_hours_display', $service->formatOvertime($norm));
+        }
+
         $pdf = Pdf::loadView('pdf.exports.attendances', [
             'title' => 'Journal de pointage',
             'date' => $date,
@@ -61,7 +69,7 @@ class ExportController extends Controller
         return $pdf->download('journal_pointage_' . str_replace('-', '', $date) . $suffix . '.pdf');
     }
 
-    public function attendancesExcel(Request $request): StreamedResponse
+    public function attendancesExcel(Request $request, AttendanceReportService $service): StreamedResponse
     {
         $data = $request->validate([
             'date' => 'nullable|date',
@@ -97,13 +105,17 @@ class ExportController extends Controller
             'Date',
             'Heure entree',
             'Heure sortie',
+            'Heures Normales',
+            'Heures Sup',
             'Controle intermediaire',
-            'Duree',
+            'Duree Totale',
             'Retard',
         ];
 
         $table = [];
         foreach ($rows as $p) {
+            $ot = $service->calculateOvertime($p, $p->horaire);
+            $norm = $service->calculateNormalHours($p, $ot);
             $table[] = [
                 (string) ($p->agent?->matricule ?? ''),
                 (string) ($p->agent?->fullname ?? ''),
@@ -113,6 +125,8 @@ class ExportController extends Controller
                 Carbon::parse($p->date_reference)->toDateString(),
                 $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
                 $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                $service->formatOvertime($norm),
+                $service->formatOvertime($ot),
                 $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                 (string) ($p->duree ?? ''),
                 (string) ($p->retard ?? ''),
@@ -199,10 +213,11 @@ class ExportController extends Controller
         );
     }
 
-    public function agentAttendancesPdf(Request $request): Response
+    public function agentAttendancesPdf(Request $request, AttendanceReportService $service): Response
     {
         $payload = $this->buildAgentAttendancesExportPayload(
-            $this->validateAgentAttendancesExportRequest($request)
+            $this->validateAgentAttendancesExportRequest($request),
+            $service
         );
 
         $pdf = Pdf::loadView('pdf.exports.agent_attendances', [
@@ -215,10 +230,11 @@ class ExportController extends Controller
         return $pdf->download($payload['filename_base'] . '.pdf');
     }
 
-    public function agentAttendancesExcel(Request $request): StreamedResponse
+    public function agentAttendancesExcel(Request $request, AttendanceReportService $service): StreamedResponse
     {
         $payload = $this->buildAgentAttendancesExportPayload(
-            $this->validateAgentAttendancesExportRequest($request)
+            $this->validateAgentAttendancesExportRequest($request),
+            $service
         );
 
         return $this->downloadXlsx(
@@ -271,73 +287,6 @@ class ExportController extends Controller
         return $pdf->download('horaires' . ($station ? ('_station_' . $station->id) : '') . '.pdf');
     }
 
-    public function horairesExcel(Request $request): StreamedResponse
-    {
-        $data = $request->validate([
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-        $stations = Station::query()->select(['id', 'name'])->get()->keyBy('id');
-
-        $rows = PresenceHoraire::query()
-            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
-            ->orderBy('libelle')
-            ->get();
-
-        $headers = ['Designation', 'Station', 'Heure debut', 'Controle intermediaire', 'Heure fin', 'Tolerance (min)'];
-        $table = [];
-        $grouped = $rows->groupBy(function ($h) {
-            return $h->site_id ?? 'none';
-        })->map(function ($items, $key) use ($stations) {
-            $stationName = 'Station non affectee';
-            if ($key !== 'none') {
-                $stationName = (string) (optional($stations->get((int) $key))->name ?? ('Station ' . $key));
-            }
-
-            return [
-                'key' => $key,
-                'station_name' => $stationName,
-                'rows' => $items,
-            ];
-        })->sortBy('station_name')->values();
-
-        foreach ($grouped as $group) {
-            $table[] = [
-                'Station: ' . $group['station_name'],
-                '',
-                '',
-                '',
-                '',
-                '',
-            ];
-            foreach ($group['rows'] as $h) {
-                $table[] = [
-                    (string) ($h->libelle ?? ''),
-                    (string) (optional($stations->get((int) $h->site_id))->name ?? ''),
-                    (string) ($h->started_at ?? ''),
-                    (string) ($h->mid_check ?? ''),
-                    (string) ($h->ended_at ?? ''),
-                    (int) ($h->tolerence_minutes ?? 0),
-                ];
-            }
-        }
-
-        $meta = [
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'horaires' . ($station ? ('_station_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Horaires',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
     public function timesheetMonthlyPdf(Request $request, AttendanceReportService $service): Response
     {
         $data = $request->validate([
@@ -371,55 +320,7 @@ class ExportController extends Controller
         return $pdf->download('timesheet_' . sprintf('%02d', $month) . '_' . $year . ($stationId ? ('_' . $stationId) : '') . '.pdf');
     }
 
-    public function timesheetMonthlyExcel(Request $request, AttendanceReportService $service): StreamedResponse
-    {
-        $data = $request->validate([
-            'month' => 'nullable|integer|min:1|max:12',
-            'year' => 'nullable|integer|min:2000|max:2100',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $month = (int) ($data['month'] ?? Carbon::now()->month);
-        $year = (int) ($data['year'] ?? Carbon::now()->year);
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $stations = $stationId
-            ? Station::query()->where('id', (int) $stationId)->orderBy('name')->get()
-            : Station::query()->orderBy('name')->get();
-
-        $headers = ['Station', 'Agents', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation'];
-        $table = [];
-        foreach ($stations as $s) {
-            $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $s->id]);
-            $sum = $this->summarizeStationFromMatrix($s, $matrix['data'], $matrix['agents']);
-            $table[] = [
-                (string) ($sum['station'] ?? ''),
-                (int) ($sum['agents'] ?? 0),
-                (int) ($sum['present'] ?? 0),
-                (int) ($sum['retard'] ?? 0),
-                (int) ($sum['absent'] ?? 0),
-                (int) ($sum['conge'] ?? 0),
-                (int) ($sum['autorisation'] ?? 0),
-            ];
-        }
-
-        $meta = [
-            'Mois: ' . sprintf('%02d', $month) . '/' . $year,
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'timesheet_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Timesheet',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
-    public function dailyPresencesPdf(Request $request): Response
+    public function dailyPresencesPdf(Request $request, AttendanceReportService $service): Response
     {
         $data = $request->validate([
             'date' => 'nullable|date',
@@ -448,6 +349,13 @@ class ExportController extends Controller
             ->get();
 
         $this->attachPresenceMotifs($rows, $date);
+        foreach ($rows as $row) {
+            $ot = $service->calculateOvertime($row, $row->horaire);
+            $norm = $service->calculateNormalHours($row, $ot);
+            $row->setAttribute('overtime_minutes', $ot);
+            $row->setAttribute('overtime_display', $service->formatOvertime($ot));
+            $row->setAttribute('normal_hours_display', $service->formatOvertime($norm));
+        }
         $groups = $this->groupPresenceRowsByStation($rows);
 
         $pdf = Pdf::loadView('pdf.exports.presences_daily', [
@@ -460,7 +368,7 @@ class ExportController extends Controller
         return $pdf->download('presences_journalier_' . str_replace('-', '', $date) . ($station ? ('_' . $station->id) : '') . '.pdf');
     }
 
-    public function dailyPresencesExcel(Request $request): StreamedResponse
+    public function dailyPresencesExcel(Request $request, AttendanceReportService $service): StreamedResponse
     {
         $data = $request->validate([
             'date' => 'nullable|date',
@@ -499,8 +407,10 @@ class ExportController extends Controller
             'Date',
             'Heure entree',
             'Heure sortie',
+            'H. Normales',
+            'Heures Sup',
             'Controle intermediaire',
-            'Duree',
+            'Duree Totale',
             'Retard',
             'Motif',
         ];
@@ -508,6 +418,8 @@ class ExportController extends Controller
         $table = [];
         foreach ($rows as $p) {
             $st = $p->assignedStation ?: ($p->stationCheckIn ?: $p->stationCheckOut);
+            $ot = $service->calculateOvertime($p, $p->horaire);
+            $norm = $service->calculateNormalHours($p, $ot);
             $table[] = [
                 (string) ($st?->name ?? 'Sans station'),
                 (string) ($p->agent?->matricule ?? ''),
@@ -518,6 +430,8 @@ class ExportController extends Controller
                 Carbon::parse($p->date_reference)->toDateString(),
                 $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
                 $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                $service->formatOvertime($norm),
+                $service->formatOvertime($ot),
                 $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                 (string) ($p->duree ?? ''),
                 (string) ($p->retard ?? ''),
@@ -534,190 +448,6 @@ class ExportController extends Controller
         return $this->downloadXlsx(
             filename: 'presences_journalier_' . str_replace('-', '', $date) . ($station ? ('_' . $station->id) : '') . '.xlsx',
             sheetTitle: 'Journalier',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
-    public function absencesDailyPdf(Request $request, AbsenceReportService $service): Response
-    {
-        $data = $request->validate([
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'date' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->startOfDay();
-        if ($start->gt($end)) {
-            [$start, $end] = [$end, $start];
-        }
-
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $rows = $service->buildAbsenceRows($start, $end, $stationId);
-
-        $pdf = Pdf::loadView('pdf.exports.absences_daily', [
-            'title' => 'Rapport des absences',
-            'from' => $start->toDateString(),
-            'to' => $end->toDateString(),
-            'station' => $station,
-            'rows' => $rows,
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('absences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.pdf');
-    }
-
-    public function absencesDailyExcel(Request $request, AbsenceReportService $service): StreamedResponse
-    {
-        $data = $request->validate([
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'date' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->startOfDay();
-        if ($start->gt($end)) {
-            [$start, $end] = [$end, $start];
-        }
-
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $rows = $service->buildAbsenceRows($start, $end, $stationId);
-
-        $headers = ['Date', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Horaire', 'Heure attendue', 'Justificatif'];
-        $table = [];
-        foreach ($rows as $r) {
-            $a = $r['agent'] ?? [];
-            $table[] = [
-                (string) ($r['date'] ?? ''),
-                (string) ($a['matricule'] ?? ''),
-                (string) ($a['fullname'] ?? ''),
-                (string) ($a['station_name'] ?? ''),
-                (string) ($a['group_name'] ?? ''),
-                (string) ($a['schedule_label'] ?? ''),
-                (string) ($a['expected_time'] ?? ''),
-                (string) ($r['justificatif'] ?? ''),
-            ];
-        }
-
-        $meta = [
-            'Periode: ' . $start->toDateString() . ' -> ' . $end->toDateString(),
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'absences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Absences',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
-    public function latesDailyPdf(Request $request, LateReportService $service): Response
-    {
-        $data = $request->validate([
-            'period' => 'nullable|string|in:daily,weekly,monthly',
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $period = (string) ($data['period'] ?? 'daily');
-        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
-        if ($start->gt($end)) {
-            [$start, $end] = [$end, $start];
-        }
-        if ($period === 'weekly') {
-            $start = $start->copy()->startOfWeek(Carbon::MONDAY);
-            $end = $end->copy()->endOfWeek(Carbon::MONDAY)->startOfDay();
-        } elseif ($period === 'monthly') {
-            $start = $start->copy()->startOfMonth();
-            $end = $end->copy()->endOfMonth()->startOfDay();
-        }
-
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $rows = $service->buildLateRows($start, $end, $stationId ? (int) $stationId : null);
-
-        $pdf = Pdf::loadView('pdf.exports.retards_daily', [
-            'title' => 'Rapport des retards',
-            'from' => $start->toDateString(),
-            'to' => $end->toDateString(),
-            'station' => $station,
-            'rows' => $rows,
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('retards_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.pdf');
-    }
-
-    public function latesDailyExcel(Request $request, LateReportService $service): StreamedResponse
-    {
-        $data = $request->validate([
-            'period' => 'nullable|string|in:daily,weekly,monthly',
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $period = (string) ($data['period'] ?? 'daily');
-        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
-        if ($start->gt($end)) {
-            [$start, $end] = [$end, $start];
-        }
-        if ($period === 'weekly') {
-            $start = $start->copy()->startOfWeek(Carbon::MONDAY);
-            $end = $end->copy()->endOfWeek(Carbon::MONDAY)->startOfDay();
-        } elseif ($period === 'monthly') {
-            $start = $start->copy()->startOfMonth();
-            $end = $end->copy()->endOfMonth()->startOfDay();
-        }
-
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $rows = $service->buildLateRows($start, $end, $stationId ? (int) $stationId : null);
-
-        $headers = ['Date', 'Matricule', 'Nom complet', 'Station', 'Groupe', 'Horaire', 'Heure prevue', 'Heure arrivee', 'Retard (min)', 'Justificatif'];
-        $table = [];
-        foreach ($rows as $r) {
-            $a = $r['agent'] ?? [];
-            $table[] = [
-                (string) ($r['date'] ?? ''),
-                (string) ($a['matricule'] ?? ''),
-                (string) ($a['fullname'] ?? ''),
-                (string) ($a['station_name'] ?? ''),
-                (string) ($a['group_name'] ?? ''),
-                (string) ($a['schedule_label'] ?? ''),
-                (string) ($r['expected_time'] ?? ''),
-                (string) ($r['arrival_time'] ?? ''),
-                (int) ($r['late_minutes'] ?? 0),
-                (string) ($r['justificatif'] ?? ''),
-            ];
-        }
-
-        $meta = [
-            'Periode: ' . $start->toDateString() . ' -> ' . $end->toDateString(),
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'retards_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Retards',
             metaLines: $meta,
             headers: $headers,
             rows: $table,
@@ -875,237 +605,6 @@ class ExportController extends Controller
         );
     }
 
-    public function weeklyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
-    {
-        $data = $request->validate([
-            'date' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = $base->copy()->startOfWeek();
-        $end = $base->copy()->endOfWeek();
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $matrix = $service->buildWeeklyMatrix($base, ['station_id' => $stationId]);
-        $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
-
-        $pdf = Pdf::loadView('pdf.exports.presences_weekly_summary', [
-            'title' => 'Rapport des presences (hebdomadaire)',
-            'from' => $start->toDateString(),
-            'to' => $end->toDateString(),
-            'station' => $station,
-            'rows' => $rows,
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('presences_hebdo_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.pdf');
-    }
-
-    public function weeklyPresenceSummaryExcel(Request $request, AttendanceReportService $service): StreamedResponse
-    {
-        $data = $request->validate([
-            'date' => 'nullable|date',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = $base->copy()->startOfWeek();
-        $end = $base->copy()->endOfWeek();
-        $stationId = $data['station_id'] ?? null;
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $matrix = $service->buildWeeklyMatrix($base, ['station_id' => $stationId]);
-        $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
-
-        $headers = ['Agent', 'Matricule', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Justif retard', 'Justif absence', 'Total preste'];
-        $table = [];
-        foreach ($rows as $r) {
-            $a = $r['agent'] ?? [];
-            $table[] = [
-                (string) ($a['fullname'] ?? ''),
-                (string) ($a['matricule'] ?? ''),
-                (string) ($a['station_name'] ?? ''),
-                (int) ($r['present'] ?? 0),
-                (int) ($r['retard'] ?? 0),
-                (int) ($r['absent'] ?? 0),
-                (int) ($r['conge'] ?? 0),
-                (int) ($r['autorisation'] ?? 0),
-                (int) ($r['retard_justifie'] ?? 0),
-                (int) ($r['absence_justifiee'] ?? 0),
-                (int) ($r['total_preste'] ?? 0),
-            ];
-        }
-
-        $meta = [
-            'Semaine: ' . $start->toDateString() . ' -> ' . $end->toDateString(),
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'presences_hebdo_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Hebdo',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
-    public function monthlyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
-    {
-        $data = $request->validate([
-            'month' => 'nullable|integer|min:1|max:12',
-            'year' => 'nullable|integer|min:2000|max:2100',
-            'station_id' => 'nullable|integer|exists:sites,id',
-            'tab' => 'nullable|string|in:brut,details',
-        ]);
-
-        $month = (int) ($data['month'] ?? Carbon::now()->month);
-        $year = (int) ($data['year'] ?? Carbon::now()->year);
-        $stationId = $data['station_id'] ?? null;
-        $tab = (string) ($data['tab'] ?? 'brut');
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
-        if ($tab === 'details') {
-            $rows = $this->summarizeMonthlyDetailsMatrix(
-                $matrix['data'],
-                $matrix['agents'],
-                $matrix['days'] ?? []
-            );
-
-            $pdf = Pdf::loadView('pdf.exports.presences_monthly_details', [
-                'title' => 'Rapport des presences (mensuel - details)',
-                'month' => $month,
-                'year' => $year,
-                'station' => $station,
-                'days' => $matrix['days'] ?? [],
-                'rows' => $rows,
-            ])->setPaper('a3', 'landscape');
-
-            return $pdf->download('presences_mensuel_details_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.pdf');
-        }
-
-        $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
-
-        $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
-            'title' => 'Rapport des presences (mensuel)',
-            'month' => $month,
-            'year' => $year,
-            'station' => $station,
-            'rows' => $rows,
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('presences_mensuel_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.pdf');
-    }
-
-    public function monthlyPresenceSummaryExcel(Request $request, AttendanceReportService $service): StreamedResponse
-    {
-        $data = $request->validate([
-            'month' => 'nullable|integer|min:1|max:12',
-            'year' => 'nullable|integer|min:2000|max:2100',
-            'station_id' => 'nullable|integer|exists:sites,id',
-            'tab' => 'nullable|string|in:brut,details',
-        ]);
-
-        $month = (int) ($data['month'] ?? Carbon::now()->month);
-        $year = (int) ($data['year'] ?? Carbon::now()->year);
-        $stationId = $data['station_id'] ?? null;
-        $tab = (string) ($data['tab'] ?? 'brut');
-        $station = $stationId ? Station::find($stationId) : null;
-
-        $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
-        if ($tab === 'details') {
-            $days = $matrix['days'] ?? [];
-            $rows = $this->summarizeMonthlyDetailsMatrix(
-                $matrix['data'],
-                $matrix['agents'],
-                $days
-            );
-
-            $headers = array_merge(
-                ['Matricule', 'Nom complet agent', 'Station'],
-                $days,
-                ['Total', 'Tot presences', 'Tot absences', 'Tot retard', 'Tot autorisation', 'Tot conge', 'Tot OFF', 'Tot autres']
-            );
-
-            $table = [];
-            foreach ($rows as $r) {
-                $a = $r['agent'] ?? [];
-                $line = [
-                    (string) ($a['matricule'] ?? ''),
-                    (string) ($a['fullname'] ?? ''),
-                    (string) ($a['station_name'] ?? ''),
-                ];
-
-                foreach ($days as $day) {
-                    $line[] = (string) ($r['day_codes'][$day] ?? '--');
-                }
-
-                $line[] = (int) ($r['total_count'] ?? 0);
-                $line[] = (int) ($r['total_presences'] ?? 0);
-                $line[] = (int) ($r['total_absences'] ?? 0);
-                $line[] = (int) ($r['total_retards'] ?? 0);
-                $line[] = (int) ($r['total_autorisations'] ?? 0);
-                $line[] = (int) ($r['total_conges'] ?? 0);
-                $line[] = (int) ($r['total_off'] ?? 0);
-                $line[] = (int) ($r['total_others'] ?? 0);
-                $table[] = $line;
-            }
-
-            $meta = [
-                'Mois: ' . sprintf('%02d', $month) . '/' . $year,
-                'Station: ' . ($station?->name ?? 'Toutes'),
-                'Format: Details',
-                'Lignes: ' . count($table),
-            ];
-
-            return $this->downloadXlsx(
-                filename: 'presences_mensuel_details_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.xlsx',
-                sheetTitle: 'Mensuel details',
-                metaLines: $meta,
-                headers: $headers,
-                rows: $table,
-            );
-        }
-
-        $rows = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
-
-        $headers = ['Agent', 'Matricule', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Justif retard', 'Justif absence', 'Total preste'];
-        $table = [];
-        foreach ($rows as $r) {
-            $a = $r['agent'] ?? [];
-            $table[] = [
-                (string) ($a['fullname'] ?? ''),
-                (string) ($a['matricule'] ?? ''),
-                (string) ($a['station_name'] ?? ''),
-                (int) ($r['present'] ?? 0),
-                (int) ($r['retard'] ?? 0),
-                (int) ($r['absent'] ?? 0),
-                (int) ($r['conge'] ?? 0),
-                (int) ($r['autorisation'] ?? 0),
-                (int) ($r['retard_justifie'] ?? 0),
-                (int) ($r['absence_justifiee'] ?? 0),
-                (int) ($r['total_preste'] ?? 0),
-            ];
-        }
-
-        $meta = [
-            'Mois: ' . sprintf('%02d', $month) . '/' . $year,
-            'Station: ' . ($station?->name ?? 'Toutes'),
-            'Lignes: ' . count($table),
-        ];
-
-        return $this->downloadXlsx(
-            filename: 'presences_mensuel_' . sprintf('%02d', $month) . '_' . $year . ($station ? ('_' . $station->id) : '') . '.xlsx',
-            sheetTitle: 'Mensuel',
-            metaLines: $meta,
-            headers: $headers,
-            rows: $table,
-        );
-    }
-
     private function summarizeMatrix(array $matrix, $agentsCollection): array
     {
         $agentsByKey = [];
@@ -1121,6 +620,7 @@ class ExportController extends Controller
             ];
         }
 
+        $service = app(AttendanceReportService::class);
         $rows = [];
         foreach ($matrix as $agentKey => $days) {
             $acc = [
@@ -1134,27 +634,33 @@ class ExportController extends Controller
                 'retard_justifie' => 0,
                 'absence_justifiee' => 0,
                 'total_preste' => 0,
+                'total_overtime_minutes' => 0,
             ];
 
-            foreach (($days ?? []) as $d => $cell) {
+            foreach (($days ?? []) as $cell) {
                 $s = $cell['status'] ?? null;
                 if ($s === 'present') $acc['present'] += 1;
                 else if ($s === 'retard') {
-                    $acc['present'] += 1; // retard = présence
+                    $acc['present'] += 1;
                     $acc['retard'] += 1;
                 }
                 else if ($s === 'absent') $acc['absent'] += 1;
                 else if ($s === 'conge') $acc['conge'] += 1;
                 else if ($s === 'autorisation') $acc['autorisation'] += 1;
                 else if ($s === 'retard_justifie') {
-                    $acc['present'] += 1; // retard justifié = présence
+                    $acc['present'] += 1;
                     $acc['retard'] += 1;
                     $acc['retard_justifie'] += 1;
                 }
                 else if ($s === 'absence_justifiee') $acc['absence_justifiee'] += 1;
+
+                if (isset($cell['overtime_minutes'])) {
+                    $acc['total_overtime_minutes'] += (int) $cell['overtime_minutes'];
+                }
             }
 
             $acc['total_preste'] = $acc['present'] + $acc['absence_justifiee'];
+            $acc['overtime_display'] = $service->formatOvertime($acc['total_overtime_minutes']);
             $rows[] = $acc;
         }
 
@@ -1163,131 +669,6 @@ class ExportController extends Controller
         return $rows;
     }
 
-    private function summarizeMonthlyDetailsMatrix(array $matrix, $agentsCollection, array $dayKeys): array
-    {
-        $agentsByKey = [];
-        foreach ($agentsCollection as $a) {
-            $key = $a->fullname . ' (' . $a->matricule . ')';
-            $agentsByKey[$key] = [
-                'id' => $a->id,
-                'fullname' => $a->fullname,
-                'matricule' => $a->matricule,
-                'photo' => $a->photo,
-                'station_id' => $a->site_id,
-                'station_name' => $a->station?->name,
-            ];
-        }
-
-        $rows = [];
-        foreach ($matrix as $agentKey => $days) {
-            $acc = [
-                'agent_key' => $agentKey,
-                'agent' => $agentsByKey[$agentKey] ?? ['fullname' => $agentKey, 'matricule' => '', 'station_name' => null],
-                'day_codes' => [],
-                'day_buckets' => [],
-                'total_count' => 0,
-                'total_presences' => 0,
-                'total_absences' => 0,
-                'total_retards' => 0,
-                'total_autorisations' => 0,
-                'total_conges' => 0,
-                'total_off' => 0,
-                'total_others' => 0,
-            ];
-
-            foreach ($dayKeys as $day) {
-                $status = $days[$day]['status'] ?? 'future';
-                $mapped = $this->mapMonthlyDetailStatus($status);
-                $bucket = $mapped['bucket'];
-
-                $acc['day_codes'][$day] = $mapped['code'];
-                $acc['day_buckets'][$day] = $bucket;
-
-                if ($bucket === null) {
-                    continue;
-                }
-
-                $acc['total_count'] += 1;
-
-                if ($bucket === 'presence') {
-                    $acc['total_presences'] += 1;
-                } elseif ($bucket === 'retard') {
-                    $acc['total_presences'] += 1;
-                    $acc['total_retards'] += 1;
-                } elseif ($bucket === 'absence') {
-                    $acc['total_absences'] += 1;
-                } elseif ($bucket === 'autorisation') {
-                    $acc['total_autorisations'] += 1;
-                } elseif ($bucket === 'conge') {
-                    $acc['total_conges'] += 1;
-                } elseif ($bucket === 'off') {
-                    $acc['total_off'] += 1;
-                } else {
-                    $acc['total_others'] += 1;
-                }
-            }
-
-            $rows[] = $acc;
-        }
-
-        usort($rows, fn ($a, $b) => strcmp((string) ($a['agent']['fullname'] ?? ''), (string) ($b['agent']['fullname'] ?? '')));
-
-        return $rows;
-    }
-
-    private function mapMonthlyDetailStatus(?string $status): array
-    {
-        return match ($status) {
-            'present' => ['code' => '1', 'bucket' => 'presence'],
-            'retard', 'retard_justifie' => ['code' => '1-R', 'bucket' => 'retard'],
-            'absent', 'absence_justifiee' => ['code' => 'A', 'bucket' => 'absence'],
-            'off' => ['code' => 'OFF', 'bucket' => 'off'],
-            'conge' => ['code' => 'C', 'bucket' => 'conge'],
-            'autorisation' => ['code' => 'AS', 'bucket' => 'autorisation'],
-            'future' => ['code' => '--', 'bucket' => null],
-            default => ['code' => 'AUT', 'bucket' => 'other'],
-        };
-    }
-
-    private function summarizeStationFromMatrix(Station $station, array $matrix, Collection $agents): array
-    {
-        $agentKeys = [];
-        foreach ($agents as $a) {
-            $agentKeys[$a->fullname . ' (' . $a->matricule . ')'] = true;
-        }
-
-        $acc = [
-            'station_id' => $station->id,
-            'station' => $station->name,
-            'agents' => count($agentKeys),
-            'present' => 0,
-            'retard' => 0,
-            'absent' => 0,
-            'conge' => 0,
-            'autorisation' => 0,
-        ];
-
-        foreach ($matrix as $agentKey => $days) {
-            if (!isset($agentKeys[$agentKey])) {
-                continue;
-            }
-            foreach (($days ?? []) as $cell) {
-                $s = $cell['status'] ?? null;
-                if ($s === 'present') $acc['present'] += 1;
-                else if ($s === 'retard' || $s === 'retard_justifie') $acc['present'] += 1;
-                else if ($s === 'retard' || $s === 'retard_justifie') $acc['retard'] += 1;
-                else if ($s === 'absent') $acc['absent'] += 1;
-                else if ($s === 'conge') $acc['conge'] += 1;
-                else if ($s === 'autorisation') $acc['autorisation'] += 1;
-            }
-        }
-
-        return $acc;
-    }
-
-    /**
-     * @return array<int, array{key:string,station_id:int|null,station_name:string,rows:\Illuminate\Support\Collection}>
-     */
     private function groupPresenceRowsByStation(Collection $rows): array
     {
         $map = [];
@@ -1394,7 +775,7 @@ class ExportController extends Controller
         ]);
     }
 
-    private function buildAgentAttendancesExportPayload(array $data): array
+    private function buildAgentAttendancesExportPayload(array $data, AttendanceReportService $service): array
     {
         $agent = Agent::query()->with('station')->findOrFail((int) $data['agent_id']);
         $dataset = (string) $data['dataset'];
@@ -1446,14 +827,16 @@ class ExportController extends Controller
                 'Heure entree',
                 'Controle intermediaire',
                 'Heure sortie',
+                'H. Normales',
+                'Heures Sup',
                 'Retard',
-                'Total heures',
-                'Photo debut',
-                'Photo fin',
+                'Duree Totale',
             ];
 
             $table = [];
             foreach ($rows as $p) {
+                $ot = $service->calculateOvertime($p, $p->horaire);
+                $norm = $service->calculateNormalHours($p, $ot);
                 $table[] = [
                     (string) ($p->getRawOriginal('date_reference') ?? ''),
                     (string) ($p->assignedStation?->name ?? ''),
@@ -1462,28 +845,17 @@ class ExportController extends Controller
                     $p->started_at ? Carbon::parse($p->started_at)->format('H:i') : '',
                     $p->mid_check ? Carbon::parse($p->mid_check)->format('H:i') : '',
                     $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '',
+                    $service->formatOvertime($norm),
+                    $service->formatOvertime($ot),
                     (string) ($p->retard ?? 'non'),
                     (string) ($p->duree ?? ''),
-                    (string) ($p->photos_debut ?? ''),
-                    (string) ($p->photos_fin ?? ''),
                 ];
             }
 
-            $statusMap = [
-                'present' => 'Present',
-                'absent' => 'Absent',
-                'late' => 'Retard',
-            ];
-            $statusCode = (string) ($data['status'] ?? '');
-            $statusLabel = $statusMap[$statusCode] ?? 'Tous';
-
             $meta = [
                 'Agent: ' . $agent->fullname . ' (' . $agent->matricule . ')',
-                'Jeu de donnees: Presences',
+                'Jeu: Presences',
                 'Portee: ' . ($applyFilters ? 'Filtres actifs' : 'Globale'),
-                'Station filtre: ' . ($applyFilters ? ($station?->name ?? 'Toutes') : 'N/A'),
-                'Periode: ' . ($applyFilters ? (($data['from'] ?? '...') . ' -> ' . ($data['to'] ?? '...')) : 'N/A'),
-                'Statut filtre: ' . ($applyFilters ? $statusLabel : 'N/A'),
                 'Lignes: ' . count($table),
             ];
 
@@ -1549,10 +921,7 @@ class ExportController extends Controller
 
         $meta = [
             'Agent: ' . $agent->fullname . ' (' . $agent->matricule . ')',
-            'Jeu de donnees: Maintenances',
-            'Portee: ' . ($applyFilters ? 'Filtres actifs' : 'Globale'),
-            'Station filtre: ' . ($applyFilters ? ($station?->name ?? 'Toutes') : 'N/A'),
-            'Periode: ' . ($applyFilters ? (($data['from'] ?? '...') . ' -> ' . ($data['to'] ?? '...')) : 'N/A'),
+            'Jeu: Maintenances',
             'Lignes: ' . count($table),
         ];
 

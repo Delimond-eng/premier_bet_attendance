@@ -2,9 +2,9 @@
 
 @php
     $metaLines = [
-        'Date: ' . ($date ?? ''),
+        'Date de référence: ' . ($date ?? ''),
         'Station: ' . (($station->name ?? null) ?: 'Toutes'),
-        'Lignes: ' . (isset($rows) ? $rows->count() : 0),
+        'Nombre de pointages: ' . (isset($rows) ? $rows->count() : 0),
     ];
 @endphp
 
@@ -12,38 +12,40 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 16%;">Agent</th>
-            <th style="width: 13%;">Station affectation</th>
-            <th style="width: 11%;">Check-in</th>
-            <th style="width: 11%;">Check-out</th>
-            <th style="width: 10%;">Date</th>
-            <th style="width: 7%;">Entree</th>
-            <th style="width: 7%;">Sortie</th>
-            <th style="width: 9%;">Controle</th>
-            <th style="width: 8%;">Duree</th>
-            <th style="width: 8%;">Retard</th>
+            <th style="width: 15%;">Agent</th>
+            <th style="width: 12%;">Affectation</th>
+            <th style="width: 10%;">Check-in</th>
+            <th style="width: 10%;">Check-out</th>
+            <th style="width: 6%;">Entrée</th>
+            <th style="width: 6%;">Sortie</th>
+            <th style="width: 8%;">H. Normales</th>
+            <th style="width: 8%;">Heures Sup</th>
+            <th style="width: 8%;">Durée Tot.</th>
+            <th style="width: 10%;">Contrôle</th>
+            <th style="width: 7%;">Retard</th>
         </tr>
         </thead>
         <tbody>
         @foreach(($rows ?? []) as $p)
             <tr>
                 <td>
-                    <div><strong>{{ $p->agent?->fullname ?? '-' }}</strong></div>
-                    <div class="muted">{{ $p->agent?->matricule ?? '' }}</div>
+                    <div class="text-bold">{{ $p->agent?->fullname ?? '-' }}</div>
+                    <div class="text-muted">{{ $p->agent?->matricule ?? '' }}</div>
                 </td>
                 <td>{{ $p->assignedStation?->name ?? '-' }}</td>
                 <td>{{ $p->stationCheckIn?->name ?? '-' }}</td>
                 <td>{{ $p->stationCheckOut?->name ?? '-' }}</td>
-                <td>{{ \Carbon\Carbon::parse($p->date_reference)->toDateString() }}</td>
-                <td>{{ $p->started_at ? \Carbon\Carbon::parse($p->started_at)->format('H:i') : '--:--' }}</td>
-                <td>{{ $p->ended_at ? \Carbon\Carbon::parse($p->ended_at)->format('H:i') : '--:--' }}</td>
-                <td>{{ $p->mid_check ? \Carbon\Carbon::parse($p->mid_check)->format('H:i') : '--:--' }}</td>
-                <td>{{ $p->duree ?? '--' }}</td>
-                <td>
+                <td class="text-center">{{ $p->started_at ? \Carbon\Carbon::parse($p->started_at)->format('H:i') : '--:--' }}</td>
+                <td class="text-center">{{ $p->ended_at ? \Carbon\Carbon::parse($p->ended_at)->format('H:i') : '--:--' }}</td>
+                <td class="text-center"><span class="badge badge-info">{{ $p->normal_hours_display ?? '0h' }}</span></td>
+                <td class="text-center"><span class="badge badge-warn">{{ $p->overtime_display ?? '0h' }}</span></td>
+                <td class="text-center text-bold">{{ $p->duree ?? '--' }}</td>
+                <td class="text-center">{{ $p->mid_check ? \Carbon\Carbon::parse($p->mid_check)->format('H:i') : '--:--' }}</td>
+                <td class="text-center">
                     @if(($p->retard ?? '') === 'oui')
-                        <span class="badge badge-no">Oui</span>
+                        <span class="badge badge-no">OUI</span>
                     @else
-                        <span class="badge badge-ok">Non</span>
+                        <span class="badge badge-ok">NON</span>
                     @endif
                 </td>
             </tr>

@@ -49,6 +49,10 @@ new Vue({
         const dd = String(today.getDate()).padStart(2, "0");
         const d = `${yyyy}-${mm}-${dd}`;
         const qType = getQueryParam("type");
+        const qPeriod = getQueryParam("period") || "daily";
+        // Si c'est journalier par defaut, on met le seuil a 1
+        const qThreshold = getQueryParam("threshold") || (qPeriod === "daily" ? 1 : 3);
+
         const activeTab = qType === "retards"
             ? "retards"
             : (qType === "departs" ? "departs" : "absences");
@@ -58,10 +62,10 @@ new Vue({
             activeTab,
             sites: [],
             filters: {
-                period: "daily",
+                period: qPeriod,
                 from: d,
                 to: d,
-                threshold: 3,
+                threshold: parseInt(qThreshold),
                 station_id: "",
             },
             range: { from: "", to: "", label: "" },
@@ -151,7 +155,7 @@ new Vue({
                 if (this.filters.to) params.set("to", this.filters.to);
                 if (stationId) params.set("station_id", stationId);
                 if (this.activeTab !== "departs") {
-                    params.set("threshold", String(this.filters.threshold || 3));
+                    params.set("threshold", String(this.filters.threshold));
                 }
 
                 const { data } = await get(`/reports/alerts/cumulative/data?${params.toString()}`);
@@ -192,7 +196,7 @@ new Vue({
             if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.activeTab !== "departs") {
-                params.set("threshold", String(this.filters.threshold || 3));
+                params.set("threshold", String(this.filters.threshold));
             }
             return `/reports/alerts/cumulative/export/pdf?${params.toString()}`;
         },
@@ -205,7 +209,7 @@ new Vue({
             if (this.filters.to) params.set("to", this.filters.to);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.activeTab !== "departs") {
-                params.set("threshold", String(this.filters.threshold || 3));
+                params.set("threshold", String(this.filters.threshold));
             }
             return `/reports/alerts/cumulative/export/excel?${params.toString()}`;
         },

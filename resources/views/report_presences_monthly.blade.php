@@ -77,6 +77,7 @@
                             <th>Autorisation</th>
                             <th>Justif retard</th>
                             <th>Justif absence</th>
+                            <th>Heures Sup</th>
                             <th>Total</th>
                         </tr>
                         </thead>
@@ -102,6 +103,7 @@
                             <td>@{{ r.autorisation }}</td>
                             <td>@{{ r.retard_justifie }}</td>
                             <td>@{{ r.absence_justifiee }}</td>
+                            <td><span class="badge bg-warning text-dark">@{{ r.overtime_display }}</span></td>
                             <td><span class="badge badge-info ms-2">Total preste : @{{ r.total_preste }}</span></td>
                         </tr>
                         </tbody>
@@ -132,6 +134,7 @@
                             <th>Tot retard</th>
                             <th>Tot autorisation</th>
                             <th>Tot congé</th>
+                            <th>Heures Sup</th>
                             <th>Tot OFF</th>
                             <th>Tot autres</th>
                         </tr>
@@ -154,6 +157,7 @@
                             <td>@{{ r.total_retards }}</td>
                             <td>@{{ r.total_autorisations }}</td>
                             <td>@{{ r.total_conges }}</td>
+                            <td><span class="badge bg-warning text-dark">@{{ r.overtime_display }}</span></td>
                             <td>@{{ r.total_off }}</td>
                             <td>@{{ r.total_others }}</td>
                         </tr>

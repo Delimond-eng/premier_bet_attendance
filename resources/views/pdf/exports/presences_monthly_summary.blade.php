@@ -12,15 +12,16 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 22%;">Agent</th>
-            <th style="width: 14%;">Station</th>
+            <th style="width: 20%;">Agent</th>
+            <th style="width: 12%;">Station</th>
             <th style="width: 7%;">Present</th>
             <th style="width: 7%;">Retard</th>
             <th style="width: 7%;">Absent</th>
             <th style="width: 7%;">Conge</th>
-            <th style="width: 10%;">Autorisation</th>
-            <th style="width: 10%;">Justif retard</th>
-            <th style="width: 10%;">Justif absence</th>
+            <th style="width: 9%;">Autorisation</th>
+            <th style="width: 9%;">Justif retard</th>
+            <th style="width: 9%;">Justif absence</th>
+            <th style="width: 7%;">Heures Sup</th>
             <th style="width: 6%;">Total</th>
         </tr>
         </thead>
@@ -40,10 +41,10 @@
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>
                 <td>{{ $r['absence_justifiee'] ?? 0 }}</td>
+                <td>{{ $r['overtime_display'] ?? '0h' }}</td>
                 <td>{{ $r['total_preste'] ?? 0 }}</td>
             </tr>
         @endforeach
         </tbody>
     </table>
 @endsection
-

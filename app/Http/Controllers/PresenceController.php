@@ -28,13 +28,13 @@ use Illuminate\Validation\ValidationException;
 
 class PresenceController extends Controller
 {
+    public function __construct(
+        private readonly AttendanceReportService $attendanceService
+    ) {
+    }
+
     /**
      * Enregistre un pointage (check-in / check-out).
-     *
-     * Règles:
-     * - Chaque check-in et check-out doit être lié à une station.
-     * - La présence conserve la station d’affectation (site_id) au moment du pointage.
-     * - Plus de logique photo (champ ignoré si envoyé).
      */
     public function createPresenceAgent(Request $request): JsonResponse
     {
@@ -49,7 +49,6 @@ class PresenceController extends Controller
                 'photo_fin' => 'nullable',
             ]);
         } catch (ValidationException $e) {
-            // Important: keep HTTP 200 to avoid client conflicts (Flutter), encode failures in payload only.
             return response()->json([
                 'status' => 'error',
                 'errors' => $e->validator->errors()->all(),
@@ -57,7 +56,6 @@ class PresenceController extends Controller
         }
 
         $now = Carbon::now()->setTimezone('Africa/Kinshasa');
-
         $agent = Agent::with(['station', 'horaire', 'groupe'])->where('matricule', $data['matricule'])->firstOrFail();
         $assignedStationId = $agent->site_id;
 
@@ -82,8 +80,6 @@ class PresenceController extends Controller
             }
         }
 
-        // On ne requiert un horaire QUE pour le check-in (pour rÃ©soudre date_reference et le retard).
-        // Le check-out s'appuie sur la prÃ©sence ouverte (started_at non null + ended_at null).
         $horaire = null;
         $dateReference = $now->copy()->startOfDay();
         if (in_array($data['key'], ['check-in', 'confirmation'], true)) {
@@ -99,7 +95,6 @@ class PresenceController extends Controller
             }
         }
 
-        // If the agent is OFF (rest day) for the reference day, they are not expected to work and should not punch in.
         if ($data['key'] === 'check-in') {
             $gid = AgentGroupAssignment::query()
                 ->where('agent_id', $agent->id)
@@ -196,8 +191,8 @@ class PresenceController extends Controller
 
         $presence = PresenceAgents::create([
             'agent_id' => $agent->id,
-            'site_id' => $assignedStationId, // station d'affectation (référence/contrôle)
-            'gps_site_id' => $stationId, // legacy
+            'site_id' => $assignedStationId,
+            'gps_site_id' => $stationId,
             'station_check_in_id' => $stationId,
             'horaire_id' => $horaire?->id,
             'date_reference' => $dateReference->toDateString(),
@@ -690,7 +685,6 @@ class PresenceController extends Controller
         $date = $now->toDateString();
         $yesterday = $now->copy()->subDay()->toDateString();
 
-        // Resolve active group assignment for a given date (prefer assignments; fallback to agent.groupe_id).
         $groupIdFor = function (string $d) use ($agent): ?int {
             $a = AgentGroupAssignment::query()
                 ->where('agent_id', $agent->id)
@@ -733,7 +727,6 @@ class PresenceController extends Controller
                 ->first();
         };
 
-        // Night shifts: between 00:00 and the shift end time, the reference schedule can be yesterday's planning.
         $planningYesterday = $planningFor($yesterday);
         if ($planningYesterday?->horaire_id) {
             $h = PresenceHoraire::find($planningYesterday->horaire_id);
@@ -752,7 +745,6 @@ class PresenceController extends Controller
             }
         }
 
-        // For flexible groups, do not fallback to agent/group/station defaults: the planning row is the source of truth.
         if ($isFlexibleYesterday && $planningYesterday && empty($planningYesterday->horaire_id)) {
             return null;
         }
@@ -766,7 +758,6 @@ class PresenceController extends Controller
             return null;
         }
 
-        // Default schedule from the active group (if any)
         if ($gidToday) {
             $group = AgentGroup::query()->with('horaire')->find($gidToday);
             if ($group?->horaire_id) {
@@ -810,7 +801,6 @@ class PresenceController extends Controller
 
     /**
      * Récupère la liste des pointages pour une station et une date.
-     * Compatible avec le flow existant (station_id filtre sur la station d'affectation).
      */
     public function getPresencesBySiteAndDate(Request $request): JsonResponse
     {
@@ -839,7 +829,14 @@ class PresenceController extends Controller
             ->orderByDesc('started_at')
             ->get();
 
-        $presences->each(fn($p) => $this->attachPresenceDistanceMeta($p));
+        $presences->each(function($p) {
+            $this->attachPresenceDistanceMeta($p);
+            $otMin = $this->attendanceService->calculateOvertime($p, $p->horaire);
+            $normMin = $this->attendanceService->calculateNormalHours($p, $otMin);
+            $p->setAttribute('overtime_minutes', $otMin);
+            $p->setAttribute('overtime_display', $this->attendanceService->formatOvertime($otMin));
+            $p->setAttribute('normal_hours_display', $this->attendanceService->formatOvertime($normMin));
+        });
 
         return response()->json([
             'status' => 'success',
@@ -920,123 +917,6 @@ class PresenceController extends Controller
         return response()->json(['status' => 'success', 'groups' => $groups]);
     }
 
-    public function countDashboard(Request $request, AttendanceReportService $service): JsonResponse
-    {
-        $date = $request->query('date') ? Carbon::parse($request->query('date')) : Carbon::today();
-        $stationId = $request->query('station_id');
-
-        $filters = [
-            'station_id' => $stationId ? (int) $stationId : null,
-        ];
-
-        $matrix = $service->buildDailyMatrix($date, $filters);
-        $key = $date->toDateString();
-
-        $totalAgents = $matrix['agents']->count();
-        $expectedAgents = 0;
-        $presentAgents = 0;
-        $lateAgents = 0;
-        $absentAgents = 0;
-
-        foreach (($matrix['data'] ?? []) as $row) {
-            $cell = $row[$key] ?? null;
-            $status = is_array($cell) ? ($cell['status'] ?? null) : null;
-
-            if ($status === 'off' || $status === 'future') {
-                continue;
-            }
-
-            $expectedAgents += 1;
-            if (in_array($status, ['present', 'retard', 'retard_justifie'], true)) {
-                $presentAgents += 1;
-            }
-            if (in_array($status, ['retard', 'retard_justifie'], true)) {
-                $lateAgents += 1;
-            }
-            if ($status === 'absent') {
-                $absentAgents += 1;
-            }
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'count' => [
-                'agents' => $totalAgents,
-                'agents_expected' => $expectedAgents,
-                'presences' => $presentAgents,
-                'retards' => $lateAgents,
-                'absents' => $absentAgents,
-            ],
-        ]);
-    }
-
-    /**
-     * Rapport mensuel (JSON + PDF si export=pdf).
-     */
-    public function monthlyReport(Request $request, AttendanceReportService $service): \Symfony\Component\HttpFoundation\Response
-    {
-        $data = $request->validate([
-            'month' => 'nullable|integer|min:1|max:12',
-            'year' => 'nullable|integer|min:2000|max:2100',
-            'station_id' => 'nullable|integer|exists:sites,id',
-            'agent_id' => 'nullable|integer|exists:agents,id',
-            'group_id' => 'nullable|integer|exists:agent_groups,id',
-        ]);
-
-        $month = (int) ($data['month'] ?? Carbon::now()->month);
-        $year = (int) ($data['year'] ?? Carbon::now()->year);
-
-        $filters = [
-            'station_id' => $data['station_id'] ?? null,
-            'agent_id' => $data['agent_id'] ?? null,
-            'group_id' => $data['group_id'] ?? null,
-        ];
-
-        $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
-
-        if ($request->query('export') === 'pdf') {
-            $pdf = Pdf::loadView('pdf.reports.monthly_report', [
-                'data' => $matrix['data'],
-                'mois' => $month,
-                'annee' => $year,
-            ])->setPaper('a4', 'portrait');
-
-            return $pdf->download("rapport_mensuel_{$month}_{$year}.pdf");
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'month' => $month,
-            'year' => $year,
-            'data' => $matrix['data'],
-            'agents' => $matrix['agents']
-                ->mapWithKeys(function (Agent $a) {
-                    $key = $a->fullname . ' (' . $a->matricule . ')';
-                    return [
-                        $key => [
-                            'id' => $a->id,
-                            'fullname' => $a->fullname,
-                            'matricule' => $a->matricule,
-                            'photo' => $a->photo,
-                            'station_id' => $a->site_id,
-                            'station_name' => $a->station?->name,
-                        ],
-                    ];
-                }),
-        ]);
-    }
-
-    /**
-     * Endpoint mobile legacy (superviseur). Non couvert dans le périmètre "attendance agents".
-     */
-    public function createSupervisorSiteVisit(Request $request): JsonResponse
-    {
-        return response()->json([
-            'status' => 'error',
-            'errors' => ['Fonctionnalité superviseur non disponible sur ce backend.'],
-        ], 501);
-    }
-
     public function dailyReport(Request $request, AttendanceReportService $service): JsonResponse
     {
         $data = $request->validate([
@@ -1082,7 +962,6 @@ class PresenceController extends Controller
         foreach (($dailyMatrix['data'] ?? []) as $agentKey => $row) {
             $cell = $row[$date] ?? null;
             $status = is_array($cell) ? ($cell['status'] ?? null) : null;
-            /** @var Agent|null $agent */
             $agent = $agentsByMatrixKey->get($agentKey);
 
             $stationId = $agent && $agent->site_id ? (int) $agent->site_id : null;
@@ -1154,7 +1033,14 @@ class PresenceController extends Controller
             ->orderByDesc('started_at')
             ->paginate($perPage);
 
-        $presences->getCollection()->each(fn($p) => $this->attachPresenceDistanceMeta($p));
+        $presences->getCollection()->each(function($p) use ($service) {
+            $this->attachPresenceDistanceMeta($p);
+            $otMin = $service->calculateOvertime($p, $p->horaire);
+            $normMin = $service->calculateNormalHours($p, $otMin);
+            $p->setAttribute('overtime_minutes', $otMin);
+            $p->setAttribute('overtime_display', $service->formatOvertime($otMin));
+            $p->setAttribute('normal_hours_display', $service->formatOvertime($normMin));
+        });
         $this->attachPresenceMotifs($presences->getCollection(), $date);
 
         return response()->json([
@@ -1173,6 +1059,57 @@ class PresenceController extends Controller
             ],
             'count_by_station' => $countByStation,
             'presences' => $presences,
+        ]);
+    }
+
+    public function agentHistory(Request $request, AttendanceReportService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'per_page' => 'nullable|integer|min:1|max:500',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $query = PresenceAgents::query()
+            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
+            ->where('agent_id', $data['agent_id'])
+            ->when(!empty($data['from']), fn ($q) => $q->whereDate('date_reference', '>=', $data['from']))
+            ->when(!empty($data['to']), fn ($q) => $q->whereDate('date_reference', '<=', $data['to']))
+            ->when(!empty($data['station_id']), function ($q) use ($data) {
+                $stationId = (int) $data['station_id'];
+                $q->where(function ($qq) use ($stationId) {
+                    $qq->where('site_id', $stationId)
+                        ->orWhere('station_check_in_id', $stationId)
+                        ->orWhere('station_check_out_id', $stationId);
+                });
+            })
+            ->orderByDesc('date_reference')
+            ->orderByDesc('started_at');
+
+        $perPage = (int) ($data['per_page'] ?? 15);
+
+        $page = $query->paginate($perPage);
+        $page->getCollection()->each(function($p) use ($service) {
+            $this->attachPresenceDistanceMeta($p);
+            $otMin = $service->calculateOvertime($p, $p->horaire);
+            $normMin = $service->calculateNormalHours($p, $otMin);
+            $p->setAttribute('overtime_minutes', $otMin);
+            $p->setAttribute('overtime_display', $service->formatOvertime($otMin));
+            $p->setAttribute('normal_hours_display', $service->formatOvertime($normMin));
+        });
+        $page->getCollection()->transform(function (PresenceAgents $p) {
+            $p->date_reference_iso = $p->getRawOriginal('date_reference');
+            $p->started_at_raw = $p->getRawOriginal('started_at');
+            $p->mid_check_raw = $p->getRawOriginal('mid_check');
+            $p->ended_at_raw = $p->getRawOriginal('ended_at');
+            return $p;
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'history' => $page,
         ]);
     }
 
@@ -1345,12 +1282,6 @@ class PresenceController extends Controller
         }
     }
 
-    /**
-     * Rapport des absences (journalier / période) avec justificatifs (congé/autorisation/justification).
-     *
-     * L'agent est considéré "absent" s'il n'a pas de pointage started_at sur la date de référence.
-     * Les justificatifs n'annulent pas l'absence, ils sont affichés en colonne.
-     */
     public function dailyAbsenceReport(Request $request, AbsenceReportService $service): JsonResponse
     {
         $data = $request->validate([
@@ -1568,55 +1499,7 @@ class PresenceController extends Controller
     }
 
     /**
-     * Historique détaillé des pointages d'un agent (stations check-in/out + affectation).
-     */
-    public function agentHistory(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'agent_id' => 'required|integer|exists:agents,id',
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'per_page' => 'nullable|integer|min:1|max:500',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $query = PresenceAgents::query()
-            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
-            ->where('agent_id', $data['agent_id'])
-            ->when(!empty($data['from']), fn ($q) => $q->whereDate('date_reference', '>=', $data['from']))
-            ->when(!empty($data['to']), fn ($q) => $q->whereDate('date_reference', '<=', $data['to']))
-            ->when(!empty($data['station_id']), function ($q) use ($data) {
-                $stationId = (int) $data['station_id'];
-                $q->where(function ($qq) use ($stationId) {
-                    $qq->where('site_id', $stationId)
-                        ->orWhere('station_check_in_id', $stationId)
-                        ->orWhere('station_check_out_id', $stationId);
-                });
-            })
-            ->orderByDesc('date_reference')
-            ->orderByDesc('started_at');
-
-        $perPage = (int) ($data['per_page'] ?? 15);
-
-        $page = $query->paginate($perPage);
-        $page->getCollection()->each(fn($p) => $this->attachPresenceDistanceMeta($p));
-        $page->getCollection()->transform(function (PresenceAgents $p) {
-            // Keep original fields (incl. formatted casts) but add ISO values for front-end logic.
-            $p->date_reference_iso = $p->getRawOriginal('date_reference');
-            $p->started_at_raw = $p->getRawOriginal('started_at');
-            $p->mid_check_raw = $p->getRawOriginal('mid_check');
-            $p->ended_at_raw = $p->getRawOriginal('ended_at');
-            return $p;
-        });
-
-        return response()->json([
-            'status' => 'success',
-            'history' => $page,
-        ]);
-    }
-
-    /**
-     * RÃ©sumÃ© "agent_attendance": profil, station, horaire du jour + stats (journalier/mensuel).
+     * Résumé "agent_attendance": profil, station, horaire du jour + stats (journalier/mensuel).
      */
     public function agentAttendanceSummary(Request $request): JsonResponse
     {
@@ -1627,7 +1510,6 @@ class PresenceController extends Controller
         ]);
 
         $now = Carbon::now()->setTimezone('Africa/Kinshasa');
-
         $agent = Agent::with(['station', 'horaire', 'groupe.horaire'])->findOrFail((int) $data['agent_id']);
 
         $horaire = $this->getHoraireForAgent($agent, $now);
@@ -1735,7 +1617,7 @@ class PresenceController extends Controller
     }
 
     /**
-     * Scan d'un QR code station et retour des donnÃ©es station.
+     * Scan d'un QR code station et retour des données station.
      */
     public function scanStation(Request $request): JsonResponse
     {
@@ -1769,7 +1651,6 @@ class PresenceController extends Controller
 
     /**
      * API pointage agent.
-     * Le matricule est considÃ©rÃ© comme identifiant unique (voir createPresenceAgent).
      */
     public function punchAgent(Request $request): JsonResponse
     {

@@ -35,6 +35,14 @@ function initOrRefreshDatatable(tableEl) {
     });
 }
 
+function formatOvertime(minutes) {
+    if (!minutes || minutes <= 0) return "0h";
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+}
+
 new Vue({
     el: "#App",
 
@@ -119,7 +127,13 @@ new Vue({
                 const { data } = await get(`/reports/daily/data?${params.toString()}`);
 
                 this.count = data?.count ?? this.count;
-                this.rows = data?.presences?.data ?? [];
+                this.rows = (data?.presences?.data ?? []).map(r => {
+                    // Try to extract overtime from comments or meta if not in row directly
+                    // But our backend now includes it in buildDailyMatrix if we use it.
+                    // Actually dailyReport uses matrix but then fetches from PresenceAgents query.
+                    // We need to match rows with matrix data if we want overtime in daily report list.
+                    return r;
+                });
                 this.stationStatsById = this.buildStationStatsMap(data?.count_by_station ?? []);
                 this.grouped = this.groupByStation(this.rows, this.stationStatsById);
 

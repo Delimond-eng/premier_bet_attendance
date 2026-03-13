@@ -211,6 +211,8 @@ class AttendanceReportService
                         'arrivee' => '--:--',
                         'depart' => '--:--',
                         'horaire' => '--',
+                        'overtime_minutes' => 0,
+                        'duration_minutes' => 0,
                     ];
                     $cursor->addDay();
                     continue;
@@ -223,45 +225,49 @@ class AttendanceReportService
                 /** @var AttendanceJustification|null $justif */
                 $justif = optional($justifications->get($agent->id . '|' . $dateKey))->first();
 
-                $gid = $groupIdFor((int) $agent->id, $dateKey) ?? ($agent->groupe_id ? (int) $agent->groupe_id : null); 
-                $group = $gid !== null ? $groupsById->get($gid) : null; 
-                $planning = $gid !== null 
-                    ? optional($plannings->get($agent->id . '|' . $dateKey . '|' . $gid))->first() 
-                    : null; 
- 
-                if (!$planning) { 
-                    // Fallback if no assignment match: take any planning for that date (legacy behavior). 
-                    $planning = optional($planningsAny->get($agent->id . '|' . $dateKey))->first(); 
-                } 
- 
-                $isFlexible = $group && empty($group->horaire_id); 
- 
-                if ($planning && $planning->is_rest_day) { 
-                    $row[$dayKey] = [ 
-                        'status' => 'off', 
-                        'arrivee' => 'OFF', 
-                        'depart' => '', 
-                        'horaire' => 'OFF', 
-                    ]; 
-                    $cursor->addDay(); 
-                    continue; 
-                } 
- 
-                // Flexible groups (horaire_id null) are "expected" only if a work planning with horaire_id exists. 
-                if ($isFlexible && (!$planning || empty($planning->horaire_id))) { 
-                    $row[$dayKey] = [ 
-                        'status' => 'unplanned', 
-                        'arrivee' => '--:--', 
-                        'depart' => '--:--', 
-                        'horaire' => '--', 
-                    ]; 
-                    $cursor->addDay(); 
-                    continue; 
-                } 
- 
-                $congeForDay = null; 
-                if ($conges->has($agent->id)) { 
-                    foreach ($conges->get($agent->id) as $c) { 
+                $gid = $groupIdFor((int) $agent->id, $dateKey) ?? ($agent->groupe_id ? (int) $agent->groupe_id : null);
+                $group = $gid !== null ? $groupsById->get($gid) : null;
+                $planning = $gid !== null
+                    ? optional($plannings->get($agent->id . '|' . $dateKey . '|' . $gid))->first()
+                    : null;
+
+                if (!$planning) {
+                    // Fallback if no assignment match: take any planning for that date (legacy behavior).
+                    $planning = optional($planningsAny->get($agent->id . '|' . $dateKey))->first();
+                }
+
+                $isFlexible = $group && empty($group->horaire_id);
+
+                if ($planning && $planning->is_rest_day) {
+                    $row[$dayKey] = [
+                        'status' => 'off',
+                        'arrivee' => 'OFF',
+                        'depart' => '',
+                        'horaire' => 'OFF',
+                        'overtime_minutes' => 0,
+                        'duration_minutes' => 0,
+                    ];
+                    $cursor->addDay();
+                    continue;
+                }
+
+                // Flexible groups (horaire_id null) are "expected" only if a work planning with horaire_id exists.
+                if ($isFlexible && (!$planning || empty($planning->horaire_id))) {
+                    $row[$dayKey] = [
+                        'status' => 'unplanned',
+                        'arrivee' => '--:--',
+                        'depart' => '--:--',
+                        'horaire' => '--',
+                        'overtime_minutes' => 0,
+                        'duration_minutes' => 0,
+                    ];
+                    $cursor->addDay();
+                    continue;
+                }
+
+                $congeForDay = null;
+                if ($conges->has($agent->id)) {
+                    foreach ($conges->get($agent->id) as $c) {
                         $from = Carbon::parse($c->date_debut)->startOfDay();
                         $to = Carbon::parse($c->date_fin)->endOfDay();
                         if ($cursor->betweenIncluded($from, $to)) {
@@ -275,21 +281,39 @@ class AttendanceReportService
                 $arrivee = '--:--';
                 $depart = '--:--';
                 $horaire = $presence?->horaire?->libelle ?? $agent->horaire?->libelle ?? '--';
+
+                /** @var PresenceHoraire|null $currentHoraireObj */
+                $currentHoraireObj = $presence?->horaire;
+                if (!$currentHoraireObj && $planning && $planning->horaire_id) {
+                    $currentHoraireObj = $planningHorairesById->get((int) $planning->horaire_id);
+                }
+                if (!$currentHoraireObj && $agent->horaire) {
+                    $currentHoraireObj = $agent->horaire;
+                }
+
                 if (!$presence && $planning && $planning->horaire_id) {
-                    $ph = $planningHorairesById->get((int) $planning->horaire_id);
-                    if ($ph) {
-                        $rawStart = (string) ($ph->getRawOriginal('started_at') ?? $ph->started_at);
-                        $rawEnd = (string) ($ph->getRawOriginal('ended_at') ?? $ph->ended_at);
+                    if ($currentHoraireObj) {
+                        $rawStart = (string) ($currentHoraireObj->getRawOriginal('started_at') ?? $currentHoraireObj->started_at);
+                        $rawEnd = (string) ($currentHoraireObj->getRawOriginal('ended_at') ?? $currentHoraireObj->ended_at);
                         $horaire = substr($rawStart, 0, 5) . ' - ' . substr($rawEnd, 0, 5);
                     }
                 }
 
+                $overtimeMinutes = 0;
+                $durationMinutes = 0;
                 if ($presence && $presence->started_at) {
                     $status = ($presence->retard === 'oui') ? 'retard' : 'present';
                     $arrivee = Carbon::parse($presence->started_at)->format('H:i');
                     $depart = $presence->ended_at ? Carbon::parse($presence->ended_at)->format('H:i') : '--:--';
                     if ($status === 'retard' && $justif && $justif->kind === 'retard') {
                         $status = 'retard_justifie';
+                    }
+
+                    $overtimeMinutes = $this->calculateOvertime($presence, $currentHoraireObj);
+
+                    if ($presence->ended_at) {
+                        $durationMinutes = Carbon::parse($presence->getRawOriginal('started_at') ?? $presence->started_at)
+                            ->diffInMinutes(Carbon::parse($presence->getRawOriginal('ended_at') ?? $presence->ended_at));
                     }
                 } elseif ($congeForDay) {
                     $status = 'conge';
@@ -310,6 +334,8 @@ class AttendanceReportService
                     'arrivee' => $arrivee,
                     'depart' => $depart,
                     'horaire' => $horaire,
+                    'overtime_minutes' => $overtimeMinutes,
+                    'duration_minutes' => $durationMinutes,
                 ];
 
                 $cursor->addDay();
@@ -323,5 +349,72 @@ class AttendanceReportService
             'days' => $days,
             'agents' => $agents,
         ];
+    }
+
+    /**
+     * Calcule les heures supplémentaires selon la règle :
+     * - Se déclenche si la sortie est > 1 heure après la fin prévue.
+     * - Si déclenché, le calcul commence dès la fin prévue.
+     */
+    public function calculateOvertime(PresenceAgents $presence, ?PresenceHoraire $horaire): int
+    {
+        if (!$presence->ended_at || !$horaire) {
+            return 0;
+        }
+
+        $actualEnd = Carbon::parse($presence->getRawOriginal('ended_at') ?? $presence->ended_at);
+        $scheduledEndStr = (string)($horaire->getRawOriginal('ended_at') ?? $horaire->ended_at);
+        $scheduledStartStr = (string)($horaire->getRawOriginal('started_at') ?? $horaire->started_at);
+
+        if (!$scheduledEndStr || !$scheduledStartStr) {
+            return 0;
+        }
+
+        $refDate = Carbon::parse($presence->getRawOriginal('date_reference') ?? $presence->date_reference);
+        $schedStart = $refDate->copy()->setTimeFromTimeString($scheduledStartStr);
+        $schedEnd = $refDate->copy()->setTimeFromTimeString($scheduledEndStr);
+
+        // Ajustement pour les shifts de nuit
+        if ($schedEnd->lt($schedStart)) {
+            $schedEnd->addDay();
+        }
+
+        // Seuil de déclenchement : 1 heure après la fin prévue
+        $triggerThreshold = $schedEnd->copy()->addHour();
+
+        if ($actualEnd->gt($triggerThreshold)) {
+            // Si déclenché, on calcule depuis l'heure de fin PRÉVUE
+            return (int) $schedEnd->diffInMinutes($actualEnd);
+        }
+
+        return 0;
+    }
+
+    public function formatOvertime(int $minutes): string
+    {
+        if ($minutes <= 0) {
+            return '0h';
+        }
+        $hours = intdiv($minutes, 60);
+        $mins = $minutes % 60;
+        if ($mins === 0) {
+            return $hours . 'h';
+        }
+        return $hours . 'h ' . $mins . 'm';
+    }
+
+    public function calculateNormalHours(PresenceAgents $presence, int $overtimeMinutes): int
+    {
+        if (!$presence->started_at || !$presence->ended_at) {
+            return 0;
+        }
+
+        $start = Carbon::parse($presence->getRawOriginal('started_at') ?? $presence->started_at);
+        $end = Carbon::parse($presence->getRawOriginal('ended_at') ?? $presence->ended_at);
+        $totalMinutes = $start->diffInMinutes($end);
+
+        // Les heures normales sont le total moins les heures sup
+        $normalMinutes = $totalMinutes - $overtimeMinutes;
+        return max(0, $normalMinutes);
     }
 }

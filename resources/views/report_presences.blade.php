@@ -159,6 +159,8 @@
                                 <th>Heure entrée</th>
                                 <th>Controle intermediaire</th>
                                 <th>Heure sortie</th>
+                                <th>H. Normales</th>
+                                <th>Heures Sup</th>
                                 <th>Retard</th>
                                 <th>Motif</th>
                                 <th>Durée</th>
@@ -201,6 +203,8 @@
                                 <td><span class="badge badge-success">@{{ row.started_at ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-info">@{{ row.mid_check ?? '--:--' }}</span></td>
                                 <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>
+                                <td><span class="badge bg-outline-info">@{{ row.normal_hours_display || '0h' }}</span></td>
+                                <td><span class="badge bg-outline-warning">@{{ row.overtime_display || '0h' }}</span></td>
                                 <td>
                                     <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
                                     <span class="badge badge-soft-success" v-else>Non</span>
@@ -220,4 +224,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/report-presences.js") }}"></script>
 @endpush
-

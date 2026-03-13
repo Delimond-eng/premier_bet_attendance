@@ -229,6 +229,8 @@
                                     <th>Controle intermediaire</th>
                                     <th>Heure sortie</th>
                                     <th>Retard</th>
+                                    <th>H. Normales</th>
+                                    <th>Heures Sup</th>
                                     <th>Total heures</th>
                                     <th>Photo debut</th>
                                     <th>Photo fin</th>
@@ -267,6 +269,8 @@
                                             <i class="ti ti-clock-hour-11 me-1"></i>Non
                                         </span>
                                     </td>
+                                    <td><span class="badge bg-outline-info">@{{ p.normal_hours_display || '0h' }}</span></td>
+                                    <td><span class="badge bg-outline-warning">@{{ p.overtime_display || '0h' }}</span></td>
                                     <td>
                                         <span class="badge badge-info d-inline-flex align-items-center">
                                             <i class="ti ti-clock-hour-11 me-1"></i>@{{ p.duree || '--' }}

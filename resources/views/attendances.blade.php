@@ -61,8 +61,9 @@
                             <th>Date</th>
                             <th>Entrée</th>
                             <th>Sortie</th>
-                            <th>Distance</th>
-                            <th>Durée</th>
+                            <th>H. Normales</th>
+                            <th>Heures Sup</th>
+                            <th>Durée Totale</th>
                             <th>Retard</th>
                         </tr>
                         </thead>
@@ -102,11 +103,8 @@
                             <td>@{{ p.date_reference }}</td>
                             <td><span class="badge badge-success">@{{ p.started_at ?? '--:--' }}</span></td>
                             <td><span class="badge badge-purple">@{{ p.ended_at ?? '--:--' }}</span></td>
-                            <td>
-                                <span class="badge d-inline-flex align-items-center" :class="p.is_on_station ? 'badge-soft-success' : 'badge-soft-danger'">
-                                    <i class="ti ti-map-pin-check me-1"></i> @{{ p.distance_label || 'Inconnue' }}
-                                </span>
-                            </td>
+                            <td><span class="badge bg-outline-info">@{{ p.normal_hours_display || '0h' }}</span></td>
+                            <td><span class="badge bg-outline-warning">@{{ p.overtime_display || '0h' }}</span></td>
                             <td><span class="badge badge-info">@{{ p.duree ?? '--' }}</span></td>
                             <td>
                                 <span class="badge badge-soft-danger" v-if="p.retard === 'oui'">Oui</span>

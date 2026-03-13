@@ -40,6 +40,14 @@ function initOrRefreshDatatable(tableEl) {
     });
 }
 
+function formatOvertime(minutes) {
+    if (!minutes || minutes <= 0) return "0h";
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+}
+
 function computeSummary(matrix, agentsByKey = {}) {
     const rows = [];
     Object.keys(matrix || {}).forEach((agent) => {
@@ -55,10 +63,12 @@ function computeSummary(matrix, agentsByKey = {}) {
             retard_justifie: 0,
             absence_justifiee: 0,
             total_preste: 0,
+            total_overtime_minutes: 0,
         };
 
         Object.keys(days).forEach((d) => {
-            const s = days[d]?.status;
+            const dayData = days[d] || {};
+            const s = dayData.status;
             if (s === "present") acc.present += 1;
             else if (s === "retard") {
                 acc.present += 1; // retard = présent (arrivé tard)
@@ -72,10 +82,15 @@ function computeSummary(matrix, agentsByKey = {}) {
             else if (s === "conge") acc.conge += 1;
             else if (s === "autorisation") acc.autorisation += 1;
             else if (s === "absence_justifiee") acc.absence_justifiee += 1;
+
+            if (dayData.overtime_minutes) {
+                acc.total_overtime_minutes += dayData.overtime_minutes;
+            }
         });
 
         // Total presté après justification des absences.
         acc.total_preste = acc.present + acc.absence_justifiee;
+        acc.overtime_display = formatOvertime(acc.total_overtime_minutes);
         rows.push(acc);
     });
     return rows;

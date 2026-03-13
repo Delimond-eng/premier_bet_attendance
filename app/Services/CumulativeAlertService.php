@@ -200,14 +200,14 @@ class CumulativeAlertService
     }
 
     /**
-     * Counts for current month badges in sidebar.
+     * Counts for current day badges in sidebar by default.
      *
      * @return array{absences:int,retards:int,departs:int}
      */
-    public function getSidebarCounts(int $threshold = 3): array
+    public function getSidebarCounts(int $threshold = 1): array
     {
-        $start = Carbon::today()->startOfMonth();
-        $end = Carbon::today()->endOfMonth()->startOfDay();
+        $start = Carbon::today()->startOfDay();
+        $end = Carbon::today()->startOfDay();
         $stationId = ManagerStationContext::stationId();
 
         $alerts = $this->buildAlerts($start, $end, $stationId, $threshold);
