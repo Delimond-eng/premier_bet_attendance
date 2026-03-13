@@ -353,6 +353,7 @@
         </div>
         <!-- end row -->
 
+        @if(str_contains(request()->getHost(), 'electrocool'))
         <div class="row mt-2">
             <div class="col-xxl-4 col-xl-5 d-flex">
                 <div class="card flex-fill">
@@ -505,6 +506,7 @@
                 </div>
             </div>
         </div>
+        @endif
 
     </div>
 @endsection
@@ -512,4 +514,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/dashboard.js") . '?v=' . filemtime(public_path('assets/js/scripts/dashboard.js')) }}"></script>
 @endpush
-

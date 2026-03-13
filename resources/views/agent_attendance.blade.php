@@ -12,7 +12,7 @@
                             <a href="/"><i class="ti ti-smart-home"></i></a>
                         </li>
                         <li class="breadcrumb-item">RH</li>
-                        <li class="breadcrumb-item active" aria-current="page">Historique presence & maintenance</li>
+                        <li class="breadcrumb-item active" aria-current="page">Historique presence @if(str_contains(request()->getHost(), 'electrocool')) & maintenance @endif</li>
                     </ol>
                 </nav>
             </div>
@@ -212,9 +212,11 @@
                             <li class="nav-item">
                                 <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'presences' }" @click="switchTab('presences')">Presences</a>
                             </li>
+                            @if(str_contains(request()->getHost(), 'electrocool'))
                             <li class="nav-item">
                                 <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'maintenances' }" @click="switchTab('maintenances')">Maintenances</a>
                             </li>
+                            @endif
                         </ul>
 
                         <div class="table-responsive" v-show="activeTab === 'presences'">
@@ -289,6 +291,7 @@
                             </table>
                         </div>
 
+                        @if(str_contains(request()->getHost(), 'electrocool'))
                         <div class="table-responsive" v-show="activeTab === 'maintenances'">
                             <table class="table" ref="tableMaintenances">
                                 <thead class="thead-light">
@@ -326,6 +329,7 @@
                                 </tbody>
                             </table>
                         </div>
+                        @endif
                     </div>
                 </div>
             </div>
