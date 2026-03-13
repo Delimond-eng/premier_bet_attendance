@@ -148,6 +148,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/planning/import-week', [PlanningController::class, 'importWeeklyPlanning'])
             ->name('planning.import_week')
             ->middleware('can:plannings.import');
+        Route::post('/planning/agent/update', [PlanningController::class, 'updateAgentWeeklyPlanning'])
+            ->name('planning.agent.update')
+            ->middleware('can:plannings.update');
 
         // RH - Timesheet / Conges / Authorizations / Justifications / Attributions
         Route::get('/timesheet.view', fn () => view('rh_timesheet'))

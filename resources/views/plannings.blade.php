@@ -24,6 +24,10 @@
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
                 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                    <button type="button" class="btn btn-info d-flex align-items-center me-2" @click="openModal">
+                        <i class="ti ti-user-edit me-2"></i> Planning Agent
+                    </button>
+
                     <div style="min-width: 260px;">
                         <select class="form-select" v-model="stationId" @change="fetchPlanning()">
                             <option value="">Toutes les stations</option>
@@ -118,6 +122,83 @@
             </div>
         </div>
         <!-- /Leads List -->
+
+        <!-- Individual Agent Planning Modal -->
+        <div class="modal fade" id="agentPlanningModal" tabindex="-1" aria-hidden="true" ref="modalEl">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info-transparent">
+                        <h5 class="modal-title">Planning Individuel de l'Agent</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">1. Sélectionner la Station</label>
+                                <select class="form-select" v-model="modal.stationId" ref="modalStationSelect">
+                                    <option value="">Choisir une station...</option>
+                                    <option v-for="s in stations" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">2. Sélectionner l'Agent</label>
+                                <select class="form-select" v-model="modal.agentId" ref="modalAgentSelect" :disabled="!modal.stationId">
+                                    <option value="">Choisir un agent...</option>
+                                    <option v-for="a in modal.agents" :key="a.id" :value="a.id">@{{ a.fullname }} (@{{ a.matricule }})</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div v-if="modal.agentId" class="border rounded p-3 bg-light">
+                            <h6 class="mb-3 border-bottom pb-2">Configuration de la semaine : <strong>@{{ weekDate }}</strong></h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered bg-white">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 30%;">Jour</th>
+                                            <th>Horaire de travail</th>
+                                            <th style="width: 15%;" class="text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="d in days" :key="d.date">
+                                            <td class="align-middle fw-medium">@{{ d.label }} <br><small class="text-muted">@{{ d.date }}</small></td>
+                                            <td class="align-middle">
+                                                <select class="form-select form-select-sm" v-model="modal.plannings[d.date]">
+                                                    <option :value="null">OFF / REPOS</option>
+                                                    <option v-for="h in modal.horaires" :key="h.id" :value="h.id">
+                                                        @{{ h.libelle }} (@{{ h.started_at.substring(0,5) }} - @{{ h.ended_at.substring(0,5) }})
+                                                    </option>
+                                                </select>
+                                            </td>
+                                            <td class="align-middle text-center">
+                                                <button v-if="modal.plannings[d.date]" class="btn btn-xs btn-outline-danger" @click="modal.plannings[d.date] = null" title="Mettre en repos">
+                                                    <i class="ti ti-trash-x"></i> Vider
+                                                </button>
+                                                <span v-else class="badge bg-soft-danger text-danger">Repos</span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div v-else-if="modal.stationId" class="text-center py-4 text-muted">
+                            <i class="ti ti-user-search fs-1 me-2"></i> Veuillez sélectionner un agent pour modifier son planning.
+                        </div>
+                        <div v-else class="text-center py-4 text-muted">
+                            <i class="ti ti-building-community fs-1 me-2"></i> Veuillez d'abord sélectionner une station.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-white" data-bs-dismiss="modal">Fermer</button>
+                        <button type="button" class="btn btn-primary" @click="saveAgentPlanning" :disabled="!modal.agentId || modal.isSaving">
+                            <span v-if="modal.isSaving" class="spinner-border spinner-border-sm me-1"></span>
+                            @{{ modal.isSaving ? 'Enregistrement...' : 'Enregistrer le planning' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
 @endsection
@@ -158,12 +239,69 @@
                             {date: 'dimanche', label: 'Dimanche'},
                         ],
                         stationGroups: [],
+
+                        // Modal Data
+                        modal: {
+                            stationId: '',
+                            agentId: '',
+                            agents: [],
+                            horaires: [],
+                            plannings: {}, // date -> horaire_id
+                            isSaving: false,
+                            bsModal: null
+                        }
                     };
+                },
+                watch: {
+                    'modal.stationId': function(newVal) {
+                        this.modal.agentId = '';
+                        this.modal.agents = [];
+                        this.modal.horaires = [];
+                        if (newVal) {
+                            this.loadModalAgents(newVal);
+                            this.loadModalHoraires(newVal);
+                        }
+                        this.$nextTick(() => {
+                            $(this.$refs.modalAgentSelect).val('').trigger('change');
+                        });
+                    },
+                    'modal.agentId': function(newVal) {
+                        this.modal.plannings = {};
+                        if (newVal) {
+                            // Pre-fill with existing planning from current view if available
+                            const existing = this.findExistingPlanningInView(newVal);
+                            this.days.forEach(d => {
+                                let hId = null;
+                                if (existing && existing[d.date]) {
+                                    hId = existing[d.date].horaire_id;
+                                    if (existing[d.date].status === 'off') hId = null;
+                                }
+                                this.$set(this.modal.plannings, d.date, hId);
+                            });
+                        }
+                    }
                 },
                 mounted: function () {
                     this.loadStations().then(() => this.fetchPlanning());
+                    this.initSelect2();
                 },
                 methods: {
+                    initSelect2() {
+                        const self = this;
+                        this.$nextTick(() => {
+                            $(this.$refs.modalStationSelect).select2({ dropdownParent: $(this.$refs.modalEl) })
+                                .on('change', function() { self.modal.stationId = $(this).val(); });
+
+                            $(this.$refs.modalAgentSelect).select2({ dropdownParent: $(this.$refs.modalEl) })
+                                .on('change', function() { self.modal.agentId = $(this).val(); });
+                        });
+                    },
+                    openModal() {
+                        if (!this.modal.bsModal) {
+                            this.modal.bsModal = new bootstrap.Modal(this.$refs.modalEl);
+                        }
+                        this.modal.bsModal.show();
+                    },
                     pickFile: function () {
                         if (this.$refs.fileInput) this.$refs.fileInput.click();
                     },
@@ -180,6 +318,63 @@
                             this.stations = (json && json.sites) ? json.sites.map(s => ({id: s.id, name: s.name})) : [];
                         } catch (e) {
                             console.error(e);
+                        }
+                    },
+                    async loadModalAgents(siteId) {
+                        try {
+                            const res = await fetch(`/agents/data?station_id=${siteId}&per_page=1000`, {credentials: 'same-origin'});
+                            const json = await res.json();
+                            this.modal.agents = json?.agents?.data ?? [];
+                        } catch (e) { this.modal.agents = []; }
+                    },
+                    async loadModalHoraires(siteId) {
+                        try {
+                            const res = await fetch(`/rh/horaires?site_id=${siteId}`, {credentials: 'same-origin'});
+                            const json = await res.json();
+                            this.modal.horaires = json?.horaires ?? [];
+                        } catch (e) { this.modal.horaires = []; }
+                    },
+                    findExistingPlanningInView(agentId) {
+                        for (let g of this.stationGroups) {
+                            const row = g.rows.find(r => r.agent.id == agentId);
+                            if (row) return row.days;
+                        }
+                        return null;
+                    },
+                    async saveAgentPlanning() {
+                        if (!this.modal.agentId) return;
+
+                        this.modal.isSaving = true;
+                        try {
+                            const payload = {
+                                agent_id: this.modal.agentId,
+                                start_date: this.days[0].date,
+                                plannings: this.days.map(d => ({
+                                    date: d.date,
+                                    horaire_id: this.modal.plannings[d.date],
+                                    is_rest_day: this.modal.plannings[d.date] === null
+                                }))
+                            };
+
+                            const res = await fetch('/rh/planning/agent/update', {
+                                method: 'POST',
+                                body: JSON.stringify(payload),
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken(),
+                                    'Content-Type': 'application/json'
+                                },
+                                credentials: 'same-origin'
+                            });
+
+                            if (!res.ok) throw new Error('Erreur lors de la sauvegarde');
+
+                            Swal.fire({icon: 'success', title: 'Succès', text: 'Planning mis à jour.'});
+                            this.modal.bsModal.hide();
+                            await this.fetchPlanning();
+                        } catch (e) {
+                            Swal.fire({icon: 'error', title: 'Erreur', text: e.message});
+                        } finally {
+                            this.modal.isSaving = false;
                         }
                     },
                     fetchPlanning: async function () {

@@ -24,19 +24,14 @@ class PlanningController extends Controller
 {
     /**
      * Import d'un planning hebdomadaire depuis Excel (vue par agent: MATRICULE + LUNDI..DIMANCHE).
-     *
-     * Règles importantes:
-     * - La semaine DOIT commencer le lundi (forcée).
-     * - Une cellule vide = OFF (repos).
-     * - Valeurs supportées: OFF/REPOS/PAUSE, "08:00-15:00", "08:00 - 15:00", "H0800_1500".
      */
     public function importWeeklyPlanning(Request $request): JsonResponse
     {
         $data = $request->validate([
             'file' => 'required|file|mimes:xlsx,xls,csv,txt',
             'group_id' => 'nullable|integer|exists:agent_groups,id',
-            'start_date' => 'nullable|date', // date dans la semaine importée (idéalement lundi)
-            'sheet' => 'nullable|string', // nom de la feuille optionnel
+            'start_date' => 'nullable|date',
+            'sheet' => 'nullable|string',
             'csv_delimiter' => 'nullable|string|size:1',
             'csv_enclosure' => 'nullable|string|size:1',
             'csv_escape' => 'nullable|string|size:1',
@@ -45,8 +40,6 @@ class PlanningController extends Controller
 
         $tz = 'Africa/Kinshasa';
 
-        // ✅ Si group_id n'est pas fourni, on essaye de prendre un groupe "flexible" (horaire_id NULL).
-        // IMPORTANT: si tu as plusieurs groupes avec horaire_id NULL, évite "le premier" => passe group_id explicitement.
         $groupId = (int) ($data['group_id']
             ?? AgentGroup::query()->whereNull('horaire_id')->orderBy('id')->value('id')
         );
@@ -61,7 +54,6 @@ class PlanningController extends Controller
             ? Carbon::parse($data['start_date'], $tz)
             : Carbon::now($tz);
 
-        // ✅ Force semaine LUNDI -> DIMANCHE (stable partout)
         $startOfWeek = $base->copy()->startOfWeek(Carbon::MONDAY);
         $endOfWeek = $startOfWeek->copy()->addDays(6);
 
@@ -78,7 +70,6 @@ class PlanningController extends Controller
                 $escape = $data['csv_escape'] ?? '\\';
 
                 if (!$delimiter) {
-                    // Sniff delimiter from first line (common: ; , tab |)
                     $firstLine = '';
                     try {
                         $fh = fopen($path, 'rb');
@@ -122,10 +113,8 @@ class PlanningController extends Controller
             }
 
             $headerMap = $this->buildHeaderMap($rows[1] ?? []);
-
             $matriculeCol = $this->findHeaderColumn($headerMap, ['MATRICULE', 'MAT', 'MATR']);
 
-            // ✅ Colonnes jours obligatoires
             $daysCols = [
                 'LUNDI' => $this->findHeaderColumn($headerMap, ['LUNDI']),
                 'MARDI' => $this->findHeaderColumn($headerMap, ['MARDI']),
@@ -160,7 +149,7 @@ class PlanningController extends Controller
 
             foreach ($rows as $rowIndex => $row) {
                 if ($rowIndex === 1) {
-                    continue; // header
+                    continue;
                 }
 
                 $matriculeRaw = (string) ($row[$matriculeCol] ?? '');
@@ -178,7 +167,6 @@ class PlanningController extends Controller
 
                 $stats['agents_found'] += 1;
 
-                // Assignation au groupe (historique)
                 $alreadyAssigned = AgentGroupAssignment::query()
                     ->where('agent_id', $agent->id)
                     ->where('agent_group_id', $groupId)
@@ -193,12 +181,10 @@ class PlanningController extends Controller
                     ]);
                 }
 
-                // Groupe courant sur agent
                 if ((int) $agent->groupe_id !== $groupId) {
                     $agent->update(['groupe_id' => $groupId]);
                 }
 
-                // Nettoyage planning existant de CETTE semaine / CE groupe
                 AgentGroupPlanning::query()
                     ->where('agent_id', $agent->id)
                     ->where('agent_group_id', $groupId)
@@ -233,7 +219,6 @@ class PlanningController extends Controller
                         continue;
                     }
 
-                    // ✅ Résolution horaire + compteur created (sans passage par référence fragile)
                     [$horaire, $created] = $this->resolveHoraireForAgent(
                         agent: $agent,
                         startedAt: $parsed['started_at'],
@@ -280,10 +265,6 @@ class PlanningController extends Controller
         }
     }
 
-    /**
-     * Génère le planning pour un groupe d'agents sur un mois donné.
-     * NOTE: rotation_type est validé mais la logique "alternating" n'est pas implémentée ici (placeholder).
-     */
     public function generateMonthlyPlanning(Request $request): JsonResponse
     {
         try {
@@ -314,8 +295,6 @@ class PlanningController extends Controller
                 $currentDate = $startDate->copy();
 
                 while ($currentDate->lte($endDate)) {
-                    // Placeholder: fixe (horaire par défaut) + repos weekend.
-                    // Pour un vrai "flexible", utilise plutôt importWeeklyPlanning / pattern hebdo.
                     AgentGroupPlanning::create([
                         'agent_id' => $agent->id,
                         'agent_group_id' => $group->id,
@@ -342,9 +321,6 @@ class PlanningController extends Controller
         }
     }
 
-    /**
-     * Récupère le planning d'une station pour une semaine (Lundi -> Dimanche).
-     */
     public function getStationWeeklyPlanning(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -359,7 +335,6 @@ class PlanningController extends Controller
             ? Carbon::parse($data['date'], $tz)
             : Carbon::now($tz);
 
-        // ✅ Force lundi
         $startOfWeek = $base->copy()->startOfWeek(Carbon::MONDAY);
         $endOfWeek = $startOfWeek->copy()->addDays(6);
 
@@ -411,12 +386,12 @@ class PlanningController extends Controller
                 );
 
                 if (!$entry) {
-                    $row['days'][$day['date']] = ['status' => 'unknown', 'label' => '--'];
+                    $row['days'][$day['date']] = ['status' => 'unknown', 'label' => '--', 'horaire_id' => null];
                     continue;
                 }
 
                 if ($entry->is_rest_day) {
-                    $row['days'][$day['date']] = ['status' => 'off', 'label' => 'OFF'];
+                    $row['days'][$day['date']] = ['status' => 'off', 'label' => 'OFF', 'horaire_id' => null];
                     continue;
                 }
 
@@ -429,7 +404,7 @@ class PlanningController extends Controller
                     $label = $start . ' - ' . $end;
                 }
 
-                $row['days'][$day['date']] = ['status' => 'work', 'label' => $label];
+                $row['days'][$day['date']] = ['status' => 'work', 'label' => $label, 'horaire_id' => $entry->horaire_id];
             }
 
             $matrix[] = $row;
@@ -475,8 +450,61 @@ class PlanningController extends Controller
     }
 
     /**
-     * Header helpers
+     * Met à jour le planning hebdomadaire d'un seul agent.
      */
+    public function updateAgentWeeklyPlanning(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'start_date' => 'required|date',
+            'plannings' => 'required|array',
+            'plannings.*.date' => 'required|date',
+            'plannings.*.horaire_id' => 'nullable|integer|exists:presence_horaires,id',
+            'plannings.*.is_rest_day' => 'required|boolean',
+        ]);
+
+        $agent = Agent::findOrFail($data['agent_id']);
+        $startOfWeek = Carbon::parse($data['start_date'])->startOfWeek(Carbon::MONDAY);
+        $endOfWeek = $startOfWeek->copy()->addDays(6);
+
+        // On utilise le groupe actuel de l'agent, ou le premier groupe flexible
+        $groupId = $agent->groupe_id ?? AgentGroup::query()->whereNull('horaire_id')->value('id');
+
+        if (!$groupId) {
+            return response()->json(['errors' => ['L\'agent doit être affecté à un groupe.']], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Nettoyage de la semaine pour cet agent
+            AgentGroupPlanning::query()
+                ->where('agent_id', $agent->id)
+                ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
+                ->delete();
+
+            foreach ($data['plannings'] as $p) {
+                AgentGroupPlanning::create([
+                    'agent_id' => $agent->id,
+                    'agent_group_id' => $groupId,
+                    'horaire_id' => $p['horaire_id'],
+                    'date' => $p['date'],
+                    'is_rest_day' => (bool) $p['is_rest_day'],
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Planning de l\'agent mis à jour avec succès.',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['errors' => [$e->getMessage()]], 500);
+        }
+    }
+
     private function buildHeaderMap(array $row): array
     {
         $map = [];
@@ -507,15 +535,6 @@ class PlanningController extends Controller
         return null;
     }
 
-    /**
-     * Supported values:
-     * - OFF (or empty)
-     * - 08:30-16:30
-     * - 08:30 - 16:30
-     * - H0800_1500
-     *
-     * @return array{type:string, started_at?:string, ended_at?:string}
-     */
     private function parsePlanningCell(string $raw): array
     {
         $trimmed = trim((string) $raw);
@@ -556,9 +575,6 @@ class PlanningController extends Controller
         return ['type' => 'invalid'];
     }
 
-    /**
-     * Retourne [PresenceHoraire|null, bool $created]
-     */
     private function resolveHoraireForAgent(Agent $agent, string $startedAt, string $endedAt): array
     {
         $siteId = $agent->site_id ? (int) $agent->site_id : null;
@@ -567,7 +583,6 @@ class PlanningController extends Controller
             ->where('started_at', $startedAt)
             ->where('ended_at', $endedAt);
 
-        // Si tu veux éviter la multiplication des horaires par site, commente cette partie et garde uniquement site_id NULL.
         if ($siteId !== null) {
             $horaire = (clone $baseQuery)->where('site_id', $siteId)->orderBy('id')->first();
             if ($horaire) {
@@ -585,7 +600,7 @@ class PlanningController extends Controller
             'started_at' => $startedAt,
             'ended_at' => $endedAt,
             'tolerence_minutes' => 15,
-            'site_id' => $siteId, // mets null si tu veux mutualiser les horaires
+            'site_id' => $siteId,
         ]);
 
         return [$horaire, true];
