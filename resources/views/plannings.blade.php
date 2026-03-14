@@ -66,18 +66,14 @@
                         <i class="ti ti-chevron-left me-1"></i>Semaines passées
                     </button>
 
-
                     <button type="button" class="btn btn-white border" @click="goNext" :disabled="isLoading || !canNext">
                         Semaines suivantes<i class="ti ti-chevron-right ms-1"></i>
                     </button>
 
-
-                    <button type="button" class="btn btn-warning-light border" @click="duplicatePrevWeek" :disabled="isLoading || !canDuplicatePrev">
+                    <button type="button" class="btn btn-info-light border" @click="duplicatePrevWeek" :disabled="isLoading || !canDuplicatePrev">
                         <i class="ti ti-copy me-1"></i>Régénérer le planning
                     </button>
                 </div>
-
-
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

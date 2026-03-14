@@ -917,6 +917,62 @@ class PresenceController extends Controller
         return response()->json(['status' => 'success', 'groups' => $groups]);
     }
 
+    /**
+     * Rapport mensuel (JSON + PDF si export=pdf).
+     */
+    public function monthlyReport(Request $request, AttendanceReportService $service): \Symfony\Component\HttpFoundation\Response
+    {
+        $data = $request->validate([
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'agent_id' => 'nullable|integer|exists:agents,id',
+            'group_id' => 'nullable|integer|exists:agent_groups,id',
+        ]);
+
+        $month = (int) ($data['month'] ?? Carbon::now()->month);
+        $year = (int) ($data['year'] ?? Carbon::now()->year);
+
+        $filters = [
+            'station_id' => $data['station_id'] ?? null,
+            'agent_id' => $data['agent_id'] ?? null,
+            'group_id' => $data['group_id'] ?? null,
+        ];
+
+        $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
+
+        if ($request->query('export') === 'pdf') {
+            $pdf = Pdf::loadView('pdf.reports.monthly_report', [
+                'data' => $matrix['data'],
+                'mois' => $month,
+                'annee' => $year,
+            ])->setPaper('a4', 'portrait');
+
+            return $pdf->download("rapport_mensuel_{$month}_{$year}.pdf");
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'month' => $month,
+            'year' => $year,
+            'data' => $matrix['data'],
+            'agents' => $matrix['agents']
+                ->mapWithKeys(function (Agent $a) {
+                    $key = $a->fullname . ' (' . $a->matricule . ')';
+                    return [
+                        $key => [
+                            'id' => $a->id,
+                            'fullname' => $a->fullname,
+                            'matricule' => $a->matricule,
+                            'photo' => $a->photo,
+                            'station_id' => $a->site_id,
+                            'station_name' => $a->station?->name,
+                        ],
+                    ];
+                }),
+        ]);
+    }
+
     public function dailyReport(Request $request, AttendanceReportService $service): JsonResponse
     {
         $data = $request->validate([
@@ -1110,6 +1166,124 @@ class PresenceController extends Controller
         return response()->json([
             'status' => 'success',
             'history' => $page,
+        ]);
+    }
+
+    /**
+     * Résumé "agent_attendance": profil, station, horaire du jour + stats (journalier/mensuel).
+     */
+    public function agentAttendanceSummary(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'hours_date' => 'nullable|date',
+            'month' => 'nullable|date_format:Y-m',
+        ]);
+
+        $now = Carbon::now()->setTimezone('Africa/Kinshasa');
+        $agent = Agent::with(['station', 'horaire', 'groupe.horaire'])->findOrFail((int) $data['agent_id']);
+
+        $horaire = $this->getHoraireForAgent($agent, $now);
+        $dateForHours = !empty($data['hours_date']) ? Carbon::parse($data['hours_date']) : $now->copy();
+        $dateForHours = $dateForHours->setTimezone('Africa/Kinshasa');
+        $dateForHoursWithTime = $dateForHours->copy()->setTime((int) $now->hour, (int) $now->minute, (int) $now->second);
+        $dateReference = $horaire ? $this->getDateReference($dateForHoursWithTime, $horaire) : $dateForHours->copy()->startOfDay();
+        $dateReferenceString = $dateReference->toDateString();
+
+        $monthBase = !empty($data['month'])
+            ? Carbon::createFromFormat('Y-m', $data['month'])->startOfMonth()
+            : $now->copy()->startOfMonth();
+        $monthStart = $monthBase->copy()->startOfMonth()->toDateString();
+        $monthEnd = $monthBase->copy()->endOfMonth()->toDateString();
+
+        $dailyRows = PresenceAgents::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date_reference', $dateReferenceString)
+            ->get();
+
+        $totalMinutes = 0;
+        foreach ($dailyRows as $row) {
+            $rawStart = $row->getRawOriginal('started_at');
+            if (!$rawStart) {
+                continue;
+            }
+            $start = Carbon::parse($rawStart);
+            $rawEnd = $row->getRawOriginal('ended_at');
+            $end = $rawEnd ? Carbon::parse($rawEnd) : $now;
+            $diff = $start->diffInMinutes($end, false);
+            if ($diff > 0) {
+                $totalMinutes += $diff;
+            }
+        }
+
+        $presenceDaysMonthly = PresenceAgents::query()
+            ->where('agent_id', $agent->id)
+            ->whereBetween('date_reference', [$monthStart, $monthEnd])
+            ->whereNotNull('started_at')
+            ->count();
+
+        $lateDaysMonthly = PresenceAgents::query()
+            ->where('agent_id', $agent->id)
+            ->whereBetween('date_reference', [$monthStart, $monthEnd])
+            ->where('retard', 'oui')
+            ->count();
+
+        $isOnLeave = Conge::query()
+            ->where('agent_id', $agent->id)
+            ->where('status', 'approved')
+            ->whereDate('date_debut', '<=', $now->toDateString())
+            ->whereDate('date_fin', '>=', $now->toDateString())
+            ->exists();
+
+        $hasPresenceToday = PresenceAgents::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date_reference', $dateReferenceString)
+            ->whereNotNull('started_at')
+            ->exists();
+
+        $isOffDay = AgentGroupPlanning::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date', $dateReferenceString)
+            ->where('is_rest_day', true)
+            ->exists();
+
+        $todayStatus = $isOffDay ? 'off' : ($isOnLeave ? 'conge' : ($hasPresenceToday ? 'present' : 'absent'));
+
+        $expectedStart = $horaire ? (string) $horaire->getRawOriginal('started_at') : null;
+        $expectedMidCheck = $horaire ? (string) $horaire->getRawOriginal('mid_check') : null;
+        $expectedEnd = $horaire ? (string) $horaire->getRawOriginal('ended_at') : null;
+        $expectedStart = $expectedStart ? substr($expectedStart, 0, 5) : null;
+        $expectedMidCheck = $expectedMidCheck ? substr($expectedMidCheck, 0, 5) : null;
+        $expectedEnd = $expectedEnd ? substr($expectedEnd, 0, 5) : null;
+
+        return response()->json([
+            'status' => 'success',
+            'agent' => [
+                'id' => $agent->id,
+                'fullname' => $agent->fullname,
+                'matricule' => $agent->matricule,
+                'photo' => $agent->photo,
+                'station' => $agent->station ? ['id' => $agent->station->id, 'name' => $agent->station->name] : null,
+            ],
+            'schedule' => $horaire ? [
+                'id' => $horaire->id,
+                'name' => $horaire->libelle,
+                'expected_start' => $expectedStart,
+                'expected_mid_check' => $expectedMidCheck,
+                'expected_end' => $expectedEnd,
+                'tolerance_minutes' => $horaire->tolerence_minutes,
+            ] : null,
+            'today_status' => $todayStatus,
+            'periods' => [
+                'daily_date_reference' => $dateReferenceString,
+                'monthly_from' => $monthStart,
+                'monthly_to' => $monthEnd,
+            ],
+            'stats' => [
+                'total_hours_daily' => round($totalMinutes / 60, 1),
+                'presences_monthly' => (int) $presenceDaysMonthly,
+                'retards_monthly' => (int) $lateDaysMonthly,
+            ],
         ]);
     }
 
@@ -1460,159 +1634,6 @@ class PresenceController extends Controller
                         ],
                     ];
                 }),
-        ]);
-    }
-
-    public function agentMaintenanceHistory(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'agent_id' => 'required|integer|exists:agents,id',
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'per_page' => 'nullable|integer|min:1|max:500',
-            'station_id' => 'nullable|integer|exists:sites,id',
-        ]);
-
-        $query = MaintenanceAgent::query()
-            ->with(['agent.station', 'station'])
-            ->where('agent_id', (int) $data['agent_id'])
-            ->when(!empty($data['from']), fn ($q) => $q->whereDate('date_maintenance', '>=', $data['from']))
-            ->when(!empty($data['to']), fn ($q) => $q->whereDate('date_maintenance', '<=', $data['to']))
-            ->when(!empty($data['station_id']), fn ($q) => $q->where('station_id', (int) $data['station_id']))
-            ->orderByDesc('date_maintenance')
-            ->orderByDesc('started_at');
-
-        $perPage = (int) ($data['per_page'] ?? 15);
-        $page = $query->paginate($perPage);
-        $page->getCollection()->transform(function (MaintenanceAgent $maintenance) {
-            $maintenance->date_maintenance_iso = $maintenance->getRawOriginal('date_maintenance');
-            $maintenance->started_at_raw = $maintenance->getRawOriginal('started_at');
-            $maintenance->end_at_raw = $maintenance->getRawOriginal('end_at');
-            $this->attachMaintenanceMeta($maintenance);
-            return $maintenance;
-        });
-
-        return response()->json([
-            'status' => 'success',
-            'history' => $page,
-        ]);
-    }
-
-    /**
-     * Résumé "agent_attendance": profil, station, horaire du jour + stats (journalier/mensuel).
-     */
-    public function agentAttendanceSummary(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'agent_id' => 'required|integer|exists:agents,id',
-            'hours_date' => 'nullable|date',
-            'month' => 'nullable|date_format:Y-m',
-        ]);
-
-        $now = Carbon::now()->setTimezone('Africa/Kinshasa');
-        $agent = Agent::with(['station', 'horaire', 'groupe.horaire'])->findOrFail((int) $data['agent_id']);
-
-        $horaire = $this->getHoraireForAgent($agent, $now);
-        $dateForHours = !empty($data['hours_date']) ? Carbon::parse($data['hours_date']) : $now->copy();
-        $dateForHours = $dateForHours->setTimezone('Africa/Kinshasa');
-        $dateForHoursWithTime = $dateForHours->copy()->setTime((int) $now->hour, (int) $now->minute, (int) $now->second);
-        $dateReference = $horaire ? $this->getDateReference($dateForHoursWithTime, $horaire) : $dateForHours->copy()->startOfDay();
-        $dateReferenceString = $dateReference->toDateString();
-
-        $monthBase = !empty($data['month'])
-            ? Carbon::createFromFormat('Y-m', $data['month'])->startOfMonth()
-            : $now->copy()->startOfMonth();
-        $monthStart = $monthBase->copy()->startOfMonth()->toDateString();
-        $monthEnd = $monthBase->copy()->endOfMonth()->toDateString();
-
-        $dailyRows = PresenceAgents::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date_reference', $dateReferenceString)
-            ->get();
-
-        $totalMinutes = 0;
-        foreach ($dailyRows as $row) {
-            $rawStart = $row->getRawOriginal('started_at');
-            if (!$rawStart) {
-                continue;
-            }
-            $start = Carbon::parse($rawStart);
-            $rawEnd = $row->getRawOriginal('ended_at');
-            $end = $rawEnd ? Carbon::parse($rawEnd) : $now;
-            $diff = $start->diffInMinutes($end, false);
-            if ($diff > 0) {
-                $totalMinutes += $diff;
-            }
-        }
-
-        $presenceDaysMonthly = PresenceAgents::query()
-            ->where('agent_id', $agent->id)
-            ->whereBetween('date_reference', [$monthStart, $monthEnd])
-            ->whereNotNull('started_at')
-            ->count();
-
-        $lateDaysMonthly = PresenceAgents::query()
-            ->where('agent_id', $agent->id)
-            ->whereBetween('date_reference', [$monthStart, $monthEnd])
-            ->where('retard', 'oui')
-            ->count();
-
-        $isOnLeave = Conge::query()
-            ->where('agent_id', $agent->id)
-            ->where('status', 'approved')
-            ->whereDate('date_debut', '<=', $now->toDateString())
-            ->whereDate('date_fin', '>=', $now->toDateString())
-            ->exists();
-
-        $hasPresenceToday = PresenceAgents::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date_reference', $dateReferenceString)
-            ->whereNotNull('started_at')
-            ->exists();
-
-        $isOffDay = AgentGroupPlanning::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date', $dateReferenceString)
-            ->where('is_rest_day', true)
-            ->exists();
-
-        $todayStatus = $isOffDay ? 'off' : ($isOnLeave ? 'conge' : ($hasPresenceToday ? 'present' : 'absent'));
-
-        $expectedStart = $horaire ? (string) $horaire->getRawOriginal('started_at') : null;
-        $expectedMidCheck = $horaire ? (string) $horaire->getRawOriginal('mid_check') : null;
-        $expectedEnd = $horaire ? (string) $horaire->getRawOriginal('ended_at') : null;
-        $expectedStart = $expectedStart ? substr($expectedStart, 0, 5) : null;
-        $expectedMidCheck = $expectedMidCheck ? substr($expectedMidCheck, 0, 5) : null;
-        $expectedEnd = $expectedEnd ? substr($expectedEnd, 0, 5) : null;
-
-        return response()->json([
-            'status' => 'success',
-            'agent' => [
-                'id' => $agent->id,
-                'fullname' => $agent->fullname,
-                'matricule' => $agent->matricule,
-                'photo' => $agent->photo,
-                'station' => $agent->station ? ['id' => $agent->station->id, 'name' => $agent->station->name] : null,
-            ],
-            'schedule' => $horaire ? [
-                'id' => $horaire->id,
-                'name' => $horaire->libelle,
-                'expected_start' => $expectedStart,
-                'expected_mid_check' => $expectedMidCheck,
-                'expected_end' => $expectedEnd,
-                'tolerance_minutes' => $horaire->tolerence_minutes,
-            ] : null,
-            'today_status' => $todayStatus,
-            'periods' => [
-                'daily_date_reference' => $dateReferenceString,
-                'monthly_from' => $monthStart,
-                'monthly_to' => $monthEnd,
-            ],
-            'stats' => [
-                'total_hours_daily' => round($totalMinutes / 60, 1),
-                'presences_monthly' => (int) $presenceDaysMonthly,
-                'retards_monthly' => (int) $lateDaysMonthly,
-            ],
         ]);
     }
 
