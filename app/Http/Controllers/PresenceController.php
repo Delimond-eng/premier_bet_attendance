@@ -1169,6 +1169,11 @@ class PresenceController extends Controller
         ]);
     }
 
+    public function agentMaintenanceHistory(Request $request): JsonResponse
+    {
+        return $this->maintenanceReport($request);
+    }
+
     /**
      * Résumé "agent_attendance": profil, station, horaire du jour + stats (journalier/mensuel).
      */

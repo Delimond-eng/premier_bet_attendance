@@ -270,7 +270,7 @@ new Vue({
                 if (this.filters.station_id) params.set("station_id", this.filters.station_id);
 
                 const { data } = await get(`/agents/attendances/maintenance-history?${params.toString()}`);
-                this.maintenanceRows = data?.history?.data ?? [];
+                this.maintenanceRows = data?.maintenances?.data ?? [];
 
                 this.$nextTick(() => setTimeout(() => initOrRefreshDatatable(this.$refs.tableMaintenances, [[0, "desc"]]), 0));
             } catch (_) {
