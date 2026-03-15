@@ -1065,7 +1065,6 @@ class AdminController extends Controller
                     'total' => 0,
                 ];
             }
-
             $bucketIndex = $bucketIndexes[$bucketKey];
             $seriesByStation[$stationKey]['data'][$bucketIndex] += 1;
             $seriesByStation[$stationKey]['total'] += 1;

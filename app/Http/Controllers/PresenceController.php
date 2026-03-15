@@ -1331,22 +1331,24 @@ class PresenceController extends Controller
             'only_active' => 'nullable|boolean',
         ]);
 
-        $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
-        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $baseDate->copy()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : $baseDate->copy()->endOfDay();
-
-        if ($start->gt($end)) {
-            [$start, $end] = [$end, $start];
-        }
-
         $baseQuery = MaintenanceAgent::query()
             ->when(!empty($data['only_active']), fn($q) => $q->whereNull('end_at'))
-            ->when(empty($data['only_active']), function($q) use ($start, $end) {
-                $q->whereDate('date_maintenance', '>=', $start->toDateString())
-                  ->whereDate('date_maintenance', '<=', $end->toDateString());
-            })
             ->when(!empty($data['station_id']), fn ($q) => $q->where('station_id', (int) $data['station_id']))
             ->when(!empty($data['agent_id']), fn ($q) => $q->where('agent_id', (int) $data['agent_id']));
+
+        // Only apply date filtering if specifically requested or if it's a global report (not specific to an agent)
+        if (!empty($data['from']) || !empty($data['to']) || !empty($data['date']) || empty($data['agent_id'])) {
+            $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
+            $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $baseDate->copy()->startOfDay();
+            $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : $baseDate->copy()->endOfDay();
+
+            if ($start->gt($end)) {
+                [$start, $end] = [$end, $start];
+            }
+
+            $baseQuery->whereDate('date_maintenance', '>=', $start->toDateString())
+                      ->whereDate('date_maintenance', '<=', $end->toDateString());
+        }
 
         $total = (clone $baseQuery)->count();
         $completed = (clone $baseQuery)->whereNotNull('end_at')->count();
@@ -1380,8 +1382,6 @@ class PresenceController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'from' => $start->toDateString(),
-            'to' => $end->toDateString(),
             'summary' => [
                 'total' => $total,
                 'completed' => $completed,

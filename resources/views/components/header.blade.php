@@ -2,11 +2,11 @@
     <div class="main-header">
 
         <div class="header-left">
-            <a href="https://smarthr.co.in/demo/html/template/index.html" class="logo">
-                <img src="https://smarthr.co.in/demo/html/template/assets/img/logo.svg" alt="Logo">
+            <a href="/" class="logo">
+                <img src="{{ asset('assets/img/icon.jpg') }}" alt="Logo">
             </a>
-            <a href="https://smarthr.co.in/demo/html/template/index.html" class="dark-logo">
-                <img src="https://smarthr.co.in/demo/html/template/assets/img/logo-white.svg" alt="Logo">
+            <a href="/" class="dark-logo">
+                <img src="{{ asset('assets/img/icon.jpg') }}" alt="Logo">
             </a>
         </div>
 
@@ -83,8 +83,6 @@
         <div class="dropdown mobile-user-menu">
             <a href="javascript:void(0);" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa fa-ellipsis-v"></i></a>
             <div class="dropdown-menu dropdown-menu-end">
-                <a class="dropdown-item" href="https://smarthr.co.in/demo/html/template/profile.html">My Profile</a>
-                <a class="dropdown-item" href="https://smarthr.co.in/demo/html/template/profile-settings.html">Settings</a>
                 <form method="POST" action="{{ route('logout') }}" class="dropdown-item m-0 p-0">
                     @csrf
                     <button type="submit" class="btn btn-link w-100 text-start p-0 js-logout">Logout</button>

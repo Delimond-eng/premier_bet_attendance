@@ -41,7 +41,14 @@ class MaintenanceAgent extends Model
                 return;
             }
 
-            $builder->where($builder->qualifyColumn('station_id'), $stationId);
+            // A manager should see maintenances performed at their station
+            // OR maintenances performed by agents assigned to their station.
+            $builder->where(function (Builder $q) use ($stationId) {
+                $q->where($q->qualifyColumn('station_id'), $stationId)
+                    ->orWhereHas('agent', function (Builder $qq) use ($stationId) {
+                        $qq->where('site_id', $stationId);
+                    });
+            });
         });
     }
 

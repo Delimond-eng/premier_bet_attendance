@@ -306,7 +306,7 @@
                                 <tbody>
                                 <tr v-for="m in maintenanceRows" :key="'m-' + m.id">
                                     <td>@{{ m.date_maintenance_iso || m.date_maintenance }}</td>
-                                    <td>@{{ m.station?.name || '-' }}</td>
+                                    <td>@{{ (m.station && m.station.name) ? m.station.name : '-' }}</td>
                                     <td><span class="badge badge-soft-success">@{{ m.started_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-soft-dark">@{{ m.end_at || '--:--' }}</span></td>
                                     <td>@{{ m.distance_label || 'Distance indisponible' }}</td>
