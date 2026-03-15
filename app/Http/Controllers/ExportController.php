@@ -605,6 +605,99 @@ class ExportController extends Controller
         );
     }
 
+    public function maintenanceReportPdf(Request $request): Response
+    {
+        $payload = $this->buildMaintenanceReportPayload($request);
+        $pdf = Pdf::loadView('pdf.exports.maintenances_report', [
+            'title' => $payload['title'],
+            'metaLines' => $payload['meta'],
+            'headers' => $payload['headers'],
+            'rows' => $payload['table'],
+            'summary' => $payload['summary'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function maintenanceReportExcel(Request $request): StreamedResponse
+    {
+        $payload = $this->buildMaintenanceReportPayload($request);
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
+        );
+    }
+
+    private function buildMaintenanceReportPayload(Request $request): array
+    {
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'agent_id' => 'nullable|integer|exists:agents,id',
+        ]);
+
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfMonth();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : Carbon::today()->endOfDay();
+        $stationId = $data['station_id'] ?? null;
+        $agentId = $data['agent_id'] ?? null;
+
+        $query = MaintenanceAgent::query()
+            ->with(['agent.station', 'station'])
+            ->whereDate('date_maintenance', '>=', $start->toDateString())
+            ->whereDate('date_maintenance', '<=', $end->toDateString())
+            ->when($stationId, fn($q) => $q->where('station_id', (int) $stationId))
+            ->when($agentId, fn($q) => $q->where('agent_id', (int) $agentId));
+
+        $rows = $query->orderByDesc('date_maintenance')->orderByDesc('started_at')->get();
+        $station = $stationId ? Station::find($stationId) : null;
+        $agent = $agentId ? Agent::find($agentId) : null;
+
+        $total = $rows->count();
+        $completed = $rows->whereNotNull('end_at')->count();
+        $ongoing = $total - $completed;
+
+        $headers = ['Agent', 'Matricule', 'Station', 'Date', 'Debut', 'Fin', 'Statut', 'Distance', 'Commentaire'];
+        $table = [];
+        foreach ($rows as $m) {
+            $table[] = [
+                (string) ($m->agent?->fullname ?? ''),
+                (string) ($m->agent?->matricule ?? ''),
+                (string) ($m->station?->name ?? ''),
+                $m->getRawOriginal('date_maintenance'),
+                $m->started_at ? Carbon::parse($m->started_at)->format('H:i') : '',
+                $m->end_at ? Carbon::parse($m->end_at)->format('H:i') : '',
+                $m->end_at ? 'Cloturee' : 'En cours',
+                $this->extractMaintenanceDistanceLabel((string) $m->commentaire),
+                (string) ($m->commentaire ?? ''),
+            ];
+        }
+
+        $meta = [
+            'Periode: ' . $start->toDateString() . ' au ' . $end->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Agent: ' . ($agent?->fullname ?? 'Tous'),
+            'Interventions: ' . $total . ' (Terminees: ' . $completed . ', En cours: ' . $ongoing . ')',
+        ];
+
+        return [
+            'title' => 'Rapport des Maintenances',
+            'sheet_title' => 'Maintenances',
+            'filename_base' => 'rapport_maintenances_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()),
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'summary' => [
+                'total' => $total,
+                'completed' => $completed,
+                'ongoing' => $ongoing,
+            ]
+        ];
+    }
+
     private function summarizeMatrix(array $matrix, $agentsCollection): array
     {
         $agentsByKey = [];

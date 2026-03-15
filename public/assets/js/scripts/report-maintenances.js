@@ -43,6 +43,8 @@ new Vue({
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, "0");
         const dd = String(today.getDate()).padStart(2, "0");
+
+        const firstDayOfMonth = `${yyyy}-${mm}-01`;
         const currentDate = `${yyyy}-${mm}-${dd}`;
 
         return {
@@ -59,7 +61,7 @@ new Vue({
                 off_station: 0,
             },
             filters: {
-                from: currentDate,
+                from: firstDayOfMonth,
                 to: currentDate,
                 station_id: "",
                 agent_id: "",
@@ -219,6 +221,17 @@ new Vue({
                 this._modal = new window.bootstrap.Modal(el);
             }
             this._modal.show();
+        },
+
+        exportReport(format = "excel") {
+            const params = new URLSearchParams();
+            if (this.filters.from) params.set("from", this.filters.from);
+            if (this.filters.to) params.set("to", this.filters.to);
+            if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.agent_id) params.set("agent_id", this.filters.agent_id);
+
+            const baseUrl = format === "pdf" ? "/reports/maintenance/export/pdf" : "/reports/maintenance/export/excel";
+            window.open(`${baseUrl}?${params.toString()}`, "_blank");
         },
     },
 });

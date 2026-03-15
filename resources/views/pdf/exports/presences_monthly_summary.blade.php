@@ -12,17 +12,18 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 20%;">Agent</th>
-            <th style="width: 12%;">Station</th>
-            <th style="width: 7%;">Present</th>
-            <th style="width: 7%;">Retard</th>
-            <th style="width: 7%;">Absent</th>
-            <th style="width: 7%;">Conge</th>
-            <th style="width: 9%;">Autorisation</th>
-            <th style="width: 9%;">Justif retard</th>
-            <th style="width: 9%;">Justif absence</th>
-            <th style="width: 7%;">Heures Sup</th>
-            <th style="width: 6%;">Total</th>
+            <th style="width: 18%;">Agent</th>
+            <th style="width: 10%;">Station</th>
+            <th style="width: 6%;">Près.</th>
+            <th style="width: 6%;">Ret.</th>
+            <th style="width: 6%;">Abs.</th>
+            <th style="width: 6%;">Congé</th>
+            <th style="width: 8%;">Auto.</th>
+            <th style="width: 8%;">Just. R.</th>
+            <th style="width: 8%;">Just. A.</th>
+            <th style="width: 8%;">H. Norm.</th>
+            <th style="width: 8%;">H. Sup</th>
+            <th style="width: 8%;">Total Pr.</th>
         </tr>
         </thead>
         <tbody>
@@ -33,7 +34,7 @@
                     <div><strong>{{ $a['fullname'] ?? '-' }}</strong></div>
                     <div class="muted">{{ $a['matricule'] ?? '' }}</div>
                 </td>
-                <td>{{ $a['station_name'] ?? '-' }}</td>
+                <td style="font-size: 8px;">{{ $a['station_name'] ?? '-' }}</td>
                 <td>{{ $r['present'] ?? 0 }}</td>
                 <td>{{ $r['retard'] ?? 0 }}</td>
                 <td>{{ $r['absent'] ?? 0 }}</td>
@@ -41,7 +42,8 @@
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>
                 <td>{{ $r['absence_justifiee'] ?? 0 }}</td>
-                <td>{{ $r['overtime_display'] ?? '0h' }}</td>
+                <td class="text-center"><strong>{{ $r['normal_hours_display'] ?? '0h' }}</strong></td>
+                <td class="text-center"><strong>{{ $r['overtime_display'] ?? '0h' }}</strong></td>
                 <td>{{ $r['total_preste'] ?? 0 }}</td>
             </tr>
         @endforeach

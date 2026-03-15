@@ -139,28 +139,6 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->name('group.store')
             ->middleware('canany:groupes.create,groupes.update');
 
-        Route::post('/generate', [PlanningController::class, 'generateMonthlyPlanning'])
-            ->name('planning.generate')
-            ->middleware('can:plannings.create');
-        Route::get('/planning/week', [PlanningController::class, 'getStationWeeklyPlanning'])
-            ->name('planning.week')
-            ->middleware('can:plannings.view');
-        Route::post('/planning/import-week', [PlanningController::class, 'importWeeklyPlanning'])
-            ->name('planning.import_week')
-            ->middleware('can:plannings.import');
-        Route::post('/planning/agent/update', [PlanningController::class, 'updateAgentWeeklyPlanning'])
-            ->name('planning.agent.update')
-            ->middleware('can:plannings.update');
-        Route::post('/planning/agent/delete', [PlanningController::class, 'deleteAgentWeeklyPlanning'])
-            ->name('planning.agent.delete')
-            ->middleware('can:plannings.delete');
-        Route::post('/planning/duplicate-week', [PlanningController::class, 'duplicatePreviousWeek'])
-            ->name('planning.duplicate_week')
-            ->middleware('can:plannings.create');
-        Route::get('/agents-for-station', [PlanningController::class, 'getAgentsForStation'])
-            ->name('planning.agents_for_station')
-            ->middleware('can:plannings.view');
-
         // RH - Timesheet / Conges / Authorizations / Justifications / Attributions
         Route::get('/timesheet.view', fn () => view('rh_timesheet'))
             ->name('timesheet.view')
@@ -336,6 +314,14 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:rapport_presences.export');
         Route::get('/monthly/export/excel', [ExportController::class, 'monthlyPresenceSummaryExcel'])
             ->name('reports.monthly.export.excel')
+            ->middleware('can:rapport_presences.export');
+
+        // Maintenances Exports
+        Route::get('/maintenance/export/pdf', [ExportController::class, 'maintenanceReportPdf'])
+            ->name('reports.maintenance.export.pdf')
+            ->middleware('can:rapport_presences.export');
+        Route::get('/maintenance/export/excel', [ExportController::class, 'maintenanceReportExcel'])
+            ->name('reports.maintenance.export.excel')
             ->middleware('can:rapport_presences.export');
     });
 
