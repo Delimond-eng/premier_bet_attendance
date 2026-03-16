@@ -186,7 +186,7 @@
                             <th>STATION AFFECTE</th>
                             <th>Date création</th>
                             <th>Statut</th>
-                            <th></th>
+                            <th class="text-end">ACTIONS</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -225,21 +225,26 @@
                                             <i class="ti ti-point-filled me-1"></i>Inactif
                                         </span>
                                     </td>
-                                    <td>
-                                        <div class="d-inline-flex">
-                                            @canany(['agents.update','agents.delete'])
-                                                <div class="action-icon d-inline-flex me-2">
-                                                    @can('agents.update')
-                                                        <a href="javascript:void(0);" class="me-2 text-info" data-action="edit" :data-id="data.id"><i class="ti ti-edit"></i></a>
-                                                    @endcan
-                                                    @can('agents.delete')
-                                                        <a href="javascript:void(0);" class="me-2 text-danger" data-action="remove" :data-id="data.id"><i class="ti ti-trash"></i></a>
-                                                    @endcan
-                                                </div>
-                                            @endcanany
-                                            @can('agents.view')
-                                                <a class="btn btn-outline-secondary rounded-pill btn-sm" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-arrow-up-circle me-1"></i>Voir détails</a>
-                                            @endcan
+                                    <td class="text-end">
+                                        <div class="dropdown">
+                                            <button class="btn btn-soft-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                Actions
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end shadow-lg">
+                                                @can('agents.view')
+                                                    <li><a class="dropdown-item" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-eye me-2 text-primary"></i>Voir détails</a></li>
+                                                @endcan
+                                                @can('plannings.view')
+                                                    <li><a class="dropdown-item" :href="'{{ route('rh.plannings.view') }}?agent_id='+data.id"><i class="ti ti-calendar-event me-2 text-info"></i>Gérer planning</a></li>
+                                                @endcan
+                                                @can('agents.update')
+                                                    <li><a class="dropdown-item" href="javascript:void(0);" data-action="edit" :data-id="data.id"><i class="ti ti-edit me-2 text-success"></i>Modifier</a></li>
+                                                @endcan
+                                                @can('agents.delete')
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item text-danger" href="javascript:void(0);" data-action="remove" :data-id="data.id"><i class="ti ti-trash me-2"></i>Supprimer</a></li>
+                                                @endcan
+                                            </ul>
                                         </div>
                                     </td>
                                 </tr>

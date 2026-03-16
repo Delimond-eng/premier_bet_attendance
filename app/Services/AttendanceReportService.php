@@ -85,7 +85,16 @@ class AttendanceReportService
             ->with(['station', 'groupe', 'horaire'])
             ->when(
                 array_key_exists('station_id', $filters) && $filters['station_id'] !== null && $filters['station_id'] !== '',
-                fn ($q) => $q->where('site_id', (int) $filters['station_id'])
+                function ($q) use ($filters, $start, $end) {
+                    $sid = (int) $filters['station_id'];
+                    $q->where(function ($sub) use ($sid, $start, $end) {
+                        $sub->where('site_id', $sid)
+                            ->orWhereHas('plannings', function ($pq) use ($sid, $start, $end) {
+                                $pq->where('site_id', $sid)
+                                   ->whereBetween('date', [$start->toDateString(), $end->toDateString()]);
+                            });
+                    });
+                }
             )
             ->when(!empty($filters['group_id']), fn ($q) => $q->where('groupe_id', $filters['group_id']))
             ->when(!empty($filters['agent_id']), fn ($q) => $q->where('id', $filters['agent_id']))
@@ -145,7 +154,7 @@ class AttendanceReportService
         $plannings = AgentGroupPlanning::query()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->get(['agent_id', 'agent_group_id', 'date', 'is_rest_day', 'horaire_id'])
+            ->get(['agent_id', 'agent_group_id', 'date', 'is_rest_day', 'horaire_id', 'site_id'])
             ->groupBy(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date)->format('Y-m-d') . '|' . (int) $p->agent_group_id);
 
         $planningsAny = $plannings
@@ -336,6 +345,7 @@ class AttendanceReportService
                     'horaire' => $horaire,
                     'overtime_minutes' => $overtimeMinutes,
                     'duration_minutes' => $durationMinutes,
+                    'planned_site_id' => $planning?->site_id,
                 ];
 
                 $cursor->addDay();

@@ -146,6 +146,7 @@ class GenerateFlexiblePlanning extends Command
                         $cycle = $cycleByDayIndex->get($dayIndex);
                         $isRestDay = (bool) ($cycle?->is_rest_day ?? true);
                         $horaireId = $isRestDay ? null : ($cycle?->horaire_id ?? null);
+                        $siteId = $isRestDay ? null : ($cycle?->site_id ?? $agent->site_id);
 
                         if ($dryRun) {
                             if ($overwrite) {
@@ -159,7 +160,7 @@ class GenerateFlexiblePlanning extends Command
                         if ($overwrite) {
                             AgentGroupPlanning::updateOrCreate(
                                 ['agent_id' => $agent->id, 'agent_group_id' => $groupId, 'date' => $date],
-                                ['horaire_id' => $horaireId, 'is_rest_day' => $isRestDay]
+                                ['horaire_id' => $horaireId, 'is_rest_day' => $isRestDay, 'site_id' => $siteId]
                             );
                             $stats['updated'] += 1;
                             continue;
@@ -180,6 +181,7 @@ class GenerateFlexiblePlanning extends Command
                             'agent_id' => $agent->id,
                             'agent_group_id' => $groupId,
                             'horaire_id' => $horaireId,
+                            'site_id' => $siteId,
                             'date' => $date,
                             'is_rest_day' => $isRestDay,
                         ]);

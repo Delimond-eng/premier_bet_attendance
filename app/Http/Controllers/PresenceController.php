@@ -83,11 +83,11 @@ class PresenceController extends Controller
         $horaire = null;
         $dateReference = $now->copy()->startOfDay();
         if (in_array($data['key'], ['check-in', 'confirmation'], true)) {
-            $horaire = $this->getHoraireForAgent($agent, $now);
+            $horaire = $this->getHoraireForAgent($agent, $now, $stationId);
             if ($data['key'] === 'check-in' && !$horaire) {
                 return response()->json([
                     'status' => 'error',
-                    'errors' => ['Horaire introuvable pour cet agent (planning/groupe/agent/station).'],
+                    'errors' => ['Horaire introuvable pour cet agent sur cette station.'],
                 ], 200);
             }
             if ($horaire) {
@@ -109,6 +109,7 @@ class PresenceController extends Controller
             $isOffDay = AgentGroupPlanning::query()
                 ->where('agent_id', $agent->id)
                 ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
+                ->when($stationId !== null, fn ($q) => $q->where('site_id', $stationId))
                 ->whereDate('date', $dateReference->toDateString())
                 ->where('is_rest_day', true)
                 ->exists();
@@ -191,7 +192,7 @@ class PresenceController extends Controller
 
         $presence = PresenceAgents::create([
             'agent_id' => $agent->id,
-            'site_id' => $assignedStationId,
+            'site_id' => $stationId, // On utilise la station de pointage comme station d'affectation pour ce shift rotatif
             'gps_site_id' => $stationId,
             'station_check_in_id' => $stationId,
             'horaire_id' => $horaire?->id,
@@ -680,7 +681,7 @@ class PresenceController extends Controller
             ->first();
     }
 
-    private function getHoraireForAgent(Agent $agent, Carbon $now): ?PresenceHoraire
+    private function getHoraireForAgent(Agent $agent, Carbon $now, ?int $stationId = null): ?PresenceHoraire
     {
         $date = $now->toDateString();
         $yesterday = $now->copy()->subDay()->toDateString();
@@ -717,17 +718,18 @@ class PresenceController extends Controller
         $groupYesterday = $groupById($gidYesterday);
         $isFlexibleYesterday = $groupYesterday && empty($groupYesterday->horaire_id);
 
-        $planningFor = function (string $d) use ($agent, $groupIdFor) {
+        $planningFor = function (string $d, ?int $sid = null) use ($agent, $groupIdFor) {
             $gid = $groupIdFor($d);
             return AgentGroupPlanning::query()
                 ->where('agent_id', $agent->id)
                 ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
+                ->when($sid !== null, fn ($q) => $q->where('site_id', $sid))
                 ->whereDate('date', $d)
                 ->where('is_rest_day', false)
                 ->first();
         };
 
-        $planningYesterday = $planningFor($yesterday);
+        $planningYesterday = $planningFor($yesterday, $stationId);
         if ($planningYesterday?->horaire_id) {
             $h = PresenceHoraire::find($planningYesterday->horaire_id);
             if ($h) {
@@ -749,7 +751,7 @@ class PresenceController extends Controller
             return null;
         }
 
-        $planning = $planningFor($date);
+        $planning = $planningFor($date, $stationId);
         if ($planning?->horaire_id) {
             return PresenceHoraire::find($planning->horaire_id);
         }
