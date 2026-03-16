@@ -13,6 +13,8 @@ new Vue({
             selectedStationId: "",
             activeMaintenances: [],
             activeMaintenanceId: null,
+            knownMaintenanceIds: [],
+            isFirstPolling: true,
             sidebar: null,
             currentStation: {},
             currentMaintenance: {}
@@ -20,24 +22,16 @@ new Vue({
     },
 
     computed: {
-        /**
-         * Mapping réactif : ID Station -> Objet Maintenance
-         * Permet un accès instantané O(1) pour le watcher et les clics
-         */
         maintenanceMap() {
             const map = {};
             this.activeMaintenances.forEach(m => {
-                map[m.station_id] = m;
+                map[Number(m.station_id)] = m;
             });
             return map;
         }
     },
 
     watch: {
-        /**
-         * Watcher fluide : Se déclenche dès que la liste des maintenances change.
-         * Il synchronise l'UI de chaque marqueur sans recréer les objets Leaflet.
-         */
         maintenanceMap: {
             handler(newMap) {
                 this.syncMarkersUI(newMap);
@@ -61,10 +55,10 @@ new Vue({
     methods: {
         initMap() {
             try {
-                // Initialisation sur Kinshasa par défaut
+                // Centre Kinshasa par défaut
                 this.map = L.map('map', {
-                    center: [-4.4419, 15.2663],
-                    zoom: 14,
+                    center: [-4.325, 15.3222],
+                    zoom: 13,
                     minZoom: 2,
                     maxZoom: 22
                 });
@@ -75,13 +69,14 @@ new Vue({
                     maxNativeZoom: 22
                 }).addTo(this.map);
 
-                // Forcer le rendu initial
                 setTimeout(() => {
                     this.map.invalidateSize();
                 }, 500);
 
-                this.loadStations();
-                this.startPolling();
+                // On charge les stations, puis on lance le polling
+                this.loadStations().then(() => {
+                    this.startPolling();
+                });
 
                 const sbEl = document.getElementById('maintenance-info-sidebar');
                 if (sbEl) {
@@ -126,6 +121,7 @@ new Vue({
                     this.$nextTick(() => this.initStationZoomSelect());
 
                     if (markersAdded > 0) {
+                        // Délai pour laisser Leaflet s'initialiser correctement avant le fitBounds
                         setTimeout(() => {
                             this.fitMarkers();
                             this.map.invalidateSize();
@@ -141,18 +137,16 @@ new Vue({
 
         fitMarkers() {
             const markerArray = Object.values(this.markers).map(m => m.marker);
-            if (markerArray.length === 0) return;
-
-            if (markerArray.length === 1) {
-                const target = markerArray[0].getLatLng();
-                this.map.setView(target, this.getMaxMapZoom(), { animate: true });
-            } else {
-                const group = new L.featureGroup(markerArray);
-                this.map.fitBounds(group.getBounds(), {
-                    padding: [50, 50],
-                    maxZoom: this.getMaxMapZoom()
-                });
+            if (markerArray.length === 0) {
+                this.map.setView([-4.325, 15.3222], 13);
+                return;
             }
+
+            const group = new L.featureGroup(markerArray);
+            this.map.fitBounds(group.getBounds(), {
+                padding: [50, 50],
+                maxZoom: 14 // Vue d'ensemble ville
+            });
         },
 
         parseLatLng(latlng) {
@@ -183,7 +177,7 @@ new Vue({
             });
         },
 
-        zoomToStation(stationId) {
+        zoomToStation(stationId, level = null) {
             const id = Number(stationId);
             if (!id || !this.map) return;
 
@@ -191,7 +185,8 @@ new Vue({
             if (!stationEntry?.marker) return;
 
             const latlng = stationEntry.marker.getLatLng();
-            this.map.flyTo(latlng, this.getMaxMapZoom(), { duration: 0.7 });
+            const targetZoom = level || this.getMaxMapZoom();
+            this.map.flyTo(latlng, targetZoom, { duration: 1.0 });
         },
 
         addStationMarker(station, coords) {
@@ -213,9 +208,12 @@ new Vue({
             });
 
             marker.on('click', () => {
-                const maintenance = this.maintenanceMap[station.id];
+                const maintenance = this.maintenanceMap[Number(station.id)];
                 if (maintenance) {
                     this.showSidebar(station, maintenance);
+                    this.zoomToStation(station.id, 17);
+                } else {
+                    this.fitMarkers();
                 }
             });
         },
@@ -225,7 +223,28 @@ new Vue({
                 const response = await get("/reports/maintenance/data?only_active=1&per_page=100");
                 const resData = response.data;
                 if (resData && resData.status === 'success') {
-                    this.activeMaintenances = resData.maintenances.data;
+                    const maintenances = resData.maintenances.data;
+                    const currentIds = maintenances.map(m => Number(m.id));
+
+                    // Détection des maintenances à focaliser
+                    const isNewMaintenance = !this.isFirstPolling && maintenances.filter(m => !this.knownMaintenanceIds.includes(Number(m.id))).length > 0;
+                    const shouldFocusInitial = this.isFirstPolling && maintenances.length > 0;
+
+                    if (isNewMaintenance || shouldFocusInitial) {
+                        const target = maintenances[0]; // La plus récente
+                        if (target.station_id && this.markers[Number(target.station_id)]) {
+                            // Petit délai pour s'assurer que le fitMarkers de l'init est passé
+                            setTimeout(() => {
+                                this.zoomToStation(target.station_id, 17);
+                                const stationData = this.markers[Number(target.station_id)].station;
+                                this.showSidebar(stationData, target);
+                            }, 1000);
+                        }
+                    }
+
+                    this.activeMaintenances = maintenances;
+                    this.knownMaintenanceIds = currentIds;
+                    this.isFirstPolling = false;
                 }
             } catch (error) {
                 console.error("Erreur polling maintenances:", error);
@@ -239,7 +258,7 @@ new Vue({
 
                 const dot = markerElement.querySelector('.station-marker');
                 const label = markerElement.querySelector('.station-label');
-                const isMaintenance = !!maintenanceMap[stationId];
+                const isMaintenance = !!maintenanceMap[Number(stationId)];
                 const hasPulse = !!markerElement.querySelector('.pulse-animation');
 
                 if (isMaintenance) {

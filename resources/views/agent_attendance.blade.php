@@ -228,9 +228,11 @@
                                     <th>Heure entree</th>
                                     <th>Controle intermediaire</th>
                                     <th>Heure sortie</th>
-                                    <th>Retard</th>
                                     <th>H. Normales</th>
                                     <th>Heures Sup</th>
+                                    <th>Distance</th>
+                                    <th>Retard</th>
+                                    <th>Motif</th>
                                     <th>Total heures</th>
                                     <th>Photo debut</th>
                                     <th>Photo fin</th>
@@ -261,6 +263,17 @@
                                     <td><span class="badge badge-success-transparent">@{{ p.started_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-info-transparent">@{{ p.mid_check || '--:--' }}</span></td>
                                     <td><span class="badge badge-danger-transparent">@{{ p.ended_at || '--:--' }}</span></td>
+                                    <td><span class="badge bg-outline-info">@{{ p.normal_hours_display || '0h' }}</span></td>
+                                    <td><span class="badge bg-outline-warning">@{{ p.overtime_display || '0h' }}</span></td>
+                                    <td>
+                                        <span v-if="p.is_on_station === true" class="text-success">
+                                            <i class="ti ti-circle-check me-1"></i>@{{ p.distance_label }}
+                                        </span>
+                                        <span v-else-if="p.is_on_station === false" class="text-danger">
+                                            <i class="ti ti-circle-x me-1"></i>@{{ p.distance_label }}
+                                        </span>
+                                        <span v-else class="text-muted">@{{ p.distance_label || '--' }}</span>
+                                    </td>
                                     <td>
                                         <span class="badge badge-warning d-inline-flex align-items-center" v-if="p.retard === 'oui'">
                                             <i class="ti ti-clock-hour-11 me-1"></i>Oui
@@ -269,8 +282,7 @@
                                             <i class="ti ti-clock-hour-11 me-1"></i>Non
                                         </span>
                                     </td>
-                                    <td><span class="badge bg-outline-info">@{{ p.normal_hours_display || '0h' }}</span></td>
-                                    <td><span class="badge bg-outline-warning">@{{ p.overtime_display || '0h' }}</span></td>
+                                    <td>@{{ p.motif || '--' }}</td>
                                     <td>
                                         <span class="badge badge-info d-inline-flex align-items-center">
                                             <i class="ti ti-clock-hour-11 me-1"></i>@{{ p.duree || '--' }}
@@ -309,7 +321,15 @@
                                     <td>@{{ (m.station && m.station.name) ? m.station.name : '-' }}</td>
                                     <td><span class="badge badge-soft-success">@{{ m.started_at || '--:--' }}</span></td>
                                     <td><span class="badge badge-soft-dark">@{{ m.end_at || '--:--' }}</span></td>
-                                    <td>@{{ m.distance_label || 'Distance indisponible' }}</td>
+                                    <td>
+                                        <span v-if="m.is_on_station === true" class="text-success">
+                                            <i class="ti ti-circle-check me-1"></i>@{{ m.distance_label }}
+                                        </span>
+                                        <span v-else-if="m.is_on_station === false" class="text-danger">
+                                            <i class="ti ti-circle-x me-1"></i>@{{ m.distance_label }}
+                                        </span>
+                                        <span v-else class="text-muted">@{{ m.distance_label || 'Distance indisponible' }}</span>
+                                    </td>
                                     <td>
                                         <img v-if="m.photo_debut" :src="m.photo_debut" :data-zoom="m.photo_debut" class="rounded border" style="width:42px;height:42px;object-fit:cover;" alt="photo debut maintenance">
                                         <span v-else class="text-muted">-</span>

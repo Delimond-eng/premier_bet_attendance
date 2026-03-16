@@ -161,6 +161,7 @@
                                 <th>Heure sortie</th>
                                 <th>H. Normales</th>
                                 <th>Heures Sup</th>
+                                <th>Distance</th>
                                 <th>Retard</th>
                                 <th>Motif</th>
                                 <th>Durée</th>
@@ -205,6 +206,15 @@
                                 <td><span class="badge badge-purple">@{{ row.ended_at ?? '--:--' }}</span></td>
                                 <td><span class="badge bg-outline-info">@{{ row.normal_hours_display || '0h' }}</span></td>
                                 <td><span class="badge bg-outline-warning">@{{ row.overtime_display || '0h' }}</span></td>
+                                <td>
+                                    <span v-if="row.is_on_station === true" class="text-success">
+                                        <i class="ti ti-circle-check me-1"></i>@{{ row.distance_label }}
+                                    </span>
+                                    <span v-else-if="row.is_on_station === false" class="text-danger">
+                                        <i class="ti ti-circle-x me-1"></i>@{{ row.distance_label }}
+                                    </span>
+                                    <span v-else class="text-muted">@{{ row.distance_label || '--' }}</span>
+                                </td>
                                 <td>
                                     <span class="badge badge-soft-danger" v-if="row.retard === 'oui'">Oui</span>
                                     <span class="badge badge-soft-success" v-else>Non</span>

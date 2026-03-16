@@ -63,6 +63,7 @@
                             <th>Sortie</th>
                             <th>H. Normales</th>
                             <th>Heures Sup</th>
+                            <th>Distance</th>
                             <th>Durée Totale</th>
                             <th>Retard</th>
                         </tr>
@@ -105,6 +106,15 @@
                             <td><span class="badge badge-purple">@{{ p.ended_at ?? '--:--' }}</span></td>
                             <td><span class="badge bg-outline-info">@{{ p.normal_hours_display || '0h' }}</span></td>
                             <td><span class="badge bg-outline-warning">@{{ p.overtime_display || '0h' }}</span></td>
+                            <td>
+                                <span v-if="p.is_on_station === true" class="text-success">
+                                    <i class="ti ti-circle-check me-1"></i>@{{ p.distance_label }}
+                                </span>
+                                <span v-else-if="p.is_on_station === false" class="text-danger">
+                                    <i class="ti ti-circle-x me-1"></i>@{{ p.distance_label }}
+                                </span>
+                                <span v-else class="text-muted">@{{ p.distance_label || '--' }}</span>
+                            </td>
                             <td><span class="badge badge-info">@{{ p.duree ?? '--' }}</span></td>
                             <td>
                                 <span class="badge badge-soft-danger" v-if="p.retard === 'oui'">Oui</span>
