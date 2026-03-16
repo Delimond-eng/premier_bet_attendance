@@ -320,6 +320,89 @@ class ExportController extends Controller
         return $pdf->download('timesheet_' . sprintf('%02d', $month) . '_' . $year . ($stationId ? ('_' . $stationId) : '') . '.pdf');
     }
 
+    public function monthlyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
+    {
+        $payload = $this->buildMonthlySummaryPayload($request, $service);
+        $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
+            'title' => $payload['title'],
+            'month' => $payload['month'],
+            'year' => $payload['year'],
+            'station' => $payload['station'],
+            'headers' => $payload['headers'],
+            'rows' => $payload['table_data'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function monthlyPresenceSummaryExcel(Request $request, AttendanceReportService $service): StreamedResponse
+    {
+        $payload = $this->buildMonthlySummaryPayload($request, $service);
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
+        );
+    }
+
+    private function buildMonthlySummaryPayload(Request $request, AttendanceReportService $service): array
+    {
+        $data = $request->validate([
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $month = (int) ($data['month'] ?? Carbon::now()->month);
+        $year = (int) ($data['year'] ?? Carbon::now()->year);
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
+        $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
+
+        $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'H. Norm', 'H. Sup', 'Total Preste'];
+        $table = [];
+        foreach ($summarized as $r) {
+            $table[] = [
+                (string) ($r['agent']['matricule'] ?? ''),
+                (string) ($r['agent']['fullname'] ?? ''),
+                (string) ($r['agent']['station_name'] ?? ''),
+                (int) $r['present'],
+                (int) $r['retard'],
+                (int) $r['absent'],
+                (int) $r['conge'],
+                (int) $r['autorisation'],
+                (int) $r['retard_justifie'],
+                (int) $r['absence_justifiee'],
+                (string) $r['normal_hours_display'],
+                (string) $r['overtime_display'],
+                (int) $r['total_preste'],
+            ];
+        }
+
+        $meta = [
+            'Periode: ' . Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Agents: ' . count($table),
+        ];
+
+        return [
+            'title' => 'Resume mensuel des presences',
+            'sheet_title' => 'Resume Mensuel',
+            'filename_base' => 'resume_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : ''),
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'table_data' => $summarized,
+            'month' => $month,
+            'year' => $year,
+            'station' => $station
+        ];
+    }
+
     public function dailyPresencesPdf(Request $request, AttendanceReportService $service): Response
     {
         $data = $request->validate([
@@ -728,6 +811,7 @@ class ExportController extends Controller
                 'absence_justifiee' => 0,
                 'total_preste' => 0,
                 'total_overtime_minutes' => 0,
+                'total_normal_minutes' => 0,
             ];
 
             foreach (($days ?? []) as $cell) {
@@ -750,10 +834,14 @@ class ExportController extends Controller
                 if (isset($cell['overtime_minutes'])) {
                     $acc['total_overtime_minutes'] += (int) $cell['overtime_minutes'];
                 }
+                if (isset($cell['duration_minutes'])) {
+                    $acc['total_normal_minutes'] += (max(0, (int)$cell['duration_minutes'] - (int)($cell['overtime_minutes'] ?? 0)));
+                }
             }
 
             $acc['total_preste'] = $acc['present'] + $acc['absence_justifiee'];
             $acc['overtime_display'] = $service->formatOvertime($acc['total_overtime_minutes']);
+            $acc['normal_hours_display'] = $service->formatOvertime($acc['total_normal_minutes']);
             $rows[] = $acc;
         }
 
@@ -1028,6 +1116,35 @@ class ExportController extends Controller
             'table' => $table,
             'rows' => $rows,
         ];
+    }
+
+    private function summarizeStationFromMatrix(Station $station, array $data, $agents): array
+    {
+        $res = [
+            'station_id' => $station->id,
+            'station_name' => $station->name,
+            'agent_count' => count($agents),
+            'total_present' => 0,
+            'total_absent' => 0,
+            'total_retard' => 0,
+            'total_overtime_minutes' => 0,
+        ];
+
+        foreach ($data as $agentKey => $days) {
+            foreach ($days as $cell) {
+                if (($cell['status'] ?? '') === 'present') $res['total_present']++;
+                elseif (($cell['status'] ?? '') === 'absent') $res['total_absent']++;
+                elseif (($cell['status'] ?? '') === 'retard') {
+                    $res['total_present']++;
+                    $res['total_retard']++;
+                }
+                $res['total_overtime_minutes'] += ($cell['overtime_minutes'] ?? 0);
+            }
+        }
+        $service = app(AttendanceReportService::class);
+        $res['total_overtime_display'] = $service->formatOvertime($res['total_overtime_minutes']);
+
+        return $res;
     }
 
     private function downloadXlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows): StreamedResponse
