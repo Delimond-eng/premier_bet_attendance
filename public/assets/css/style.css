@@ -5228,7 +5228,7 @@ button:focus {
   color: #111827;
   background-color: #FFF;
   padding: 0;
-  z-index: 10;
+  z-index: 10000 !important;
 }
 
 .dropdown-divider {
