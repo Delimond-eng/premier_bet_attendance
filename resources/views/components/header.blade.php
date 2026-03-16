@@ -3,10 +3,26 @@
 
         <div class="header-left">
             <a href="/" class="logo">
-                <img src="{{ asset('assets/img/icon.jpg') }}" alt="Logo">
+                <span class="salama-logo salama-logo--normal" aria-label="SALAMA ATTENDANCE">
+                    <span class="salama-logo__icon" aria-hidden="true">
+                        <span class="salama-logo__h">H</span>
+                    </span>
+                    <span class="salama-logo__wordmark">
+                        <span class="salama-logo__name text-primary">SALAMA</span>
+                        <span class="salama-logo__sub text-primary">ATTENDANCE</span>
+                    </span>
+                </span>
             </a>
             <a href="/" class="dark-logo">
-                <img src="{{ asset('assets/img/icon.jpg') }}" alt="Logo">
+                <span class="salama-logo salama-logo--normal" aria-label="SALAMA ATTENDANCE">
+                    <span class="salama-logo__icon" aria-hidden="true">
+                        <span class="salama-logo__h">H</span>
+                    </span>
+                    <span class="salama-logo__wordmark">
+                        <span class="salama-logo__name text-primary">SALAMA</span>
+                        <span class="salama-logo__sub text-primary">ATTENDANCE</span>
+                    </span>
+                </span>
             </a>
         </div>
 

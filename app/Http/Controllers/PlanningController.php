@@ -407,130 +407,135 @@ class PlanningController extends Controller
 
     public function getStationWeeklyPlanning(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'station_id' => 'nullable|integer|exists:sites,id',
-            'date' => 'nullable|date',
-            'exists_only' => 'nullable|boolean',
-        ]);
+        try {
+            $data = $request->validate([
+                'station_id' => 'nullable|integer|exists:sites,id',
+                'date' => 'nullable|date',
+                'exists_only' => 'nullable|boolean',
+            ]);
 
-        $tz = 'Africa/Kinshasa';
+            $tz = 'Africa/Kinshasa';
 
-        $base = !empty($data['date'])
-            ? Carbon::parse($data['date'], $tz)
-            : Carbon::now($tz);
+            $base = !empty($data['date'])
+                ? Carbon::parse($data['date'], $tz)
+                : Carbon::now($tz);
 
-        $startOfWeek = $base->copy()->startOfWeek(Carbon::MONDAY);
-        $endOfWeek = $startOfWeek->copy()->addDays(6);
+            $startOfWeek = $base->copy()->startOfWeek(Carbon::MONDAY);
+            $endOfWeek = $startOfWeek->copy()->addDays(6);
 
-        $existsOnly = (bool) ($data['exists_only'] ?? false);
+            $existsOnly = (bool) ($data['exists_only'] ?? false);
 
-        $baseQuery = AgentGroupPlanning::query()
-            ->when(
-                !empty($data['station_id']),
-                fn ($q) => $q->whereHas('agent', fn ($sub) => $sub->where('site_id', (int) $data['station_id']))
-            )
-            ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()]);
+            $baseQuery = AgentGroupPlanning::query()
+                ->when(
+                    !empty($data['station_id']),
+                    fn ($q) => $q->whereHas('agent', fn ($sub) => $sub->where('site_id', (int) $data['station_id']))
+                )
+                ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()]);
 
-        if ($existsOnly) {
+            if ($existsOnly) {
+                return response()->json([
+                    'status' => 'success',
+                    'from' => $startOfWeek->toDateString(),
+                    'to' => $endOfWeek->toDateString(),
+                    'exists' => $baseQuery->exists(),
+                ]);
+            }
+
+            $plannings = (clone $baseQuery)
+                ->with(['agent.station', 'horaire'])
+                ->get();
+
+            $agents = $plannings->pluck('agent')->filter()->unique('id')->values();
+
+            $days = [];
+            $cursor = $startOfWeek->copy();
+            while ($cursor->lte($endOfWeek)) {
+                $label = ucfirst((string) $cursor->copy()->locale('fr')->translatedFormat('l'));
+                $days[] = [
+                    'date' => $cursor->toDateString(),
+                    'label' => $label,
+                ];
+                $cursor->addDay();
+            }
+
+            $matrix = [];
+            foreach ($agents as $agent) {
+                $row = [
+                    'agent' => $agent,
+                    'days' => [],
+                ];
+
+                foreach ($days as $day) {
+                    $entry = $plannings->first(fn ($p) =>
+                        (int) $p->agent_id === (int) $agent->id && $p->date === $day['date']
+                    );
+
+                    if (!$entry) {
+                        $row['days'][$day['date']] = ['status' => 'unknown', 'label' => '--', 'horaire_id' => null];
+                        continue;
+                    }
+
+                    if ($entry->is_rest_day) {
+                        $row['days'][$day['date']] = ['status' => 'off', 'label' => 'OFF', 'horaire_id' => null];
+                        continue;
+                    }
+
+                    $label = '--';
+                    if ($entry->horaire) {
+                        $rawStart = (string) ($entry->horaire->getRawOriginal('started_at') ?? $entry->horaire->started_at);
+                        $rawEnd = (string) ($entry->horaire->getRawOriginal('ended_at') ?? $entry->horaire->ended_at);
+                        $start = substr($rawStart, 0, 5);
+                        $end = substr($rawEnd, 0, 5);
+                        $label = $start . ' - ' . $end;
+                    }
+
+                    $row['days'][$day['date']] = ['status' => 'work', 'label' => $label, 'horaire_id' => $entry->horaire_id];
+                }
+
+                $matrix[] = $row;
+            }
+
+            $stationGroups = collect($matrix)
+                ->groupBy(function ($row) {
+                    $stationId = $row['agent']?->site_id;
+                    return $stationId ? ('station:' . $stationId) : 'station:none';
+                })
+                ->map(function ($rows, $key) {
+                    $agent = $rows->first()['agent'] ?? null;
+                    $station = $agent?->station;
+                    $stationName = $station?->name ?? 'Sans station';
+                    $stationId = $station?->id ?? null;
+
+                    $sorted = $rows->sortBy(fn ($r) => (string) ($r['agent']?->fullname ?? $r['agent']?->matricule ?? ''))->values()->all();
+
+                    return [
+                        'key' => $key,
+                        'station' => $station ? [
+                            'id' => $stationId,
+                            'name' => $stationName,
+                            'code' => $station->code,
+                        ] : null,
+                        'station_name' => $stationName,
+                        'rows' => $sorted,
+                    ];
+                })
+                ->values()
+                ->sortBy('station_name')
+                ->values()
+                ->all();
+
             return response()->json([
                 'status' => 'success',
                 'from' => $startOfWeek->toDateString(),
                 'to' => $endOfWeek->toDateString(),
-                'exists' => $baseQuery->exists(),
+                'days' => $days,
+                'data' => $matrix,
+                'stations' => $stationGroups,
             ]);
+        } catch (\Throwable $e) {
+            Log::error('getStationWeeklyPlanning failed', ['error' => $e->getMessage()]);
+            return response()->json(['errors' => [$e->getMessage()]], 500);
         }
-
-        $plannings = (clone $baseQuery)
-            ->with(['agent.station', 'horaire'])
-            ->get();
-
-        $agents = $plannings->pluck('agent')->filter()->unique('id')->values();
-
-        $days = [];
-        $cursor = $startOfWeek->copy();
-        while ($cursor->lte($endOfWeek)) {
-            $label = ucfirst((string) $cursor->copy()->locale('fr')->translatedFormat('l'));
-            $days[] = [
-                'date' => $cursor->toDateString(),
-                'label' => $label,
-            ];
-            $cursor->addDay();
-        }
-
-        $matrix = [];
-        foreach ($agents as $agent) {
-            $row = [
-                'agent' => $agent,
-                'days' => [],
-            ];
-
-            foreach ($days as $day) {
-                $entry = $plannings->first(fn ($p) =>
-                    (int) $p->agent_id === (int) $agent->id && $p->date === $day['date']
-                );
-
-                if (!$entry) {
-                    $row['days'][$day['date']] = ['status' => 'unknown', 'label' => '--', 'horaire_id' => null];
-                    continue;
-                }
-
-                if ($entry->is_rest_day) {
-                    $row['days'][$day['date']] = ['status' => 'off', 'label' => 'OFF', 'horaire_id' => null];
-                    continue;
-                }
-
-                $label = '--';
-                if ($entry->horaire) {
-                    $rawStart = (string) ($entry->horaire->getRawOriginal('started_at') ?? $entry->horaire->started_at);
-                    $rawEnd = (string) ($entry->horaire->getRawOriginal('ended_at') ?? $entry->horaire->ended_at);
-                    $start = substr($rawStart, 0, 5);
-                    $end = substr($rawEnd, 0, 5);
-                    $label = $start . ' - ' . $end;
-                }
-
-                $row['days'][$day['date']] = ['status' => 'work', 'label' => $label, 'horaire_id' => $entry->horaire_id];
-            }
-
-            $matrix[] = $row;
-        }
-
-        $stationGroups = collect($matrix)
-            ->groupBy(function ($row) {
-                $stationId = $row['agent']?->site_id;
-                return $stationId ? ('station:' . $stationId) : 'station:none';
-            })
-            ->map(function ($rows, $key) {
-                $agent = $rows->first()['agent'] ?? null;
-                $station = $agent?->station;
-                $stationName = $station?->name ?? 'Sans station';
-                $stationId = $station?->id ?? null;
-
-                $sorted = $rows->sortBy(fn ($r) => (string) ($r['agent']?->fullname ?? $r['agent']?->matricule ?? ''))->values()->all();
-
-                return [
-                    'key' => $key,
-                    'station' => $station ? [
-                        'id' => $stationId,
-                        'name' => $stationName,
-                        'code' => $station->code,
-                    ] : null,
-                    'station_name' => $stationName,
-                    'rows' => $sorted,
-                ];
-            })
-            ->values()
-            ->sortBy('station_name')
-            ->values()
-            ->all();
-
-        return response()->json([
-            'status' => 'success',
-            'from' => $startOfWeek->toDateString(),
-            'to' => $endOfWeek->toDateString(),
-            'days' => $days,
-            'data' => $matrix,
-            'stations' => $stationGroups,
-        ]);
     }
 
     /**

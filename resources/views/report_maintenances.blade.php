@@ -119,7 +119,7 @@
                     </button>
                 </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-nowrap mb-0" ref="table">
                         <thead class="thead-light">
