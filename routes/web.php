@@ -363,6 +363,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
         // Mobile Devices Management
         Route::get('/devices', [DeviceManagementController::class, 'index'])->name('devices.index');
+        Route::post('/devices/test-fcm', [DeviceManagementController::class, 'testFcm'])->name('devices.test_fcm');
         Route::post('/devices/{device}/update', [DeviceManagementController::class, 'update'])->name('devices.update');
         Route::post('/devices/{device}/sync', [DeviceManagementController::class, 'sync'])->name('devices.sync');
     });
