@@ -243,6 +243,11 @@
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
+                        <li class="@active(['admin.devices.index'])">
+                            <a href="{{ route('admin.devices.index') }}">
+                                <i class="ti ti-device-mobile"></i><span>Gestion Terminaux</span>
+                            </a>
+                        </li>
                         @canany(['users.view', 'roles.view', 'logs.view'])
                         <li class="submenu">
                             <a href="javascript:void(0);" class="@active(['admin.*'])">
