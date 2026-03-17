@@ -19,7 +19,7 @@
         <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
             <div class="mb-2">
                 <button type="button" id="btnTestFcm" class="btn btn-dark d-flex align-items-center">
-                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (FCM)
+                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (Terminaux)
                 </button>
             </div>
         </div>
@@ -40,7 +40,7 @@
                                     <th>IMEI</th>
                                     <th>Nom du Terminal</th>
                                     <th>Plateforme</th>
-                                    <th>Token FCM (Tronqué)</th>
+                                    {{--  <th>Token FCM (Tronqué)</th>  --}}
                                     <th>Dernière Connexion</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
@@ -61,9 +61,9 @@
                                             <span class="badge badge-soft-secondary">{{ $device->platform ?? 'N/A' }}</span>
                                         @endif
                                     </td>
-                                    <td title="{{ $device->firebase_token }}">
-                                        {{ Str::limit($device->firebase_token, 20) }}
-                                    </td>
+                                    {{--  <td title="$device->firebase_token">
+                                        Str::limit($device->firebase_token, 20)
+                                    </td>  --}}
                                     <td>{{ $device->last_seen_at ? $device->last_seen_at->diffForHumans() : 'Jamais' }}</td>
                                     <td class="text-end">
                                         <div class="d-flex justify-content-end gap-2">

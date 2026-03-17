@@ -28,15 +28,24 @@ class BiometricApiController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $device = MobileDevice::updateOrCreate(
-            ['imei' => $request->imei],
-            [
+        $device = MobileDevice::where('imei', $request->imei)->first();
+
+        if ($device) {
+            // ✅ On met à jour uniquement ce qu'on veut
+            $device->update([
+                'firebase_token' => $request->firebase_token,
+                'last_seen_at' => now(),
+            ]);
+        } else {
+            // ✅ On crée avec toutes les infos
+            $device = MobileDevice::create([
+                'imei' => $request->imei,
                 'firebase_token' => $request->firebase_token,
                 'platform' => $request->platform,
                 'device_name' => $request->device_name,
                 'last_seen_at' => now(),
-            ]
-        );
+            ]);
+        }
 
         return response()->json([
             'success' => true,
