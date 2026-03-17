@@ -34,7 +34,9 @@
                                 @foreach($devices as $device)
                                 <tr>
                                     <td>{{ $device->imei }}</td>
-                                    <td>{{ $device->device_name ?? 'Inconnu' }}</td>
+                                    <td>
+                                        <span id="deviceName_{{ $device->id }}">{{ $device->device_name ?? 'Inconnu' }}</span>
+                                    </td>
                                     <td>
                                         @if($device->platform == 'android')
                                             <span class="badge bg-success"><i class="fab fa-android"></i> Android</span>
@@ -49,13 +51,22 @@
                                     </td>
                                     <td>{{ $device->last_seen_at ? $device->last_seen_at->diffForHumans() : 'Jamais' }}</td>
                                     <td class="text-end">
-                                        <button class="btn btn-primary btn-sm btn-sync"
-                                                data-id="{{ $device->id }}"
-                                                data-name="{{ $device->device_name ?? $device->imei }}"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#syncModal">
-                                            <i class="feather-refresh-cw"></i> Sync Biométrie
-                                        </button>
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button class="btn btn-info btn-sm btn-edit"
+                                                    data-id="{{ $device->id }}"
+                                                    data-name="{{ $device->device_name }}"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#editDeviceModal">
+                                                <i class="feather-edit"></i> Editer
+                                            </button>
+                                            <button class="btn btn-primary btn-sm btn-sync"
+                                                    data-id="{{ $device->id }}"
+                                                    data-name="{{ $device->device_name ?? $device->imei }}"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#syncModal">
+                                                <i class="feather-refresh-cw"></i> Sync Biométrie
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 @endforeach
@@ -66,6 +77,31 @@
                         {{ $devices->links() }}
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editer Device -->
+<div class="modal fade" id="editDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier le nom du terminal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editDeviceForm">
+                    @csrf
+                    <div class="form-group">
+                        <label>Nom du terminal <span class="text-danger">*</span></label>
+                        <input type="text" id="edit_device_name" name="device_name" class="form-control" placeholder="Entrez un nom pour ce terminal">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" id="btnSaveDevice" class="btn btn-primary">Enregistrer les modifications</button>
             </div>
         </div>
     </div>
@@ -160,7 +196,48 @@
 $(document).ready(function() {
     let currentDeviceId = null;
 
-    // Ouverture du modal
+    // --- LOGIQUE EDITION DEVICE ---
+    $('.btn-edit').on('click', function() {
+        currentDeviceId = $(this).data('id');
+        $('#edit_device_name').val($(this).data('name'));
+    });
+
+    $('#btnSaveDevice').on('click', function() {
+        let name = $('#edit_device_name').val();
+        if (!name) {
+            Swal.fire('Erreur', 'Le nom du terminal est requis.', 'error');
+            return;
+        }
+
+        let btn = $(this);
+        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+
+        $.ajax({
+            url: `/admin/devices/${currentDeviceId}/update`,
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                device_name: name
+            },
+            success: function(response) {
+                if (response.success) {
+                    $(`#deviceName_${currentDeviceId}`).text(name);
+                    // Mettre à jour l'attribut data-name du bouton edit pour la prochaine ouverture
+                    $(`.btn-edit[data-id="${currentDeviceId}"]`).data('name', name);
+                    Swal.fire('Succès', response.message, 'success');
+                    $('#editDeviceModal').modal('hide');
+                }
+            },
+            error: function() {
+                Swal.fire('Erreur', 'Impossible de mettre à jour le terminal.', 'error');
+            },
+            complete: function() {
+                btn.prop('disabled', false).text('Enregistrer les modifications');
+            }
+        });
+    });
+
+    // --- LOGIQUE SYNC BIOMETRIE ---
     $('.btn-sync').on('click', function() {
         currentDeviceId = $(this).data('id');
         $('#modalDeviceName').text($(this).data('name'));
@@ -168,12 +245,10 @@ $(document).ready(function() {
         $('#selectAll').prop('checked', false);
     });
 
-    // Sélectionner tout
     $('#selectAll').on('change', function() {
         $('.agent-checkbox').prop('checked', $(this).prop('checked'));
     });
 
-    // Recherche instantanée
     $('#searchAgent').on('keyup', function() {
         let val = $(this).val().toLowerCase();
         $('.bio-row').each(function() {
@@ -181,7 +256,6 @@ $(document).ready(function() {
         });
     });
 
-    // Soumission de la synchronisation
     $('#btnSubmitSync').on('click', function() {
         let selectedMatricules = [];
         $('.agent-checkbox:checked').each(function() {

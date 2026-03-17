@@ -28,6 +28,26 @@ class DeviceManagementController extends Controller
     }
 
     /**
+     * Mettre à jour le nom du terminal.
+     */
+    public function update(Request $request, MobileDevice $device)
+    {
+        $request->validate([
+            'device_name' => 'required|string|max:255',
+        ]);
+
+        $device->update([
+            'device_name' => $request->device_name,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Terminal mis à jour avec succès.',
+            'device' => $device
+        ]);
+    }
+
+    /**
      * Envoyer une notification de synchronisation à un terminal.
      */
     public function sync(Request $request, MobileDevice $device)
