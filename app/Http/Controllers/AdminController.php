@@ -7,6 +7,7 @@ use App\Models\AgentHistory;
 use App\Models\AgentGroup;
 use App\Models\AgentGroupAssignment;
 use App\Models\AgentGroupPlanning;
+use App\Models\AgentBiometric;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
@@ -1481,41 +1482,60 @@ class AdminController extends Controller
     }
 
     /**
-     * Enroll agent with photo
+     * Enroll agent with photo and biometric embedding
      * @return JsonResponse
      */
     public function enrollAgent(Request $request) : JsonResponse{
         try {
             $data = $request->validate([
-                "matricule"=>"required|string|exists:agents,matricule",
+                "matricule" => "required|string|exists:agents,matricule",
+                "embedding" => "nullable|string",
+                "model_version" => "nullable|string",
+                "quality_score" => "nullable|numeric",
             ]);
+
             $agent = Agent::where("matricule", $data["matricule"])->first();
-            if ($request->hasFile('photo') && isset($agent)) {
+
+            if (!$agent) {
+                return response()->json(['errors' => ["Agent non trouvé."]], 404);
+            }
+
+            // Mise à jour de la photo si présente
+            if ($request->hasFile('photo')) {
                 $file = $request->file('photo');
                 $filename = uniqid('agent_') . '.' . $file->getClientOriginalExtension();
                 $destination = public_path('uploads/agents');
                 $file->move($destination, $filename);
-                // Générer un lien complet sans utiliser storage
-                $data['photo'] = url('uploads/agents/' . $filename);
-
                 $agent->update([
-                    "photo"=>$data["photo"]
+                    "photo" => url('uploads/agents/' . $filename)
                 ]);
             }
 
-
+            // Mise à jour ou création de l'embedding biométrique
+            if (!empty($data['embedding'])) {
+                AgentBiometric::updateOrCreate(
+                    ['matricule' => $agent->matricule],
+                    [
+                        'agent_id' => $agent->id,
+                        'embedding' => $data['embedding'],
+                        'model_version' => $data['model_version'] ?? null,
+                        'quality_score' => $data['quality_score'] ?? null,
+                        'status' => 'active',
+                    ]
+                );
+            }
 
             return response()->json([
-                "status"=>"success",
-                "result"=>$agent
+                "status" => "success",
+                "message" => "Enrôlement réussi.",
+                "result" => $agent->load('station')
             ]);
         }
         catch (\Illuminate\Validation\ValidationException $e) {
-            $errors = $e->validator->errors()->all();
-            return response()->json(['errors' => $errors ]);
+            return response()->json(['errors' => $e->validator->errors()->all()], 422);
         }
-        catch (\Illuminate\Database\QueryException $e){
-            return response()->json(['errors' => $e->getMessage() ]);
+        catch (\Throwable $e){
+            return response()->json(['errors' => [$e->getMessage()]], 500);
         }
     }
 }

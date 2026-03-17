@@ -1,110 +1,108 @@
-<?php 
+<?php
+
 namespace App\Services;
 
 use Google\Client;
 use GuzzleHttp\Client as HttpClient;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class FcmService
 {
-    protected $http;
-    protected $accessToken;
-    protected $projectId;
+    protected HttpClient $http;
+    protected string $projectId;
 
     public function __construct()
     {
         $this->http = new HttpClient();
 
-        $client = new Client();
-        $client->useApplicationDefaultCredentials();
-        $client->setAuthConfig(storage_path('app/firebase/credentials.json'));
-        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        $path = storage_path('firebase/credentials.json');
 
-        $this->accessToken = $client->fetchAccessTokenWithAssertion()['access_token'];
-        Log::info($this->accessToken);
-        $this->projectId = json_decode(file_get_contents(storage_path('app/firebase/credentials.json')), true)['project_id'];
-    }
-
-    public function sendNotification($deviceToken, $title, $body)
-    {
-        $message = [
-            "message" => [
-                "token" => $deviceToken,
-                "notification" => [
-                    "title" => $title,
-                    "body" => $body,
-                ],
-                "android" => [
-                    "priority" => "high"
-                ],
-                "apns" => [
-                    "headers" => [
-                        "apns-priority" => "10"
-                    ]
-                ]
-            ]
-        ];
-
-        $response = $this->http->post("https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send", [
-            'headers' => [
-                'Authorization' => "Bearer {$this->accessToken}",
-                'Content-Type' => 'application/json',
-            ],
-            'json' => $message,
-        ]);
-
-        return json_decode($response->getBody(), true);
-    }
-
-    public function sendNotificationToManyTokens(array $tokens, string $title, string $body)
-    {
-        // Préparation du message multicast
-        $message = [
-            "message" => [
-                "notification" => [
-                    "title" => $title,
-                    "body" => $body,
-                ],
-                "android" => [
-                    "priority" => "high"
-                ],
-                "apns" => [
-                    "headers" => [
-                        "apns-priority" => "10"
-                    ]
-                ]
-            ],
-            "validate_only" => false
-        ];
-        // Résultats des envois
-        $results = [];
-        // Envoi des notifications un par un avec un message personnalisé pour chaque token
-        foreach ($tokens as $token) {
-            $message['message']['token'] = $token;
-            try {
-                $response = $this->http->post("https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send", [
-                    'headers' => [
-                        'Authorization' => "Bearer {$this->accessToken}",
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $message,
-                ]);
-
-                $results[] = [
-                    'token' => $token,
-                    'status' => 'success',
-                    'response' => json_decode($response->getBody(), true),
-                ];
-            } catch (\Exception $e) {
-                $results[] = [
-                    'token' => $token,
-                    'status' => 'error',
-                    'error' => $e->getMessage(),
-                ];
-            }
+        if (!file_exists($path)) {
+            // Fallback for different project structures
+            $path = storage_path('app/firebase/credentials.json');
         }
 
-        return $results;
+        if (file_exists($path)) {
+            $credentials = json_decode(file_get_contents($path), true);
+            $this->projectId = $credentials['project_id'] ?? '';
+        }
     }
 
+    protected function getAccessToken(): string
+    {
+        return Cache::remember('firebase_access_token', 3500, function () {
+            $client = new Client();
+            $path = storage_path('firebase/credentials.json');
+            if (!file_exists($path)) {
+                $path = storage_path('app/firebase/credentials.json');
+            }
+
+            $client->setAuthConfig($path);
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+
+            return $client->fetchAccessTokenWithAssertion()['access_token'];
+        });
+    }
+
+    protected function send(array $payload)
+    {
+        if (empty($this->projectId)) {
+            throw new \Exception("Firebase Project ID not configured.");
+        }
+
+        return $this->http->post(
+            "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send",
+            [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->getAccessToken(),
+                    'Content-Type' => 'application/json',
+                ],
+                'json' => $payload,
+            ]
+        );
+    }
+
+    public function notify(string $token, string $title, string $body)
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'notification' => compact('title', 'body'),
+                'android' => ['priority' => 'high'],
+            ]
+        ]);
+    }
+
+    public function sendMdmCommand(string $token, string $command, array $params = [])
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'data' => array_merge([
+                    'command' => $command,
+                    'issued_at' => now()->toIso8601String(),
+                ], $params),
+                'android' => [
+                    'priority' => 'high',
+                ],
+            ]
+        ]);
+    }
+
+    public function sendBiometricSync(string $token, array $matricules)
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'data' => [
+                    'type' => 'biometric_sync',
+                    'matricules' => json_encode($matricules),
+                    'sent_at' => now()->toIso8601String(),
+                ],
+                'android' => [
+                    'priority' => 'high',
+                ],
+            ]
+        ]);
+    }
 }

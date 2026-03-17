@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\DeviceManagementController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\HRController;
@@ -359,6 +360,10 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/logs', fn () => view('logs'))
             ->name('logs')
             ->middleware('can:logs.view');
+
+        // Mobile Devices Management
+        Route::get('/devices', [DeviceManagementController::class, 'index'])->name('devices.index');
+        Route::post('/devices/{device}/sync', [DeviceManagementController::class, 'sync'])->name('devices.sync');
     });
 
     // Users/Roles management APIs (Vue)
