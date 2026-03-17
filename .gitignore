@@ -23,4 +23,4 @@ backup.cnf
 /*.zip
 
 # Firebase
-storage/firebase/credentials.json
+storage/app/firebase/credentials.json
