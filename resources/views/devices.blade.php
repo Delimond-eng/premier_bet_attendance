@@ -19,7 +19,7 @@
         <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
             <div class="mb-2">
                 <button type="button" id="btnTestFcm" class="btn btn-dark d-flex align-items-center">
-                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (Terminaux)
+                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (FCM)
                 </button>
             </div>
         </div>
@@ -37,10 +37,9 @@
                         <table class="table table-hover table-center mb-0 datatable">
                             <thead>
                                 <tr>
-                                    <th>IMEI</th>
+                                    <th>PHONE ID</th>
                                     <th>Nom du Terminal</th>
                                     <th>Plateforme</th>
-                                    {{--  <th>Token FCM (Tronqué)</th>  --}}
                                     <th>Dernière Connexion</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
@@ -61,19 +60,16 @@
                                             <span class="badge badge-soft-secondary">{{ $device->platform ?? 'N/A' }}</span>
                                         @endif
                                     </td>
-                                    {{--  <td title="$device->firebase_token">
-                                        Str::limit($device->firebase_token, 20)
-                                    </td>  --}}
                                     <td>{{ $device->last_seen_at ? $device->last_seen_at->diffForHumans() : 'Jamais' }}</td>
                                     <td class="text-end">
                                         <div class="d-flex justify-content-end gap-2">
-                                            <button class="btn btn-soft-success btn-sm btn-edit"
+                                            <button class="btn btn-info btn-sm btn-edit"
                                                     data-id="{{ $device->id }}"
                                                     data-name="{{ $device->device_name }}"
                                                     title="Modifier nom">
                                                 <i class="ti ti-edit"></i>
                                             </button>
-                                            <button class="btn btn-soft-primary btn-sm btn-sync"
+                                            <button class="btn btn-primary btn-sm btn-sync"
                                                     data-id="{{ $device->id }}"
                                                     data-name="{{ $device->device_name ?? $device->imei }}"
                                                     title="Sync Biométrie">
@@ -247,7 +243,7 @@ $(document).ready(function() {
     });
 
     // --- EDITION DEVICE ---
-    $('.btn-edit').on('click', function() {
+    $(document).on('click', '.btn-edit', function() {
         currentDeviceId = $(this).data('id');
         $('#edit_device_name').val($(this).data('name'));
         $('#editDeviceModal').modal('show');
@@ -285,7 +281,7 @@ $(document).ready(function() {
     });
 
     // --- SYNC BIOMETRIE ---
-    $('.btn-sync').on('click', function() {
+    $(document).on('click', '.btn-sync', function() {
         currentDeviceId = $(this).data('id');
         $('#modalDeviceName').text($(this).data('name'));
         $('.agent-checkbox').prop('checked', false);

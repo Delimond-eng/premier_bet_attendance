@@ -68,6 +68,7 @@ class BiometricApiController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // 🔥 Récupérer les biométriques
         $biometrics = AgentBiometric::whereIn('matricule', $request->matricules)
             ->where('status', 'active')
             ->get([
@@ -78,6 +79,16 @@ class BiometricApiController extends Controller
                 'status',
                 'updated_at'
             ]);
+
+        // 🔥 Récupérer les agents correspondants
+        $agents = Agent::whereIn('matricule', $request->matricules)
+            ->pluck('fullname', 'matricule'); // clé = matricule
+
+        // 🔥 Ajouter le nom à chaque biométrique
+        $biometrics = $biometrics->map(function ($item) use ($agents) {
+            $item->name = $agents[$item->matricule] ?? null;
+            return $item;
+        });
 
         return response()->json([
             'success' => true,
