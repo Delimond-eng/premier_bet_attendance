@@ -19,7 +19,7 @@
         <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
             <div class="mb-2">
                 <button type="button" id="btnTestFcm" class="btn btn-dark d-flex align-items-center">
-                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (FCM)
+                    <i class="ti ti-broadcast me-2"></i> Tester Connexion (Terminaux)
                 </button>
             </div>
         </div>
