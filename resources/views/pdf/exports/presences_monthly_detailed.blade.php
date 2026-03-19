@@ -2,10 +2,10 @@
 
 @section('body')
     <style>
-        table { font-size: 7px; table-layout: fixed; width: 100%; }
+        table { font-size: 7px; table-layout: fixed; width: 100%; border-spacing: 0; }
         th, td { padding: 2px 1px; border: 0.5px solid #ccc; text-align: center; overflow: hidden; }
-        .col-agent { width: 85px; text-align: left; }
-        .col-day { width: 12px; }
+        .col-agent { width: 140px; text-align: left; padding-left: 3px; }
+        .col-day { width: auto; }
         .col-total { width: 18px; font-weight: bold; font-size: 6px; }
         .badge { font-size: 6px; padding: 1px; }
         .text-left { text-align: left; }
