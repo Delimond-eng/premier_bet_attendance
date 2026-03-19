@@ -323,14 +323,26 @@ class ExportController extends Controller
     public function monthlyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
     {
         $payload = $this->buildMonthlySummaryPayload($request, $service);
-        $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
-            'title' => $payload['title'],
-            'month' => $payload['month'],
-            'year' => $payload['year'],
-            'station' => $payload['station'],
-            'headers' => $payload['headers'],
-            'rows' => $payload['table_data'],
-        ])->setPaper('a4', 'landscape');
+
+        if ($request->query('tab') === 'details') {
+            $pdf = Pdf::loadView('pdf.exports.presences_monthly_detailed', [
+                'title' => $payload['title'],
+                'month' => $payload['month'],
+                'year' => $payload['year'],
+                'station' => $payload['station'],
+                'rows' => $payload['table_data'],
+                'daysInMonth' => $payload['days_in_month'],
+            ])->setPaper('a4', 'landscape');
+        } else {
+            $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
+                'title' => $payload['title'],
+                'month' => $payload['month'],
+                'year' => $payload['year'],
+                'station' => $payload['station'],
+                'headers' => $payload['headers'],
+                'rows' => $payload['table_data'],
+            ])->setPaper('a4', 'landscape');
+        }
 
         return $pdf->download($payload['filename_base'] . '.pdf');
     }
@@ -353,53 +365,94 @@ class ExportController extends Controller
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'tab' => 'nullable|string',
         ]);
 
         $month = (int) ($data['month'] ?? Carbon::now()->month);
         $year = (int) ($data['year'] ?? Carbon::now()->year);
         $stationId = $data['station_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
+        $tab = $data['tab'] ?? 'brut';
 
         $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
-        $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents']);
+        $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents'], $tab);
 
-        $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'H. Norm', 'H. Sup', 'Total Preste'];
-        $table = [];
-        foreach ($summarized as $r) {
-            $table[] = [
-                (string) ($r['agent']['matricule'] ?? ''),
-                (string) ($r['agent']['fullname'] ?? ''),
-                (string) ($r['agent']['station_name'] ?? ''),
-                (int) $r['present'],
-                (int) $r['retard'],
-                (int) $r['absent'],
-                (int) $r['conge'],
-                (int) $r['autorisation'],
-                (int) $r['retard_justifie'],
-                (int) $r['absence_justifiee'],
-                (string) $r['normal_hours_display'],
-                (string) $r['overtime_display'],
-                (int) $r['total_preste'],
-            ];
+        if ($tab === 'details') {
+            $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+            $headers = ['Matricule', 'Nom complet', 'Station'];
+            for ($d = 1; $d <= $daysInMonth; $d++) {
+                $headers[] = sprintf('%02d', $d);
+            }
+            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'Ret.', 'Aut.', 'Congé', 'H.Sup', 'OFF']);
+
+            $table = [];
+            foreach ($summarized as $r) {
+                $row = [
+                    (string) ($r['agent']['matricule'] ?? ''),
+                    (string) ($r['agent']['fullname'] ?? ''),
+                    (string) ($r['agent']['station_name'] ?? ''),
+                ];
+                for ($d = 1; $d <= $daysInMonth; $d++) {
+                    $row[] = (string) ($r['days'][sprintf('%02d', $d)] ?? '--');
+                }
+                $row[] = (int) $r['total_count'];
+                $row[] = (int) $r['total_presences'];
+                $row[] = (int) $r['total_absences'];
+                $row[] = (int) $r['total_retards'];
+                $row[] = (int) $r['total_autorisations'];
+                $row[] = (int) $r['total_conges'];
+                $row[] = (string) $r['overtime_display'];
+                $row[] = (int) $r['total_off'];
+                $table[] = $row;
+            }
+
+            $title = 'Rapport détaillé des présences';
+            $sheetTitle = 'Détails Mensuel';
+            $filenameBase = 'details_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '');
+        } else {
+            $daysInMonth = 0;
+            $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'H. Norm', 'H. Sup', 'Total Preste'];
+            $table = [];
+            foreach ($summarized as $r) {
+                $table[] = [
+                    (string) ($r['agent']['matricule'] ?? ''),
+                    (string) ($r['agent']['fullname'] ?? ''),
+                    (string) ($r['agent']['station_name'] ?? ''),
+                    (int) $r['present'],
+                    (int) $r['retard'],
+                    (int) $r['absent'],
+                    (int) $r['conge'],
+                    (int) $r['autorisation'],
+                    (int) $r['retard_justifie'],
+                    (int) $r['absence_justifiee'],
+                    (string) $r['normal_hours_display'],
+                    (string) $r['overtime_display'],
+                    (int) $r['total_preste'],
+                ];
+            }
+            $title = 'Résumé mensuel des présences';
+            $sheetTitle = 'Résumé Mensuel';
+            $filenameBase = 'resume_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '');
         }
 
         $meta = [
-            'Periode: ' . Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'Période: ' . Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y'),
             'Station: ' . ($station?->name ?? 'Toutes'),
             'Agents: ' . count($table),
         ];
 
         return [
-            'title' => 'Resume mensuel des presences',
-            'sheet_title' => 'Resume Mensuel',
-            'filename_base' => 'resume_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : ''),
+            'title' => $title,
+            'sheet_title' => $sheetTitle,
+            'filename_base' => $filenameBase,
             'meta' => $meta,
             'headers' => $headers,
             'table' => $table,
             'table_data' => $summarized,
             'month' => $month,
             'year' => $year,
-            'station' => $station
+            'station' => $station,
+            'days_in_month' => $daysInMonth
         ];
     }
 
@@ -781,7 +834,7 @@ class ExportController extends Controller
         ];
     }
 
-    private function summarizeMatrix(array $matrix, $agentsCollection): array
+    private function summarizeMatrix(array $matrix, $agentsCollection, string $tab = 'brut'): array
     {
         $agentsByKey = [];
         foreach ($agentsCollection as $a) {
@@ -812,10 +865,23 @@ class ExportController extends Controller
                 'total_preste' => 0,
                 'total_overtime_minutes' => 0,
                 'total_normal_minutes' => 0,
+                // Fields for details
+                'days' => [],
+                'total_count' => 0,
+                'total_presences' => 0,
+                'total_absences' => 0,
+                'total_retards' => 0,
+                'total_autorisations' => 0,
+                'total_conges' => 0,
+                'total_off' => 0,
+                'total_others' => 0,
             ];
 
-            foreach (($days ?? []) as $cell) {
+            foreach (($days ?? []) as $dayKey => $cell) {
                 $s = $cell['status'] ?? null;
+                $mapped = $this->mapStatusToCode($s);
+                $acc['days'][$dayKey] = $mapped['code'];
+
                 if ($s === 'present') $acc['present'] += 1;
                 else if ($s === 'retard') {
                     $acc['present'] += 1;
@@ -837,6 +903,17 @@ class ExportController extends Controller
                 if (isset($cell['duration_minutes'])) {
                     $acc['total_normal_minutes'] += (max(0, (int)$cell['duration_minutes'] - (int)($cell['overtime_minutes'] ?? 0)));
                 }
+
+                if ($mapped['bucket']) {
+                    $acc['total_count'] += 1;
+                    if ($mapped['bucket'] === 'presence') $acc['total_presences'] += 1;
+                    elseif ($mapped['bucket'] === 'retard') { $acc['total_presences'] += 1; $acc['total_retards'] += 1; }
+                    elseif ($mapped['bucket'] === 'absence') $acc['total_absences'] += 1;
+                    elseif ($mapped['bucket'] === 'autorisation') $acc['total_autorisations'] += 1;
+                    elseif ($mapped['bucket'] === 'conge') $acc['total_conges'] += 1;
+                    elseif ($mapped['bucket'] === 'off') $acc['total_off'] += 1;
+                    else $acc['total_others'] += 1;
+                }
             }
 
             $acc['total_preste'] = $acc['present'] + $acc['absence_justifiee'];
@@ -848,6 +925,32 @@ class ExportController extends Controller
         usort($rows, fn ($a, $b) => strcmp((string) ($a['agent']['fullname'] ?? ''), (string) ($b['agent']['fullname'] ?? '')));
 
         return $rows;
+    }
+
+    private function mapStatusToCode(?string $status): array
+    {
+        switch ($status) {
+            case "present":
+                return ['code' => '1', 'bucket' => 'presence'];
+            case "retard":
+            case "retard_justifie":
+                return ['code' => '1-R', 'bucket' => 'retard'];
+            case "absent":
+            case "absence_justifiee":
+                return ['code' => 'A', 'bucket' => 'absence'];
+            case "off":
+                return ['code' => 'OFF', 'bucket' => 'off'];
+            case "conge":
+                return ['code' => 'C', 'bucket' => 'conge'];
+            case "autorisation":
+                return ['code' => 'AS', 'bucket' => 'autorisation'];
+            case "future":
+                return ['code' => '--', 'bucket' => null];
+            case "unplanned":
+                return ['code' => 'AUT', 'bucket' => 'other'];
+            default:
+                return ['code' => 'AUT', 'bucket' => 'other'];
+        }
     }
 
     private function groupPresenceRowsByStation(Collection $rows): array
