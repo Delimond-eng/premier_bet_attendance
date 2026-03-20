@@ -1121,6 +1121,44 @@ class PresenceController extends Controller
         if (is_string($value)) return $value;
         if ($value instanceof \Illuminate\Http\UploadedFile && $value->isValid()) {
             $filename = 'punch_' . uniqid() . '.' . $value->getClientOriginalExtension();
+
+            // Compression logic using native PHP GD library
+            $tempPath = $value->getRealPath();
+            $info = getimagesize($tempPath);
+            $mime = $info['mime'] ?? '';
+
+            $source = null;
+            if ($mime === 'image/jpeg') $source = imagecreatefromjpeg($tempPath);
+            elseif ($mime === 'image/png') $source = imagecreatefrompng($tempPath);
+            elseif ($mime === 'image/webp') $source = imagecreatefromwebp($tempPath);
+
+            if ($source) {
+                // Resize if too large (max width 1200px)
+                $width = imagesx($source);
+                $height = imagesy($source);
+                $maxW = 1200;
+
+                if ($width > $maxW) {
+                    $newW = $maxW;
+                    $newH = floor($height * ($maxW / $width));
+                    $target = imagecreatetruecolor($newW, $newH);
+                    imagecopyresampled($target, $source, 0, 0, 0, 0, $newW, $newH, $width, $height);
+                    imagedestroy($source);
+                    $source = $target;
+                }
+
+                $destDir = public_path("punches/$dir");
+                if (!file_exists($destDir)) mkdir($destDir, 0755, true);
+
+                $fullPath = "$destDir/$filename";
+                // Save as JPEG with 70% quality for optimization
+                imagejpeg($source, $fullPath, 70);
+                imagedestroy($source);
+
+                return url("punches/$dir/$filename");
+            }
+
+            // Fallback if GD fails
             $value->move(public_path("punches/$dir"), $filename);
             return url("punches/$dir/$filename");
         }
