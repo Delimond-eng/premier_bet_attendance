@@ -32,22 +32,28 @@
         </div>
 
         <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <h5>Synthese agents</h5>
-                <div class="d-flex align-items-center gap-2">
-                    <select class="form-select" v-model.number="filters.month" style="max-width: 200px;">
-                        <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
-                    </select>
-                    <select class="form-select" v-model.number="filters.year" style="max-width: 140px;">
-                        <option v-for="y in yearOptions" :key="y" :value="y">@{{ y }}</option>
-                    </select>
-                    <div class="flex-fill" style="width: 320px;">
-                        <select class="form-select" v-model="filters.station_id" ref="stationSelect">
-                            <option value="">Toutes les stations</option>
-                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+            <div class="card-header">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h5>Synthese agents</h5>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <select class="form-select" v-model.number="filters.month" style="width: 140px;">
+                            <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
                         </select>
+                        <select class="form-select" v-model.number="filters.year" style="width: 100px;">
+                            <option v-for="y in yearOptions" :key="y" :value="y">@{{ y }}</option>
+                        </select>
+                        <select class="form-select" v-model="filters.matricule_prefix" style="width: 160px;">
+                            <option value="">Toutes les branches</option>
+                            <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
+                        </select>
+                        <div style="width: 240px;">
+                            <select class="form-select" v-model="filters.station_id" ref="stationSelect">
+                                <option value="">Toutes les stations</option>
+                                <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
                     </div>
-                    <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
                 </div>
             </div>
             <div class="card-body">

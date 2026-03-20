@@ -287,6 +287,48 @@ class ExportController extends Controller
         return $pdf->download('horaires' . ($station ? ('_station_' . $station->id) : '') . '.pdf');
     }
 
+    public function horairesExcel(Request $request): StreamedResponse
+    {
+        $data = $request->validate([
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+        $stationsById = Station::query()->select(['id', 'name'])->get()->keyBy('id');
+
+        $rows = PresenceHoraire::query()
+            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->orderBy('libelle')
+            ->get();
+
+        $headers = ['Designation', 'Station', 'Heure debut', 'Controle', 'Heure fin', 'Tolerance (min)'];
+        $table = [];
+        foreach ($rows as $h) {
+            $table[] = [
+                (string) ($h->libelle ?? ''),
+                (string) (optional($stationsById->get((int) $h->site_id))->name ?? 'Station ' . $h->site_id),
+                (string) ($h->started_at ?? ''),
+                (string) ($h->mid_check ?? ''),
+                (string) ($h->ended_at ?? ''),
+                (int) ($h->tolerence_minutes ?? 0),
+            ];
+        }
+
+        $meta = [
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return $this->downloadXlsx(
+            filename: 'horaires' . ($station ? ('_station_' . $station->id) : '') . '.xlsx',
+            sheetTitle: 'Horaires',
+            metaLines: $meta,
+            headers: $headers,
+            rows: $table,
+        );
+    }
+
     public function timesheetMonthlyPdf(Request $request, AttendanceReportService $service): Response
     {
         $data = $request->validate([
@@ -320,6 +362,55 @@ class ExportController extends Controller
         return $pdf->download('timesheet_' . sprintf('%02d', $month) . '_' . $year . ($stationId ? ('_' . $stationId) : '') . '.pdf');
     }
 
+    public function timesheetMonthlyExcel(Request $request, AttendanceReportService $service): StreamedResponse
+    {
+        $data = $request->validate([
+            'month' => 'nullable|integer|min:1|max:12',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $month = (int) ($data['month'] ?? Carbon::now()->month);
+        $year = (int) ($data['year'] ?? Carbon::now()->year);
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $stations = $stationId
+            ? Station::query()->where('id', (int) $stationId)->orderBy('name')->get()
+            : Station::query()->orderBy('name')->get();
+
+        $headers = ['Station', 'Agents', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'H. Sup'];
+        $table = [];
+        foreach ($stations as $s) {
+            $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $s->id]);
+            $r = $this->summarizeStationFromMatrix($s, $matrix['data'], $matrix['agents']);
+            $table[] = [
+                (string) $r['station_name'],
+                (int) $r['agent_count'],
+                (int) $r['total_present'],
+                (int) $r['total_retard'],
+                (int) $r['total_absent'],
+                (int) $r['total_conge'],
+                (int) $r['total_autorisation'],
+                (string) $r['total_overtime_display'],
+            ];
+        }
+
+        $meta = [
+            'Mois: ' . sprintf('%02d/%d', $month, $year),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return $this->downloadXlsx(
+            filename: 'timesheet_' . sprintf('%02d', $month) . '_' . $year . ($stationId ? ('_' . $stationId) : '') . '.xlsx',
+            sheetTitle: 'Timesheet Mensuel',
+            metaLines: $meta,
+            headers: $headers,
+            rows: $table,
+        );
+    }
+
     public function monthlyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
     {
         $payload = $this->buildMonthlySummaryPayload($request, $service);
@@ -332,7 +423,7 @@ class ExportController extends Controller
                 'station' => $payload['station'],
                 'rows' => $payload['table_data'],
                 'daysInMonth' => $payload['days_in_month'],
-            ])->setPaper('a4', 'landscape');
+            ])->setPaper('a3', 'landscape');
         } else {
             $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
                 'title' => $payload['title'],
@@ -359,6 +450,96 @@ class ExportController extends Controller
         );
     }
 
+    public function weeklyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
+    {
+        $payload = $this->buildWeeklySummaryPayload($request, $service);
+        $pdf = Pdf::loadView('pdf.exports.presences_weekly_summary', [
+            'title' => $payload['title'],
+            'from' => $payload['from'],
+            'to' => $payload['to'],
+            'station' => $payload['station'],
+            'headers' => $payload['headers'],
+            'rows' => $payload['table_data'],
+            'days' => $payload['days'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function weeklyPresenceSummaryExcel(Request $request, AttendanceReportService $service): StreamedResponse
+    {
+        $payload = $this->buildWeeklySummaryPayload($request, $service);
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
+        );
+    }
+
+    private function buildWeeklySummaryPayload(Request $request, AttendanceReportService $service): array
+    {
+        $data = $request->validate([
+            'date' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $baseDate = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
+        $start = $baseDate->copy()->startOfWeek(Carbon::MONDAY);
+        $end = $start->copy()->addDays(6);
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $matrix = $service->buildWeeklyMatrix($baseDate, ['station_id' => $stationId]);
+        $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents'], 'brut');
+
+        $headers = ['Matricule', 'Nom complet', 'Station'];
+        foreach ($matrix['days'] as $day) {
+            $headers[] = Carbon::parse($day)->format('D d/m');
+        }
+        $headers = array_merge($headers, ['Pres.', 'Abs.', 'Ret.', 'Aut.', 'Congé', 'H.Sup']);
+
+        $table = [];
+        foreach ($summarized as $r) {
+            $row = [
+                (string) ($r['agent']['matricule'] ?? ''),
+                (string) ($r['agent']['fullname'] ?? ''),
+                (string) ($r['agent']['station_name'] ?? ''),
+            ];
+            foreach ($matrix['days'] as $day) {
+                $row[] = (string) ($r['days'][$day] ?? '--');
+            }
+            $row[] = (int) $r['total_presences'];
+            $row[] = (int) $r['total_absences'];
+            $row[] = (int) $r['total_retards'];
+            $row[] = (int) $r['total_autorisations'];
+            $row[] = (int) $r['total_conges'];
+            $row[] = (string) $r['overtime_display'];
+            $table[] = $row;
+        }
+
+        $meta = [
+            'Période: ' . $start->toDateString() . ' au ' . $end->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Agents: ' . count($table),
+        ];
+
+        return [
+            'title' => 'Résumé hebdomadaire des présences',
+            'sheet_title' => 'Résumé Hebdo',
+            'filename_base' => 'resume_hebdo_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()),
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'table_data' => $summarized,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'station' => $station,
+            'days' => $matrix['days'],
+        ];
+    }
+
     private function buildMonthlySummaryPayload(Request $request, AttendanceReportService $service): array
     {
         $data = $request->validate([
@@ -366,6 +547,7 @@ class ExportController extends Controller
             'year' => 'nullable|integer|min:2000|max:2100',
             'station_id' => 'nullable|integer|exists:sites,id',
             'tab' => 'nullable|string',
+            'matricule_prefix' => 'nullable|string',
         ]);
 
         $month = (int) ($data['month'] ?? Carbon::now()->month);
@@ -373,8 +555,14 @@ class ExportController extends Controller
         $stationId = $data['station_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
         $tab = $data['tab'] ?? 'brut';
+        $prefix = $data['matricule_prefix'] ?? null;
 
-        $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $stationId]);
+        $filters = ['station_id' => $stationId];
+        if ($prefix) {
+            $filters['matricule_prefix'] = $prefix;
+        }
+
+        $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
         $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents'], $tab);
 
         if ($tab === 'details') {
@@ -408,7 +596,7 @@ class ExportController extends Controller
 
             $title = 'Rapport détaillé des présences';
             $sheetTitle = 'Détails Mensuel';
-            $filenameBase = 'details_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '');
+            $filenameBase = 'details_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
             $daysInMonth = 0;
             $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'H. Norm', 'H. Sup', 'Total Preste'];
@@ -432,12 +620,13 @@ class ExportController extends Controller
             }
             $title = 'Résumé mensuel des présences';
             $sheetTitle = 'Résumé Mensuel';
-            $filenameBase = 'resume_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '');
+            $filenameBase = 'resume_mensuel_' . $year . '_' . sprintf('%02d', $month) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         }
 
         $meta = [
             'Période: ' . Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y'),
             'Station: ' . ($station?->name ?? 'Toutes'),
+            'Branche (Matricule): ' . ($prefix ?: 'Toutes'),
             'Agents: ' . count($table),
         ];
 
@@ -588,6 +777,164 @@ class ExportController extends Controller
             headers: $headers,
             rows: $table,
         );
+    }
+
+    public function absencesDailyPdf(Request $request, AbsenceReportService $service): Response
+    {
+        $payload = $this->buildAbsenceReportPayload($request, $service);
+        $pdf = Pdf::loadView('pdf.exports.absences_daily', [
+            'title' => $payload['title'],
+            'from' => $payload['from'],
+            'to' => $payload['to'],
+            'station' => $payload['station'],
+            'rows' => $payload['table_data'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function absencesDailyExcel(Request $request, AbsenceReportService $service): StreamedResponse
+    {
+        $payload = $this->buildAbsenceReportPayload($request, $service);
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
+        );
+    }
+
+    private function buildAbsenceReportPayload(Request $request, AbsenceReportService $service): array
+    {
+        $data = $request->validate([
+            'date' => 'nullable|date',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->endOfDay();
+        if ($start->gt($end)) [$start, $end] = [$end, $start];
+
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $rows = $service->buildAbsenceRows($start, $end, $stationId);
+
+        $headers = ['Date', 'Matricule', 'Nom complet', 'Station', 'Horaire', 'Heure prevue', 'Justificatif'];
+        $table = [];
+        foreach ($rows as $r) {
+            $table[] = [
+                $r['date'],
+                (string) ($r['agent']['matricule'] ?? ''),
+                (string) ($r['agent']['fullname'] ?? ''),
+                (string) ($r['agent']['station_name'] ?? ''),
+                (string) ($r['agent']['schedule_label'] ?? ''),
+                (string) ($r['agent']['expected_time'] ?? ''),
+                (string) $r['justificatif'],
+            ];
+        }
+
+        $meta = [
+            'Periode: ' . $start->toDateString() . ' au ' . $end->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return [
+            'title' => 'Rapport des absences',
+            'sheet_title' => 'Absences',
+            'filename_base' => 'absences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()),
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'table_data' => $rows,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'station' => $station,
+        ];
+    }
+
+    public function latesDailyPdf(Request $request, LateReportService $service): Response
+    {
+        $payload = $this->buildLateReportPayload($request, $service);
+        $pdf = Pdf::loadView('pdf.exports.retards_daily', [
+            'title' => $payload['title'],
+            'from' => $payload['from'],
+            'to' => $payload['to'],
+            'station' => $payload['station'],
+            'rows' => $payload['table_data'],
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download($payload['filename_base'] . '.pdf');
+    }
+
+    public function latesDailyExcel(Request $request, LateReportService $service): StreamedResponse
+    {
+        $payload = $this->buildLateReportPayload($request, $service);
+        return $this->downloadXlsx(
+            filename: $payload['filename_base'] . '.xlsx',
+            sheetTitle: $payload['sheet_title'],
+            metaLines: $payload['meta'],
+            headers: $payload['headers'],
+            rows: $payload['table'],
+        );
+    }
+
+    private function buildLateReportPayload(Request $request, LateReportService $service): array
+    {
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+        ]);
+
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $start->copy();
+        if ($start->gt($end)) [$start, $end] = [$end, $start];
+
+        $stationId = $data['station_id'] ?? null;
+        $station = $stationId ? Station::find($stationId) : null;
+
+        $rows = $service->buildLateRows($start, $end, $stationId);
+
+        $headers = ['Date', 'Matricule', 'Nom complet', 'Station', 'Horaire', 'Heure prevue', 'Heure arrivee', 'Retard (min)', 'Justificatif'];
+        $table = [];
+        foreach ($rows as $r) {
+            $table[] = [
+                $r['date'],
+                (string) ($r['agent']['matricule'] ?? ''),
+                (string) ($r['agent']['fullname'] ?? ''),
+                (string) ($r['agent']['station_name'] ?? ''),
+                (string) ($r['agent']['schedule_label'] ?? ''),
+                (string) ($r['expected_time'] ?? ''),
+                (string) ($r['arrival_time'] ?? ''),
+                (int) ($r['late_minutes'] ?? 0),
+                (string) ($r['justificatif'] ?? ''),
+            ];
+        }
+
+        $meta = [
+            'Periode: ' . $start->toDateString() . ' au ' . $end->toDateString(),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return [
+            'title' => 'Rapport des retards',
+            'sheet_title' => 'Retards',
+            'filename_base' => 'retards_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()),
+            'meta' => $meta,
+            'headers' => $headers,
+            'table' => $table,
+            'table_data' => $rows,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'station' => $station,
+        ];
     }
 
     public function cumulativeAlertsPdf(Request $request, CumulativeAlertService $service): Response
@@ -887,14 +1234,14 @@ class ExportController extends Controller
                     $acc['present'] += 1;
                     $acc['retard'] += 1;
                 }
-                else if ($s === 'absent') $acc['absent'] += 1;
-                else if ($s === 'conge') $acc['conge'] += 1;
-                else if ($s === 'autorisation') $acc['autorisation'] += 1;
                 else if ($s === 'retard_justifie') {
                     $acc['present'] += 1;
                     $acc['retard'] += 1;
                     $acc['retard_justifie'] += 1;
                 }
+                else if ($s === 'absent') $acc['absent'] += 1;
+                else if ($s === 'conge') $acc['conge'] += 1;
+                else if ($s === 'autorisation') $acc['autorisation'] += 1;
                 else if ($s === 'absence_justifiee') $acc['absence_justifiee'] += 1;
 
                 if (isset($cell['overtime_minutes'])) {
@@ -1230,17 +1577,23 @@ class ExportController extends Controller
             'total_present' => 0,
             'total_absent' => 0,
             'total_retard' => 0,
+            'total_conge' => 0,
+            'total_autorisation' => 0,
             'total_overtime_minutes' => 0,
         ];
 
         foreach ($data as $agentKey => $days) {
             foreach ($days as $cell) {
-                if (($cell['status'] ?? '') === 'present') $res['total_present']++;
-                elseif (($cell['status'] ?? '') === 'absent') $res['total_absent']++;
-                elseif (($cell['status'] ?? '') === 'retard') {
+                $status = $cell['status'] ?? '';
+                if ($status === 'present') $res['total_present']++;
+                elseif ($status === 'absent') $res['total_absent']++;
+                elseif ($status === 'retard' || $status === 'retard_justifie') {
                     $res['total_present']++;
                     $res['total_retard']++;
                 }
+                elseif ($status === 'conge') $res['total_conge']++;
+                elseif ($status === 'autorisation') $res['total_autorisation']++;
+
                 $res['total_overtime_minutes'] += ($cell['overtime_minutes'] ?? 0);
             }
         }

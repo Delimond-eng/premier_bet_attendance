@@ -983,6 +983,21 @@ class PresenceController extends Controller
         ]);
     }
 
+    public function maintenanceAgents(Request $request): JsonResponse
+    {
+        $stationId = $request->query('station_id');
+
+        $agents = Agent::query()
+            ->when($stationId, fn($q) => $q->where('site_id', $stationId))
+            ->orderBy('fullname')
+            ->get(['id', 'fullname', 'matricule']);
+
+        return response()->json([
+            'status' => 'success',
+            'agents' => $agents
+        ]);
+    }
+
     public function maintenanceReport(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -1159,6 +1174,7 @@ class PresenceController extends Controller
             'station_id' => 'nullable|integer',
             'agent_id' => 'nullable|integer',
             'group_id' => 'nullable|integer',
+            'matricule_prefix' => 'nullable|string',
         ]);
 
         $month = (int) ($data['month'] ?? Carbon::now()->month);
@@ -1168,9 +1184,33 @@ class PresenceController extends Controller
             'station_id' => $data['station_id'] ?? null,
             'agent_id' => $data['agent_id'] ?? null,
             'group_id' => $data['group_id'] ?? null,
+            'matricule_prefix' => $data['matricule_prefix'] ?? null,
         ];
 
         $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
+
+        $showMatriculeFilter = str_contains($request->getHost(), 'premierbet');
+        $prefixes = [];
+
+        if ($showMatriculeFilter) {
+            $prefixes = Agent::query()
+                ->whereNotNull('matricule')
+                ->get(['matricule'])
+                ->map(function ($a) {
+                    $m = (string) $a->matricule;
+                    if (str_contains($m, '-')) {
+                        return explode('-', $m)[0];
+                    }
+                    if (preg_match('/^[A-Za-z]+/', $m, $matches)) {
+                        return strtoupper($matches[0]);
+                    }
+                    return strtoupper(substr($m, 0, 2));
+                })
+                ->unique()
+                ->filter()
+                ->values()
+                ->all();
+        }
 
         if ($request->query('export') === 'pdf') {
             $pdf = Pdf::loadView('pdf.reports.monthly_report', [
@@ -1186,6 +1226,8 @@ class PresenceController extends Controller
             'status' => 'success',
             'month' => $month,
             'year' => $year,
+            'show_matricule_filter' => $showMatriculeFilter,
+            'prefixes' => $prefixes,
             'data' => $matrix['data'],
             'agents' => $matrix['agents']
                 ->mapWithKeys(function (Agent $a) {

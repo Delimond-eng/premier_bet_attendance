@@ -200,10 +200,13 @@ new Vue({
             isLoading: false,
             activeTab: "brut",
             sites: [],
+            prefixes: [],
+            show_matricule_filter: false,
             filters: {
                 month: Number.isFinite(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : mm,
                 year: Number.isFinite(qYear) && qYear >= minYear ? qYear : yyyy,
                 station_id: qStation || "",
+                matricule_prefix: "",
             },
             matrix: {},
             rows: [],
@@ -272,9 +275,12 @@ new Vue({
                 params.set("month", String(this.filters.month));
                 params.set("year", String(this.filters.year));
                 if (stationId) params.set("station_id", stationId);
+                if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
 
                 const { data } = await get(`/reports/monthly?${params.toString()}`);
                 this.matrix = data?.data ?? {};
+                this.prefixes = data?.prefixes ?? [];
+                this.show_matricule_filter = !!data?.show_matricule_filter;
                 const agentsByKey = data?.agents ?? {};
 
                 let rows = computeSummary(this.matrix, agentsByKey);
@@ -347,6 +353,7 @@ new Vue({
             params.set("year", String(this.filters.year));
             params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/monthly/export/pdf?${params.toString()}`;
         },
 
@@ -356,6 +363,7 @@ new Vue({
             params.set("year", String(this.filters.year));
             params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/monthly/export/excel?${params.toString()}`;
         },
     },

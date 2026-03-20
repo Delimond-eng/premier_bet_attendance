@@ -98,6 +98,9 @@ class AttendanceReportService
             )
             ->when(!empty($filters['group_id']), fn ($q) => $q->where('groupe_id', $filters['group_id']))
             ->when(!empty($filters['agent_id']), fn ($q) => $q->where('id', $filters['agent_id']))
+            ->when(!empty($filters['matricule_prefix']), function ($q) use ($filters) {
+                $q->where('matricule', 'like', $filters['matricule_prefix'] . '%');
+            })
             ->orderBy('fullname');
 
         /** @var Collection<int,Agent> $agents */

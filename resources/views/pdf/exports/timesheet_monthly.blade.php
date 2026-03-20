@@ -24,16 +24,15 @@
         <tbody>
         @foreach(($rows ?? []) as $r)
             <tr>
-                <td><strong>{{ $r['station'] ?? '-' }}</strong></td>
-                <td>{{ $r['agents'] ?? 0 }}</td>
-                <td>{{ $r['present'] ?? 0 }}</td>
-                <td>{{ $r['retard'] ?? 0 }}</td>
-                <td>{{ $r['absent'] ?? 0 }}</td>
-                <td>{{ $r['conge'] ?? 0 }}</td>
-                <td>{{ $r['autorisation'] ?? 0 }}</td>
+                <td><strong>{{ $r['station_name'] ?? '-' }}</strong></td>
+                <td>{{ $r['agent_count'] ?? 0 }}</td>
+                <td>{{ $r['total_present'] ?? 0 }}</td>
+                <td>{{ $r['total_retard'] ?? 0 }}</td>
+                <td>{{ $r['total_absent'] ?? 0 }}</td>
+                <td>{{ $r['total_conge'] ?? 0 }}</td>
+                <td>{{ $r['total_autorisation'] ?? 0 }}</td>
             </tr>
         @endforeach
         </tbody>
     </table>
 @endsection
-
