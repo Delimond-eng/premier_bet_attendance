@@ -983,6 +983,31 @@ class PresenceController extends Controller
         ]);
     }
 
+    public function agentMaintenanceHistory(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'per_page' => 'nullable|integer|min:1|max:500',
+        ]);
+
+        $query = MaintenanceAgent::query()
+            ->with(['station'])
+            ->where('agent_id', $data['agent_id'])
+            ->orderByDesc('started_at');
+
+        $perPage = (int) ($data['per_page'] ?? 15);
+        $page = $query->paginate($perPage);
+
+        $page->getCollection()->each(function($m) {
+            $m->date_maintenance_iso = $m->getRawOriginal('date_maintenance');
+            $m->started_at_raw = $m->getRawOriginal('started_at');
+            $m->end_at_raw = $m->getRawOriginal('end_at');
+            $this->attachMaintenanceMeta($m);
+        });
+
+        return response()->json(['status' => 'success', 'history' => $page]);
+    }
+
     public function maintenanceAgents(Request $request): JsonResponse
     {
         $stationId = $request->query('station_id');
@@ -1113,6 +1138,24 @@ class PresenceController extends Controller
     public function getAllGroups()
     {
         return response()->json(['status' => 'success', 'groups' => AgentGroup::with('horaire')->get()]);
+    }
+
+    public function createGroup(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'id' => 'nullable|integer',
+            'libelle' => 'required|string|max:255',
+            'horaire_id' => 'nullable|integer|exists:presence_horaires,id',
+            'status' => 'required|string|in:actif,inactif',
+        ]);
+
+        $group = AgentGroup::updateOrCreate(['id' => $data['id'] ?? null], [
+            'libelle' => $data['libelle'],
+            'horaire_id' => $data['horaire_id'],
+            'status' => $data['status'],
+        ]);
+
+        return response()->json(['status' => 'success', 'result' => $group]);
     }
 
     private function normalizePunchPhoto($value, $dir): ?string

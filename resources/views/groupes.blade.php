@@ -136,6 +136,7 @@
                                         <small class="text-muted">Les horaires affichés correspondent à la station choisie.</small>
                                     </div>
                                 </div>
+                                <!--
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Statut</label>
@@ -145,6 +146,8 @@
                                         </select>
                                     </div>
                                 </div>
+                                -->
+
                             </div>
                         </div>
                         <div class="modal-footer">

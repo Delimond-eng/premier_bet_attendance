@@ -16,6 +16,9 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
                 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                    <div style="min-width: 240px;">
+                        <input type="text" class="form-control" v-model="searchQuery" placeholder="Rechercher agent (Nom, Matricule)...">
+                    </div>
                     <div style="min-width: 260px;">
                         <select class="form-select" v-model="stationId" @change="fetchPlanning()">
                             <option value="">Toutes les stations d'affectation</option>
@@ -25,9 +28,11 @@
                     <div style="min-width: 190px;">
                         <input type="date" class="form-control" v-model="weekDate" @change="fetchPlanning()">
                     </div>
+                    {{--
                     <button type="button" class="btn btn-primary d-flex align-items-center" @click="openImportModal">
                         <i class="ti ti-upload me-2"></i> Charger le planning excel
                     </button>
+                    --}}
                     <button type="button" class="btn btn-info d-flex align-items-center ms-2" @click="openModal">
                         <i class="ti ti-user-edit me-2"></i> Planning Agent
                     </button>
@@ -63,8 +68,8 @@
                         </thead>
                         <tbody>
                             <tr v-if="isLoading"><td :colspan="days.length + 2" class="p-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div> Chargement...</td></tr>
-                            <tr v-else-if="stationGroups.length === 0"><td :colspan="days.length + 2" class="p-4 text-muted">Aucun planning cette semaine.</td></tr>
-                            <template v-for="g in stationGroups">
+                            <tr v-else-if="filteredStationGroups.length === 0"><td :colspan="days.length + 2" class="p-4 text-muted">Aucun planning trouvé.</td></tr>
+                            <template v-for="g in filteredStationGroups">
                                 <tr :key="'station-' + g.key" class="table-primary">
                                     <td :colspan="days.length + 2" class="text-start fw-bold py-2 text-uppercase">
                                         <i class="ti ti-building me-1"></i> @{{ g.station_name }}
@@ -92,7 +97,7 @@
                                             <ul class="dropdown-menu dropdown-menu-end">
                                                 <li><a class="dropdown-item" href="javascript:void(0);" @click="editIndividualPlanning(r.agent, g.key)"><i class="ti ti-edit me-2"></i>Modifier</a></li>
                                                 <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item text-danger" href="javascript:void(0);" @click="deleteAgentPlanning(r.agent)"><i class="ti ti-trash me-2"></i>Supprimer</a></li>
+                                                <li><a class="dropdown-item text-danger" href="javascript:void(0);" @click="deleteAgentPlanning(r.agent, g.key)"><i class="ti ti-trash me-2"></i>Supprimer</a></li>
                                             </ul>
                                         </div>
                                     </td>
@@ -104,7 +109,7 @@
             </div>
         </div>
 
-        <!-- Import Modal -->
+        <!-- Import Modal (Commented out in view, but keeping HTML structure if needed later) -->
         <div class="modal fade" id="importModal" tabindex="-1" ref="importModalEl">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -115,8 +120,8 @@
                     <div class="modal-body">
                         <div class="alert alert-soft-primary mb-3">Semaine cible : <strong>@{{ weekDate }}</strong></div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">1. Station d'affectation</label>
-                            <p class="text-muted small">Les agents seront affectés à cette station et leur planning y sera rattaché.</p>
+                            <label class="form-label fw-bold">1. Station de travail (Rotation)</label>
+                            <p class="text-muted small">Les agents seront planifiés dans cette station.</p>
                             <select class="form-select" v-model="importModal.stationId">
                                 <option value="">Choisir une station...</option>
                                 <option v-for="s in stations" :key="s.id" :value="s.id">@{{ s.name }}</option>
@@ -150,7 +155,7 @@
                     <div class="modal-body">
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
-                                <label class="form-label fw-bold">1. Station d'affectation actuelle</label>
+                                <label class="form-label fw-bold">1. Station d'affectation</label>
                                 <select class="form-select" v-model="modal.stationId" ref="modalStationSelect">
                                     <option value="">Choisir...</option>
                                     <option v-for="s in stations" :key="s.id" :value="s.id">@{{ s.name }}</option>
@@ -214,12 +219,25 @@
         el: '#planning-app',
         data() {
             return {
-                stations: [], stationId: '', weekDate: new Date().toISOString().slice(0, 10),
+                stations: [], stationId: '', searchQuery: '', weekDate: new Date().toISOString().slice(0, 10),
                 isLoading: false, isUploading: false, canPrev: false, canNext: false, canDuplicatePrev: false,
                 days: [], stationGroups: [],
                 importModal: { stationId: '', file: null, bsModal: null },
                 modal: { stationId: '', agentId: '', targetStationId: '', agents: [], horaires: [], plannings: {}, isSaving: false, bsModal: null }
             };
+        },
+        computed: {
+            filteredStationGroups() {
+                if (!this.searchQuery) return this.stationGroups;
+                const q = this.searchQuery.toLowerCase();
+                return this.stationGroups.map(g => {
+                    const filteredRows = g.rows.filter(r =>
+                        r.agent.fullname.toLowerCase().includes(q) ||
+                        r.agent.matricule.toLowerCase().includes(q)
+                    );
+                    return { ...g, rows: filteredRows };
+                }).filter(g => g.rows.length > 0);
+            }
         },
         watch: {
             'modal.stationId'(val) {
@@ -232,10 +250,12 @@
                 this.$nextTick(() => { $(this.$refs.modalAgentSelect).val('').trigger('change'); });
             },
             'modal.targetStationId'(val) {
-                // If no rotation station selected, default to the affectation station
                 const sid = val || this.modal.stationId;
                 if (sid) {
                     this.loadModalHoraires(sid);
+                    if (this.modal.agentId) {
+                        this.applyExistingPlanning(this.modal.agentId, sid);
+                    }
                 } else {
                     this.modal.horaires = [];
                 }
@@ -244,28 +264,8 @@
                 this.modal.plannings = {};
                 if (val) {
                     const agent = this.modal.agents.find(a => a.id == val);
-                    const existing = this.findExistingPlanning(val);
-
-                    let targetId = '';
-                    if (existing) {
-                        for (let date in existing) {
-                            if (existing[date].site_id) {
-                                targetId = existing[date].site_id;
-                                break;
-                            }
-                        }
-                    }
-                    if (!targetId && agent) targetId = agent.site_id;
-
-                    this.modal.targetStationId = targetId || '';
-
-                    this.days.forEach(d => {
-                        let hId = null;
-                        if (existing?.[d.date]?.status === 'work') {
-                            hId = existing[d.date].horaire_id;
-                        }
-                        this.$set(this.modal.plannings, d.date, hId);
-                    });
+                    const targetSid = this.modal.targetStationId || agent.site_id;
+                    this.applyExistingPlanning(val, targetSid);
                 } else {
                     this.modal.targetStationId = '';
                 }
@@ -312,18 +312,32 @@
                     this.modal.horaires = json?.horaires || [];
                 } catch (e) { console.error(e); }
             },
-            findExistingPlanning(aid) {
-                for (let g of this.stationGroups) { const r = g.rows.find(row => row.agent.id == aid); if (r) return r.days; } return null;
+            findExistingPlanning(aid, sid) {
+                const group = this.stationGroups.find(g => g.key == sid);
+                if (group) {
+                    const r = group.rows.find(row => row.agent.id == aid);
+                    if (r) return r.days;
+                }
+                return null;
+            },
+            applyExistingPlanning(aid, sid) {
+                const existing = this.findExistingPlanning(aid, sid);
+                this.days.forEach(d => {
+                    let hId = null;
+                    if (existing?.[d.date]?.status === 'work') {
+                        hId = existing[d.date].horaire_id;
+                    }
+                    this.$set(this.modal.plannings, d.date, hId);
+                });
             },
             editIndividualPlanning(agent, groupStationId) {
                 this.modal.stationId = agent.site_id;
                 this.$nextTick(() => {
                     $(this.$refs.modalStationSelect).val(agent.site_id).trigger('change');
                     setTimeout(() => {
+                        this.modal.targetStationId = groupStationId;
                         this.modal.agentId = agent.id;
                         $(this.$refs.modalAgentSelect).val(agent.id).trigger('change');
-                        // Crucially, use the station from the table as the rotation station
-                        this.modal.targetStationId = groupStationId;
                         this.openModal();
                     }, 300);
                 });
@@ -371,12 +385,12 @@
                     Swal.fire('Succès', 'Reconduit', 'success'); this.fetchPlanning();
                 } catch (e) { Swal.fire('Erreur', 'Impossible de régénérer', 'error'); } finally { this.isLoading = false; }
             },
-            async deleteAgentPlanning(agent) {
-                const res = await Swal.fire({ title: 'Confirmer', text: `Supprimer tout le planning de ${agent.fullname} ?`, icon: 'warning', showCancelButton: true });
+            async deleteAgentPlanning(agent, siteId) {
+                const res = await Swal.fire({ title: 'Confirmer', text: `Supprimer tout le planning de ${agent.fullname} pour cette station ?`, icon: 'warning', showCancelButton: true });
                 if (!res.isConfirmed) return;
                 this.isLoading = true;
                 try {
-                    await fetch('/rh/planning/agent/delete', { method: 'POST', body: JSON.stringify({ agent_id: agent.id, start_date: this.weekDate }), headers: { 'X-CSRF-TOKEN': csrf(), 'Content-Type': 'application/json' } });
+                    await fetch('/rh/planning/agent/delete', { method: 'POST', body: JSON.stringify({ agent_id: agent.id, start_date: this.weekDate, site_id: siteId }), headers: { 'X-CSRF-TOKEN': csrf(), 'Content-Type': 'application/json' } });
                     this.fetchPlanning();
                 } catch (e) { Swal.fire('Erreur', '', 'error'); } finally { this.isLoading = false; }
             }

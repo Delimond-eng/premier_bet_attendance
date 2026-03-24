@@ -353,8 +353,8 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label class="form-label">Groupe horaire<span class="text-danger"> *</span></label>
-                                        <select class="form-select" v-model="createForm.groupe_id" required>
+                                        <label class="form-label">Groupe horaire</label>
+                                        <select class="form-select" v-model="createForm.groupe_id">
                                             <option value="">Selectionner groupe</option>
                                             <option v-for="g in filteredGroups" :key="g.id" :value="g.id">
                                                 @{{ g.libelle }} - @{{ g.horaire?.libelle ?? 'Horaire' }}

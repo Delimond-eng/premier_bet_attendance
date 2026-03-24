@@ -20,7 +20,6 @@ class PlanningController extends Controller
 {
     /**
      * Résout l'ID du groupe pour un agent.
-     * Si l'agent n'a pas de groupe, on cherche celui dont l'horaire_id est null.
      */
     private function resolveAgentGroupId($agentOrGroupId)
     {
@@ -30,13 +29,11 @@ class PlanningController extends Controller
             return $groupId;
         }
 
-        // Si non défini ou invalide, on cherche le groupe flexible (horaire_id null)
         $flexibleGroup = AgentGroup::whereNull('horaire_id')->first();
         if ($flexibleGroup) {
             return $flexibleGroup->id;
         }
 
-        // Fallback ultime sur le premier groupe existant
         return AgentGroup::first()?->id;
     }
 
@@ -66,7 +63,7 @@ class PlanningController extends Controller
             ->with('agent')
             ->whereBetween('date', [$prevWeekStart->toDateString(), $prevWeekEnd->toDateString()])
             ->when($request->station_id, function ($q) use ($request) {
-                $q->where(fn($sub) => $sub->where('site_id', $request->station_id)->orWhereHas('agent', fn($a) => $a->where('site_id', $request->station_id)));
+                $q->where('site_id', $request->station_id);
             })
             ->get();
 
@@ -78,13 +75,17 @@ class PlanningController extends Controller
             DB::beginTransaction();
             foreach ($prevPlannings as $p) {
                 $targetDate = $currentWeekStart->copy()->addDays(Carbon::parse($p->date)->dayOfWeekIso - 1);
+                $siteId = $p->site_id ?? $p->agent?->site_id;
 
                 AgentGroupPlanning::updateOrCreate(
-                    ['agent_id' => $p->agent_id, 'date' => $targetDate->toDateString()],
+                    [
+                        'agent_id' => $p->agent_id,
+                        'date' => $targetDate->toDateString(),
+                        'site_id' => $siteId
+                    ],
                     [
                         'agent_group_id' => $this->resolveAgentGroupId($p->agent_group_id ?? $p->agent),
                         'horaire_id' => $p->horaire_id,
-                        'site_id' => $p->site_id ?? $p->agent?->site_id,
                         'is_rest_day' => $p->is_rest_day,
                     ]
                 );
@@ -120,9 +121,13 @@ class PlanningController extends Controller
                 $agent = Agent::where('matricule', $matricule)->first();
                 if (!$agent) continue;
 
+                // ANCIENNE LOGIQUE : On met à jour la station d'affectation
                 $agent->update(['site_id' => $data['station_id']]);
 
-                AgentGroupPlanning::where('agent_id', $agent->id)->whereBetween('date', [$startOfWeek->toDateString(), $startOfWeek->copy()->addDays(6)->toDateString()])->delete();
+                // ANCIENNE LOGIQUE : On supprime tout le planning de la semaine pour cet agent
+                AgentGroupPlanning::where('agent_id', $agent->id)
+                    ->whereBetween('date', [$startOfWeek->toDateString(), $startOfWeek->copy()->addDays(6)->toDateString()])
+                    ->delete();
 
                 $groupId = $this->resolveAgentGroupId($agent);
 
@@ -134,7 +139,7 @@ class PlanningController extends Controller
                     AgentGroupPlanning::create([
                         'agent_id' => $agent->id,
                         'agent_group_id' => $groupId,
-                        'horaire_id' => $parsed['type'] === 'range' ? $this->resolveHoraire($agent, $parsed)['id'] : null,
+                        'horaire_id' => $parsed['type'] === 'range' ? $this->resolveHoraire($agent, $parsed, $data['station_id'])['id'] : null,
                         'site_id' => $data['station_id'],
                         'date' => $date,
                         'is_rest_day' => $parsed['type'] === 'off',
@@ -158,9 +163,10 @@ class PlanningController extends Controller
         return ['type' => 'off'];
     }
 
-    private function resolveHoraire($agent, $p) {
+    private function resolveHoraire($agent, $p, $siteId = null) {
+        $sid = $siteId ?? $agent->site_id;
         return PresenceHoraire::firstOrCreate(
-            ['started_at' => $p['start'], 'ended_at' => $p['end'], 'site_id' => $agent->site_id],
+            ['started_at' => $p['start'], 'ended_at' => $p['end'], 'site_id' => $sid],
             ['libelle' => "Shift {$p['start']}-{$p['end']}", 'tolerence_minutes' => 15]
         );
     }
@@ -172,14 +178,10 @@ class PlanningController extends Controller
 
         $query = AgentGroupPlanning::query()
             ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
-            ->when($request->station_id, fn($q) => $q->where(fn($sub) => $sub->where('site_id', $request->station_id)->orWhereHas('agent', fn($a) => $a->where('site_id', $request->station_id))));
+            ->when($request->station_id, fn($q) => $q->where('site_id', $request->station_id));
 
-        // Ajout du support pour exists_only requis par le frontend
         if ($request->exists_only) {
-            return response()->json([
-                'status' => 'success',
-                'exists' => $query->exists()
-            ]);
+            return response()->json(['status' => 'success', 'exists' => $query->exists()]);
         }
 
         $plannings = $query->with(['agent.station', 'horaire', 'station'])->get();
@@ -190,9 +192,11 @@ class PlanningController extends Controller
             $days[] = ['date' => $d->toDateString(), 'label' => ucfirst($d->locale('fr')->dayName)];
         }
 
-        $matrix = $plannings->groupBy('agent_id')->map(function ($ps) use ($days) {
-            $agent = $ps->first()->agent;
-            $res = ['agent' => $agent, 'days' => []];
+        $matrix = $plannings->groupBy(function($p) {
+            return $p->agent_id . '_' . $p->site_id;
+        })->map(function ($ps) use ($days) {
+            $first = $ps->first();
+            $res = ['agent' => $first->agent, 'site_id' => $first->site_id, 'days' => []];
             foreach ($days as $day) {
                 $p = $ps->firstWhere('date', $day['date']);
                 $label = 'OFF';
@@ -212,10 +216,7 @@ class PlanningController extends Controller
             return $res;
         });
 
-        $groups = $matrix->groupBy(function($r) {
-            foreach($r['days'] as $day) { if(!empty($day['site_id'])) return $day['site_id']; }
-            return $r['agent']?->site_id;
-        })->map(fn($rows, $sid) => [
+        $groups = $matrix->groupBy('site_id')->map(fn($rows, $sid) => [
             'key' => $sid,
             'station_name' => Station::withoutGlobalScopes()->find($sid)?->name ?? 'Sans station',
             'rows' => $rows->values()
@@ -237,27 +238,25 @@ class PlanningController extends Controller
         ]);
 
         $agent = Agent::withoutGlobalScopes()->findOrFail($data['agent_id']);
-        $startOfWeek = Carbon::parse($data['start_date'])->startOfWeek(Carbon::MONDAY);
 
         try {
             DB::beginTransaction();
-
             $groupId = $this->resolveAgentGroupId($agent);
 
-            if (!$groupId) {
-                throw new \Exception("Aucun groupe d'agent valide n'a été trouvé (un groupe avec horaire_id null est requis si l'agent n'a pas de groupe).");
-            }
-
             foreach ($data['plannings'] as $p) {
+                $siteId = $p['site_id'] ?? $agent->site_id;
+
+                // On ne supprime que le planning pour CETTE station précise
                 AgentGroupPlanning::where('agent_id', $agent->id)
                     ->where('date', $p['date'])
+                    ->where('site_id', $siteId)
                     ->delete();
 
                 AgentGroupPlanning::create([
                     'agent_id' => $agent->id,
                     'agent_group_id' => $groupId,
                     'horaire_id' => $p['horaire_id'],
-                    'site_id' => $p['site_id'] ?? $agent->site_id,
+                    'site_id' => $siteId,
                     'date' => $p['date'],
                     'is_rest_day' => (bool) $p['is_rest_day'],
                 ]);
@@ -274,7 +273,14 @@ class PlanningController extends Controller
     public function deleteAgentWeeklyPlanning(Request $request): JsonResponse
     {
         $startOfWeek = Carbon::parse($request->start_date)->startOfWeek(Carbon::MONDAY);
-        AgentGroupPlanning::where('agent_id', $request->agent_id)->whereBetween('date', [$startOfWeek->toDateString(), $startOfWeek->copy()->addDays(6)->toDateString()])->delete();
+        $query = AgentGroupPlanning::where('agent_id', $request->agent_id)
+            ->whereBetween('date', [$startOfWeek->toDateString(), $startOfWeek->copy()->addDays(6)->toDateString()]);
+
+        if ($request->site_id) {
+            $query->where('site_id', $request->site_id);
+        }
+
+        $query->delete();
         return response()->json(['status' => 'success', 'message' => 'Supprimé.']);
     }
 }
