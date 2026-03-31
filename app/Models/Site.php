@@ -39,6 +39,7 @@ class Site extends Model
         "latlng",
         "adresse",
         "phone",
+         "isValidLatlng",
         "emails",
         "fcm_token",
         "client_email",
@@ -115,7 +116,7 @@ class Site extends Model
         return $this->hasMany(PresenceAgents::class, foreignKey: 'site_id', localKey: "id");
     }
 
-    
+
     /**
      * has manu agents
      * @return HasMany

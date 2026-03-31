@@ -97,6 +97,35 @@ class PresenceController extends Controller
             }
             if ($horaire) {
                 $dateReference = $this->getDateReference($now, $horaire);
+
+                // BLOQUER SI EN RETARD (PREMIERBET UNIQUEMENT)
+                if ($data['key'] === 'check-in' && str_contains($request->getHost(), 'premierbet')) {
+                    $heureRef = $dateReference->copy()->setTimeFromTimeString($horaire->started_at);
+                    $toleranceMinutes = (int) ($horaire->tolerence_minutes ?? 15);
+                    if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
+                        return response()->json([
+                            'status' => 'error',
+                            'errors' => ['Vous êtes en retard. Veuillez contacter le responsable des ressources humaines.'],
+                        ], 200);
+                    }
+                }
+            }
+        }
+
+        // VÉRIFICATION POUR CONFIRMATION (MID-CHECK)
+        if ($data['key'] === 'confirmation') {
+            $openPresence = PresenceAgents::withoutGlobalScopes()
+                ->where('agent_id', $agent->id)
+                ->whereDate('date_reference', $dateReference->toDateString())
+                ->whereNotNull('started_at')
+                ->whereNull('ended_at')
+                ->first();
+
+            if (!$openPresence) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ["Impossible de confirmer: Aucun pointage d'entrée (check-in) actif trouvé pour aujourd'hui."],
+                ], 200);
             }
         }
 
