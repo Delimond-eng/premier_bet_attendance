@@ -60,6 +60,11 @@ new Vue({
             importForm: {
                 file: null,
             },
+            qrExport: {
+                format: 'a4',
+                cols: 3,
+                orientation: 'landscape'
+            }
         };
     },
 
@@ -67,6 +72,15 @@ new Vue({
         "form.name": function () {
             this.ensureAutoCode();
         },
+        "qrExport.format": function (newFormat) {
+            if (newFormat === 'a4') {
+                this.qrExport.cols = 3;
+            } else if (newFormat === 'a3') {
+                this.qrExport.cols = 4;
+            } else if (newFormat === 'a2') {
+                this.qrExport.cols = 8;
+            }
+        }
     },
 
     mounted() {
@@ -338,5 +352,14 @@ new Vue({
                 this.isLoading = false;
             }
         },
+
+        downloadQrcodes() {
+            const params = new URLSearchParams({
+                format: this.qrExport.format,
+                cols: this.qrExport.cols,
+                orientation: this.qrExport.orientation
+            });
+            window.location.href = `/stations/qrcodes?${params.toString()}`;
+        }
     },
 });

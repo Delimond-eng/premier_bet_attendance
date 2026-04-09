@@ -51,11 +51,37 @@
                                 <a href="javascript:void(0);" class="dropdown-toggle btn btn-light rounded-pill text-dark dropdown-icon-none" data-bs-toggle="dropdown">
                                     <i class="ti ti-qrcode fs-16"></i>
                                 </a>
-                                <ul class="dropdown-menu dropdown-menu-end p-3">
+                                <ul class="dropdown-menu dropdown-menu-end p-3" style="min-width: 250px;">
                                     <li>
-                                        @can('stations.export')
-                                            <a href="{{ route('stations.qrcode') }}" class="dropdown-item rounded-1">Télécharger les qrcodes</a>
-                                        @endcan
+                                        <div class="p-2">
+                                            <h6 class="fs-12 fw-bold mb-2">Options d'exportation QR</h6>
+                                            <div class="mb-2">
+                                                <label class="fs-11 text-muted mb-1">Format papier</label>
+                                                <select class="form-select form-select-sm" v-model="qrExport.format">
+                                                    <option value="a4">A4</option>
+                                                    <option value="a3">A3</option>
+                                                    <option value="a2">A2</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="fs-11 text-muted mb-1">Par ligne</label>
+                                                <select class="form-select form-select-sm" v-model="qrExport.cols">
+                                                    <option v-for="n in 10" :key="n" :value="n">@{{ n }} par ligne</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="fs-11 text-muted mb-1">Orientation</label>
+                                                <select class="form-select form-select-sm" v-model="qrExport.orientation">
+                                                    <option value="portrait">Portrait</option>
+                                                    <option value="landscape">Paysage</option>
+                                                </select>
+                                            </div>
+                                            @can('stations.export')
+                                                <button @click="downloadQrcodes" class="btn btn-primary w-100 btn-sm">
+                                                    <i class="ti ti-download me-1"></i> Télécharger
+                                                </button>
+                                            @endcan
+                                        </div>
                                     </li>
                                 </ul>
                             </div>

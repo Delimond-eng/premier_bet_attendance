@@ -4,11 +4,6 @@
     <meta charset="UTF-8">
     <title>QR CODES DES STATIONS - SALAMA GROUP</title>
     <style>
-        @page {
-            size: A4;
-            margin: 12mm;
-        }
-
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -31,7 +26,6 @@
         }
 
         .qr-cell {
-            width: 33.333%;
             padding: 8px;
             vertical-align: top;
         }
@@ -43,6 +37,7 @@
             background: #ffffff;
             text-align: center;
             page-break-inside: avoid;
+            margin-bottom: 10px;
         }
 
         .card-header {
@@ -117,22 +112,30 @@
         }
 
         .empty-cell {
-            width: 33.333%;
             padding: 8px;
         }
     </style>
 </head>
 <body>
 
-@foreach(array_chunk($areas, 9) as $page)
+@php
+    $cols = $cols ?? 3;
+    $width = 100 / $cols;
+    // Calculate items per page based on cols.
+    // This is a rough estimate, you might want to adjust it.
+    // Assuming 3 rows per page for simplicity.
+    $itemsPerPage = $cols * 3;
+@endphp
+
+@foreach(array_chunk($areas, $itemsPerPage) as $page)
     <div class="page">
         <table class="qr-grid">
             @foreach($page as $index => $area)
-                @if($index % 3 === 0)
+                @if($index % $cols === 0)
                     <tr>
                 @endif
 
-                <td class="qr-cell">
+                <td class="qr-cell" style="width: {{ $width }}%;">
                     <div class="card">
                         <div class="card-header">
                             <p class="company-name">SALAMA GROUP LTD</p>
@@ -157,18 +160,18 @@
                     </div>
                 </td>
 
-                @if(($index + 1) % 3 === 0)
+                @if(($index + 1) % $cols === 0)
                     </tr>
                 @endif
             @endforeach
 
             @php
-                $remaining = count($page) % 3;
+                $remaining = count($page) % $cols;
             @endphp
 
             @if($remaining !== 0)
-                @for($i = 0; $i < 3 - $remaining; $i++)
-                    <td class="empty-cell"></td>
+                @for($i = 0; $i < $cols - $remaining; $i++)
+                    <td class="empty-cell" style="width: {{ $width }}%;"></td>
                 @endfor
                 </tr>
             @endif

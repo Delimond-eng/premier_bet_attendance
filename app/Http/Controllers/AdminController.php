@@ -1227,8 +1227,12 @@ class AdminController extends Controller
         ];
     }
 
-    public function generateSiteQrcodes()
+    public function generateSiteQrcodes(Request $request)
     {
+        $format = $request->query('format', 'a4');
+        $cols = (int) $request->query('cols', 3);
+        $orientation = $request->query('orientation', 'landscape');
+
         $stations = Station::query()->orderBy('name')->get();
         $horairesByStation = PresenceHoraire::query()
             ->select(['id', 'site_id', 'libelle', 'started_at', 'mid_check', 'ended_at'])
@@ -1280,8 +1284,11 @@ class AdminController extends Controller
             ];
         }
 
-        $pdf = Pdf::loadView('pdf.qrcodes', ['areas' => $data])
-            ->setPaper('a4', 'landscape')
+        $pdf = Pdf::loadView('pdf.qrcodes', [
+            'areas' => $data,
+            'cols' => $cols,
+        ])
+            ->setPaper($format, $orientation)
             ->setOption('isHtml5ParserEnabled', true);
         return $pdf->download('qrcodes_stations.pdf');
     }
