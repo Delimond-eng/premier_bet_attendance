@@ -1232,8 +1232,15 @@ class AdminController extends Controller
         $format = $request->query('format', 'a4');
         $cols = (int) $request->query('cols', 3);
         $orientation = $request->query('orientation', 'landscape');
+        $stationIds = $request->query('ids');
 
-        $stations = Station::query()->orderBy('name')->get();
+        $query = Station::query()->orderBy('name');
+        if (!empty($stationIds)) {
+            $ids = is_array($stationIds) ? $stationIds : explode(',', $stationIds);
+            $query->whereIn('id', array_map('intval', $ids));
+        }
+        $stations = $query->get();
+
         $horairesByStation = PresenceHoraire::query()
             ->select(['id', 'site_id', 'libelle', 'started_at', 'mid_check', 'ended_at'])
             ->orderBy('site_id')

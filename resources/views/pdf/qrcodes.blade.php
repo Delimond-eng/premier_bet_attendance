@@ -4,19 +4,15 @@
     <meta charset="UTF-8">
     <title>QR CODES DES STATIONS - SALAMA GROUP</title>
     <style>
+        @page {
+            margin: 10mm;
+        }
+
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             color: #111827;
             background: #ffffff;
-        }
-
-        .page {
-            page-break-after: always;
-        }
-
-        .page:last-child {
-            page-break-after: auto;
         }
 
         .qr-grid {
@@ -26,8 +22,12 @@
         }
 
         .qr-cell {
-            padding: 8px;
+            padding: 5px;
             vertical-align: top;
+        }
+
+        tr {
+            page-break-inside: avoid;
         }
 
         .card {
@@ -36,18 +36,17 @@
             overflow: hidden;
             background: #ffffff;
             text-align: center;
-            page-break-inside: avoid;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
 
         .card-header {
             background: #1e40af;
             color: #ffffff;
-            padding: 10px 6px;
+            padding: 8px 4px;
         }
 
         .company-name {
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 800;
             margin: 0;
             text-transform: uppercase;
@@ -55,129 +54,122 @@
         }
 
         .kiosk-title {
-            font-size: 9px;
+            font-size: 8px;
             font-weight: 400;
-            margin: 3px 0 0;
+            margin: 2px 0 0;
             opacity: 0.9;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.2px;
         }
 
         .card-body {
-            padding: 12px 8px 8px;
+            padding: 10px 5px 5px;
             background: #ffffff;
         }
 
         .qr-wrapper {
             display: inline-block;
-            padding: 6px;
+            padding: 4px;
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 0;
         }
 
         .qr-img {
-            width: 125px;
-            height: 125px;
+            width: 130px;
+            height: 130px;
             display: block;
         }
 
         .instruction {
-            font-size: 8px;
+            font-size: 7px;
             color: #94a3b8;
-            margin: 8px 0 0;
+            margin: 5px 0 0;
             font-style: italic;
         }
 
         .station-footer {
-            padding: 10px 8px;
+            padding: 8px 5px;
             background: #f8fafc;
             border-top: 1px solid #e2e8f0;
         }
 
         .station-name {
             margin: 0;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             color: #1e40af;
             text-transform: uppercase;
-            line-height: 1.3;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
         }
 
         .station-code {
-            margin: 4px 0 0;
-            font-size: 9px;
+            margin: 2px 0 0;
+            font-size: 8px;
             color: #64748b;
             font-weight: 600;
         }
 
         .empty-cell {
-            padding: 8px;
+            padding: 5px;
         }
     </style>
 </head>
 <body>
 
 @php
-    $cols = $cols ?? 3;
+    $cols = (int)($cols ?? 3);
     $width = 100 / $cols;
-    // Calculate items per page based on cols.
-    // This is a rough estimate, you might want to adjust it.
-    // Assuming 3 rows per page for simplicity.
-    $itemsPerPage = $cols * 3;
 @endphp
 
-@foreach(array_chunk($areas, $itemsPerPage) as $page)
-    <div class="page">
-        <table class="qr-grid">
-            @foreach($page as $index => $area)
-                @if($index % $cols === 0)
-                    <tr>
-                @endif
+<table class="qr-grid">
+    @foreach($areas as $index => $area)
+        @if($index % $cols === 0)
+            <tr>
+        @endif
 
-                <td class="qr-cell" style="width: {{ $width }}%;">
-                    <div class="card">
-                        <div class="card-header">
-                            <p class="company-name">SALAMA GROUP LTD</p>
-                            <p class="kiosk-title">SMART KIOSK</p>
-                        </div>
+        <td class="qr-cell" style="width: {{ $width }}%;">
+            <div class="card">
+                <div class="card-header">
+                    <p class="company-name">SALAMA GROUP LTD</p>
+                    <p class="kiosk-title">SMART KIOSK</p>
+                </div>
 
-                        <div class="card-body">
-                            <div class="qr-wrapper">
-                                <img
-                                    class="qr-img"
-                                    src="{{ $area['qrcode'] ?? '' }}"
-                                    alt="QR Code"
-                                >
-                            </div>
-                            <p class="instruction">Scanner pour valider votre présence</p>
-                        </div>
-
-                        <div class="station-footer">
-                            <p class="station-name">{{ $area['name'] ?? '-' }}</p>
-                            <p class="station-code">ID: {{ $area['code'] ?? 'N/A' }}</p>
-                        </div>
+                <div class="card-body">
+                    <div class="qr-wrapper">
+                        <img
+                            class="qr-img"
+                            src="{{ $area['qrcode'] ?? '' }}"
+                            alt="QR Code"
+                        >
                     </div>
-                </td>
+                    <p class="instruction">Scanner pour valider votre présence</p>
+                </div>
 
-                @if(($index + 1) % $cols === 0)
-                    </tr>
-                @endif
-            @endforeach
+                <div class="station-footer">
+                    <p class="station-name">{{ $area['name'] ?? '-' }}</p>
+                    <p class="station-code">ID: {{ $area['code'] ?? 'N/A' }}</p>
+                </div>
+            </div>
+        </td>
 
-            @php
-                $remaining = count($page) % $cols;
-            @endphp
+        @if(($index + 1) % $cols === 0)
+            </tr>
+        @endif
+    @endforeach
 
-            @if($remaining !== 0)
-                @for($i = 0; $i < $cols - $remaining; $i++)
-                    <td class="empty-cell" style="width: {{ $width }}%;"></td>
-                @endfor
-                </tr>
-            @endif
-        </table>
-    </div>
-@endforeach
+    @php
+        $remaining = count($areas) % $cols;
+    @endphp
+
+    @if($remaining !== 0)
+        @for($i = 0; $i < $cols - $remaining; $i++)
+            <td class="empty-cell" style="width: {{ $width }}%;"></td>
+        @endfor
+        </tr>
+    @endif
+</table>
 
 </body>
 </html>

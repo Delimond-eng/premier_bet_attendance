@@ -63,9 +63,22 @@ new Vue({
             qrExport: {
                 format: 'a4',
                 cols: 3,
-                orientation: 'landscape'
+                orientation: 'landscape',
+                selectedIds: [],
+                search: '',
             }
         };
+    },
+
+    computed: {
+        filteredStationsForSelection() {
+            const search = String(this.qrExport.search || "").toLowerCase().trim();
+            if (!search) return this.sites;
+            return this.sites.filter(s =>
+                String(s.name || "").toLowerCase().includes(search) ||
+                String(s.code || "").toLowerCase().includes(search)
+            );
+        }
     },
 
     watch: {
@@ -359,7 +372,33 @@ new Vue({
                 cols: this.qrExport.cols,
                 orientation: this.qrExport.orientation
             });
+
+            if (this.qrExport.selectedIds.length > 0) {
+                params.set('ids', this.qrExport.selectedIds.join(','));
+            }
+
             window.location.href = `/stations/qrcodes?${params.toString()}`;
+        },
+
+        openSelectionModal() {
+            const el = document.getElementById("selection_stations_modal");
+            if (el && window.bootstrap) {
+                const modal = window.bootstrap.Modal.getOrCreateInstance(el);
+                modal.show();
+            }
+        },
+
+        toggleStationSelection(id) {
+            const idx = this.qrExport.selectedIds.indexOf(id);
+            if (idx > -1) {
+                this.qrExport.selectedIds.splice(idx, 1);
+            } else {
+                this.qrExport.selectedIds.push(id);
+            }
+        },
+
+        selectAllStationsForExport() {
+            this.qrExport.selectedIds = this.sites.map(s => s.id);
         }
     },
 });

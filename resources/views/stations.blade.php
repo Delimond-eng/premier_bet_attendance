@@ -76,6 +76,12 @@
                                                     <option value="landscape">Paysage</option>
                                                 </select>
                                             </div>
+
+                                            <button class="btn btn-outline-primary btn-sm w-100 mb-2" @click="openSelectionModal">
+                                                <i class="ti ti-list-check me-1"></i>
+                                                @{{ qrExport.selectedIds.length > 0 ? qrExport.selectedIds.length + ' station(s) sél.' : 'Sélectionner stations' }}
+                                            </button>
+
                                             @can('stations.export')
                                                 <button @click="downloadQrcodes" class="btn btn-primary w-100 btn-sm">
                                                     <i class="ti ti-download me-1"></i> Télécharger
@@ -240,6 +246,48 @@
                 </div>
             </div>
         @endcanany
+
+        <!-- Modal Sélection Stations -->
+        <div class="modal fade" id="selection_stations_modal" aria-modal="true" role="dialog">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4 class="modal-title">Sélectionner les stations à imprimer</h4>
+                        <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                            <i class="ti ti-x"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body pb-0">
+                        <div class="mb-3">
+                            <input type="text" class="form-control" v-model="qrExport.search" placeholder="Rechercher une station par nom ou code...">
+                        </div>
+                        <div class="row overflow-auto" style="max-height: 400px;">
+                            <div class="col-md-4 mb-3" v-for="s in filteredStationsForSelection" :key="s.id">
+                                <div class="card h-100 border pointer" :class="{'border-primary bg-light-primary': qrExport.selectedIds.includes(s.id)}" @click="toggleStationSelection(s.id)">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <span class="badge bg-outline-primary fs-10">@{{ s.code }}</span>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" :checked="qrExport.selectedIds.includes(s.id)">
+                                            </div>
+                                        </div>
+                                        <h6 class="fs-13 mb-1 text-truncate">@{{ s.name }}</h6>
+                                        <p class="fs-11 text-muted mb-0 text-truncate">@{{ s.adresse }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer d-flex justify-content-between">
+                        <div>
+                            <button class="btn btn-outline-secondary btn-sm" @click="qrExport.selectedIds = []">Tout désélectionner</button>
+                            <button class="btn btn-outline-info btn-sm" @click="selectAllStationsForExport">Tout sélectionner</button>
+                        </div>
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Terminer (@{{ qrExport.selectedIds.length }})</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 @endsection
 
