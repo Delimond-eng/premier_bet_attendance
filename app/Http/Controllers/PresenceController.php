@@ -1281,14 +1281,13 @@ class PresenceController extends Controller
         $data = $request->validate([
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
             'station_id' => 'nullable|integer',
             'agent_id' => 'nullable|integer',
             'group_id' => 'nullable|integer',
             'matricule_prefix' => 'nullable|string',
         ]);
-
-        $month = (int) ($data['month'] ?? Carbon::now()->month);
-        $year = (int) ($data['year'] ?? Carbon::now()->year);
 
         $filters = [
             'station_id' => $data['station_id'] ?? null,
@@ -1297,7 +1296,16 @@ class PresenceController extends Controller
             'matricule_prefix' => $data['matricule_prefix'] ?? null,
         ];
 
-        $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
+        if (!empty($data['from']) && !empty($data['to'])) {
+            $filters['from'] = $data['from'];
+            $filters['to'] = $data['to'];
+            $matrix = $service->buildMonthlyMatrix(0, 0, $filters);
+            $month = null; $year = null;
+        } else {
+            $month = (int) ($data['month'] ?? Carbon::now()->month);
+            $year = (int) ($data['year'] ?? Carbon::now()->year);
+            $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
+        }
 
         $showMatriculeFilter = str_contains($request->getHost(), 'premierbet');
         $prefixes = [];
@@ -1322,20 +1330,13 @@ class PresenceController extends Controller
                 ->all();
         }
 
-        if ($request->query('export') === 'pdf') {
-            $pdf = Pdf::loadView('pdf.reports.monthly_report', [
-                'data' => $matrix['data'],
-                'mois' => $month,
-                'annee' => $year,
-            ])->setPaper('a4', 'portrait');
-
-            return $pdf->download("rapport_mensuel_{$month}_{$year}.pdf");
-        }
-
         return response()->json([
             'status' => 'success',
             'month' => $month,
             'year' => $year,
+            'from' => $data['from'] ?? null,
+            'to' => $data['to'] ?? null,
+            'days' => $matrix['days'],
             'show_matricule_filter' => $showMatriculeFilter,
             'prefixes' => $prefixes,
             'data' => $matrix['data'],

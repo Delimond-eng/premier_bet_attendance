@@ -196,21 +196,28 @@ new Vue({
         const qYear = parseInt(getQueryParam("year") || "", 10);
         const qStation = getQueryParam("station_id");
 
+        const qFrom = getQueryParam("from");
+        const qTo = getQueryParam("to");
+
         return {
             isLoading: false,
             activeTab: "brut",
             sites: [],
             prefixes: [],
             show_matricule_filter: false,
+            useRange: !!(qFrom && qTo),
             filters: {
                 month: Number.isFinite(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : mm,
                 year: Number.isFinite(qYear) && qYear >= minYear ? qYear : yyyy,
                 station_id: qStation || "",
                 matricule_prefix: "",
+                from: qFrom || "",
+                to: qTo || "",
             },
             matrix: {},
             rows: [],
             detailedRows: [],
+            dynamicDayKeys: [],
         };
     },
 
@@ -233,8 +240,42 @@ new Vue({
                         this.filters.station_id = v;
                     },
                 });
+                this.initRangePicker();
             });
             await this.load();
+        },
+
+        initRangePicker() {
+            const $ = window.$;
+            if (!$ || !$.fn || !$.fn.daterangepicker) return;
+
+            const self = this;
+            const start = this.filters.from ? moment(this.filters.from) : moment().startOf('month');
+            const end = this.filters.to ? moment(this.filters.to) : moment().endOf('month');
+
+            $('#reportRange').daterangepicker({
+                startDate: start,
+                endDate: end,
+                opens: 'left',
+                locale: {
+                    format: 'DD/MM/YYYY',
+                    applyLabel: "Appliquer",
+                    cancelLabel: "Annuler",
+                    daysOfWeek: ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"],
+                    monthNames: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"],
+                    firstDay: 1
+                }
+            }, (start, end) => {
+                self.filters.from = start.format('YYYY-MM-DD');
+                self.filters.to = end.format('YYYY-MM-DD');
+                // Mise à jour automatique après sélection
+                self.load();
+            });
+
+            // Valeur initiale de l'input
+            if (this.filters.from && this.filters.to) {
+                $('#reportRange').val(moment(this.filters.from).format('DD/MM/YYYY') + ' - ' + moment(this.filters.to).format('DD/MM/YYYY'));
+            }
         },
 
         switchTab(tab) {
@@ -272,8 +313,14 @@ new Vue({
                 destroyDatatable(this.$refs.tableDetails);
 
                 const params = new URLSearchParams();
-                params.set("month", String(this.filters.month));
-                params.set("year", String(this.filters.year));
+                if (this.useRange && this.filters.from && this.filters.to) {
+                    params.set("from", this.filters.from);
+                    params.set("to", this.filters.to);
+                } else {
+                    params.set("month", String(this.filters.month));
+                    params.set("year", String(this.filters.year));
+                }
+
                 if (stationId) params.set("station_id", stationId);
                 if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
 
@@ -281,10 +328,12 @@ new Vue({
                 this.matrix = data?.data ?? {};
                 this.prefixes = data?.prefixes ?? [];
                 this.show_matricule_filter = !!data?.show_matricule_filter;
+                this.dynamicDayKeys = data?.days ?? [];
+
                 const agentsByKey = data?.agents ?? {};
 
                 let rows = computeSummary(this.matrix, agentsByKey);
-                let detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.monthDays);
+                let detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.dynamicDayKeys);
 
                 if (stationId) {
                     rows = rows.filter(
@@ -302,6 +351,7 @@ new Vue({
                 this.matrix = {};
                 this.rows = [];
                 this.detailedRows = [];
+                this.dynamicDayKeys = [];
             } finally {
                 this.isLoading = false;
             }
@@ -336,21 +386,15 @@ new Vue({
             return years;
         },
 
-        monthDays() {
-            const month = Number(this.filters.month) || 1;
-            const year = Number(this.filters.year) || new Date().getFullYear();
-            const numberOfDays = new Date(year, month, 0).getDate();
-            const days = [];
-            for (let i = 1; i <= numberOfDays; i += 1) {
-                days.push(String(i).padStart(2, "0"));
-            }
-            return days;
-        },
-
         exportPdfUrl() {
             const params = new URLSearchParams();
-            params.set("month", String(this.filters.month));
-            params.set("year", String(this.filters.year));
+            if (this.useRange && this.filters.from && this.filters.to) {
+                params.set("from", this.filters.from);
+                params.set("to", this.filters.to);
+            } else {
+                params.set("month", String(this.filters.month));
+                params.set("year", String(this.filters.year));
+            }
             params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
@@ -359,12 +403,25 @@ new Vue({
 
         exportExcelUrl() {
             const params = new URLSearchParams();
-            params.set("month", String(this.filters.month));
-            params.set("year", String(this.filters.year));
+             if (this.useRange && this.filters.from && this.filters.to) {
+                params.set("from", this.filters.from);
+                params.set("to", this.filters.to);
+            } else {
+                params.set("month", String(this.filters.month));
+                params.set("year", String(this.filters.year));
+            }
             params.set("tab", this.activeTab);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/monthly/export/excel?${params.toString()}`;
         },
     },
+
+    watch: {
+        useRange(val) {
+            if (val) {
+                this.$nextTick(() => this.initRangePicker());
+            }
+        }
+    }
 });

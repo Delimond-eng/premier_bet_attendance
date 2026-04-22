@@ -36,12 +36,31 @@
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                     <h5>Synthese agents</h5>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <select class="form-select" v-model.number="filters.month" style="width: 140px;">
+
+                        <!-- Month/Year Selects -->
+                        <select class="form-select" v-model.number="filters.month" style="width: 140px;" v-show="!useRange">
                             <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
                         </select>
-                        <select class="form-select" v-model.number="filters.year" style="width: 100px;">
+                        <select class="form-select" v-model.number="filters.year" style="width: 100px;" v-show="!useRange">
                             <option v-for="y in yearOptions" :key="y" :value="y">@{{ y }}</option>
                         </select>
+
+                        <!-- Date Range Input (replaces month/year selects) -->
+                        <div v-show="useRange">
+                            <div class="input-icon position-relative" style="width: 260px;">
+                                <span class="input-icon-addon">
+                                    <i class="ti ti-calendar text-gray-9"></i>
+                                </span>
+                                <input type="text" class="form-control date-range bookingrange" id="reportRange" placeholder="dd/mm/yyyy - dd/mm/yyyy">
+                            </div>
+                        </div>
+
+                        <!-- Toggle Range -->
+                        <div class="form-check form-switch me-2">
+                            <input class="form-check-input" type="checkbox" id="useRange" v-model="useRange">
+                            <label class="form-check-label fs-12" for="useRange">Intervalle</label>
+                        </div>
+
                         <select class="form-select" v-model="filters.matricule_prefix" style="width: 160px;">
                             <option value="">Sous-traitance</option>
                             <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
@@ -57,18 +76,20 @@
                 </div>
             </div>
             <div class="card-body">
-                <ul class="nav nav-tabs nav-tabs-solid mb-3">
-                    <li class="nav-item">
-                        <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'brut' }" @click="switchTab('brut')">
-                            Presences mensuelles brutes
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'details' }" @click="switchTab('details')">
-                            Presences mensuelles details
-                        </a>
-                    </li>
-                </ul>
+                <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+                    <ul class="nav nav-tabs nav-tabs-solid mb-0">
+                        <li class="nav-item">
+                            <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'brut' }" @click="switchTab('brut')">
+                                Presences mensuelles brutes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="javascript:void(0);" class="nav-link" :class="{ active: activeTab === 'details' }" @click="switchTab('details')">
+                                Presences mensuelles details
+                            </a>
+                        </li>
+                    </ul>
+                </div>
 
                 <div class="table-responsive" v-show="activeTab === 'brut'">
                     <table class="table" ref="tableRaw">
@@ -133,7 +154,7 @@
                             <th>Matricule</th>
                             <th>Nom complet agent</th>
                             <th>Station</th>
-                            <th v-for="d in monthDays" :key="'head-' + d" class="text-center attendance-day-head">@{{ d }}</th>
+                            <th v-for="d in dynamicDayKeys" :key="'head-' + d" class="text-center attendance-day-head">@{{ d }}</th>
                             <th>Total</th>
                             <th>Tot presences</th>
                             <th>Tot absences</th>
@@ -151,7 +172,7 @@
                             <td>@{{ r.agent?.fullname ?? '-' }}</td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
                             <td
-                                v-for="d in monthDays"
+                                v-for="d in dynamicDayKeys"
                                 :key="'cell-' + r.agent_key + '-' + d"
                                 class="text-center attendance-day-cell"
                             >

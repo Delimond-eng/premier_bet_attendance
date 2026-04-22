@@ -10,7 +10,7 @@
         <meta name="keywords" content="mobile">
         <meta name="author" content="SALAMA GROUP LTD">
         <meta name="robots" content="noindex, nofollow">
-        <title>SALAMA Attendance(Electrocool) </title>
+        <title>RD Tech Attendance </title>
 
             <!-- Favicon -->
         <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/logo-4.svg') }}">

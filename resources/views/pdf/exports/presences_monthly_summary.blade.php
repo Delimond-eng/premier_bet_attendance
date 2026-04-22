@@ -1,8 +1,9 @@
 @extends('pdf.exports._base')
 
 @php
+    $isRange = !empty($from) && !empty($to);
     $metaLines = [
-        'Mois: ' . sprintf('%02d', (int) ($month ?? 0)) . '/' . (string) ($year ?? ''),
+        'Période: ' . ($isRange ? ($from . ' au ' . $to) : (sprintf('%02d', (int) ($month ?? 0)) . '/' . (string) ($year ?? ''))),
         'Station: ' . (($station->name ?? null) ?: 'Toutes'),
         'Lignes: ' . (is_array($rows ?? null) ? count($rows) : 0),
     ];
