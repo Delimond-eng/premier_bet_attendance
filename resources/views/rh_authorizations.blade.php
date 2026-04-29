@@ -86,7 +86,7 @@
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Agent<span class="text-danger"> *</span></label>
-                                        <select class="form-select" v-model="form.agent_id">
+                                        <select class="form-select select2-agent" v-model="form.agent_id">
                                             <option value="" hidden>--Sélectionner agent--</option>
                                             <option v-for="ag in agents" :key="ag.id" :value="ag.id">@{{ ag.fullname }} (@{{ ag.matricule }})</option>
                                         </select>
@@ -101,7 +101,19 @@
                                 <div class="col-md-12">
                                     <div class="mb-3">
                                         <label class="form-label">Type<span class="text-danger"> *</span></label>
-                                        <input class="form-control" v-model="form.type" placeholder="retard, absence, maladie...">
+                                        <select class="form-select" v-model="form.type_select">
+                                            <option value="retard">Retard</option>
+                                            <option value="absence">Absence</option>
+                                            <option value="depart">Départ (Sortie)</option>
+                                            <option value="maladie">Maladie</option>
+                                            <option value="autre">Autre...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-12" v-if="form.type_select === 'autre'">
+                                    <div class="mb-3">
+                                        <label class="form-label">Préciser le type<span class="text-danger"> *</span></label>
+                                        <input class="form-control" v-model="form.type_autre" placeholder="Entrez le type d'autorisation">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -114,9 +126,9 @@
                                     <div class="mb-3">
                                         <label class="form-label">Statut</label>
                                         <select class="form-select" v-model="form.status">
-                                            <option value="pending">pending</option>
-                                            <option value="approved">approved</option>
-                                            <option value="rejected">rejected</option>
+                                            <option value="pending">En attente</option>
+                                            <option value="approved">Approuvée</option>
+                                            <option value="rejected">Rejetée</option>
                                         </select>
                                     </div>
                                 </div>

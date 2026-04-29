@@ -97,16 +97,24 @@ class PresenceController extends Controller
             }
             if ($horaire) {
                 $dateReference = $this->getDateReference($now, $horaire);
-
-                // BLOQUER SI EN RETARD (PREMIERBET UNIQUEMENT)
-                if ($data['key'] === 'check-in' && str_contains($request->getHost(), 'premierbet')) {
+                // BLOQUER SI EN RETARD (PREMIERBET & ELECTROCOOL)
+                $host = $request->getHost();
+                if ($data['key'] === 'check-in' && (str_contains($host, 'premierbet') || str_contains($host, 'electrocool'))) {
                     $heureRef = $dateReference->copy()->setTimeFromTimeString($horaire->started_at);
                     $toleranceMinutes = (int) ($horaire->tolerence_minutes ?? 15);
                     if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
-                        return response()->json([
-                            'status' => 'error',
-                            'errors' => ['Vous êtes en retard. Veuillez contacter le responsable des ressources humaines.'],
-                        ], 200);
+                        // On vérifie s'il y a une autorisation spéciale approuvée pour aujourd'hui
+                        $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
+                            ->whereDate('date_reference', $dateReference->toDateString())
+                            ->where('status', 'approved')
+                            ->exists();
+
+                        if (!$hasAuth) {
+                            return response()->json([
+                                'status' => 'error',
+                                'errors' => ['Vous êtes en retard. Veuillez contacter le responsable des ressources humaines.'],
+                            ], 200);
+                        }
                     }
                 }
             }
@@ -194,7 +202,6 @@ class PresenceController extends Controller
                 'error' => $e->getMessage(),
                 'agent_id' => $agent->id ?? null,
             ]);
-
             return response()->json(['status' => 'error', 'errors' => ['Erreur interne: ' . $e->getMessage()]], 200);
         }
     }
@@ -211,11 +218,21 @@ class PresenceController extends Controller
         }
 
         $retard = 'non';
+        $specialAuthComment = "";
         if ($horaire) {
             $heureRef = $dateReference->copy()->setTimeFromTimeString($horaire->started_at);
             $toleranceMinutes = (int) ($horaire->tolerence_minutes ?? 15);
             if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
                 $retard = 'oui';
+
+                // On vérifie s'il y a une autorisation spéciale pour mentionner dans le commentaire
+                $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
+                    ->whereDate('date_reference', $dateReference->toDateString())
+                    ->where('status', 'approved')
+                    ->exists();
+                if ($hasAuth) {
+                    $specialAuthComment = "Présence validée avec autorisation spéciale.";
+                }
             }
         }
 
@@ -223,6 +240,10 @@ class PresenceController extends Controller
         if ($coordonnees) {
             $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
             $commentLine = $this->buildGenericCommentLine('Check-in', $geo);
+        }
+
+        if ($specialAuthComment !== "") {
+            $commentLine = $commentLine !== "" ? ($commentLine . "\n" . $specialAuthComment) : $specialAuthComment;
         }
 
         $presence = PresenceAgents::create([
@@ -259,6 +280,43 @@ class PresenceController extends Controller
             return response()->json(['status' => 'error', 'errors' => ['Aucun pointage d’entrée ouvert trouvé.']], 200);
         }
 
+        $specialAuthComment = "";
+        // BLOQUER SI SORTIE PRECOCE (ELECTROCOOL UNIQUEMENT)
+        $host = request()->getHost();
+        if (str_contains($host, 'electrocool') && $presence->horaire_id) {
+            $horaire = PresenceHoraire::find($presence->horaire_id);
+            if ($horaire) {
+                $dateRef = Carbon::parse($presence->getRawOriginal('date_reference'));
+                $hStart = $horaire->getRawOriginal('started_at');
+                $hEnd = $horaire->getRawOriginal('ended_at');
+
+                $heureFin = $dateRef->copy()->setTimeFromTimeString($hEnd);
+                $heureDebut = $dateRef->copy()->setTimeFromTimeString($hStart);
+
+                if ($heureFin->lt($heureDebut)) {
+                    $heureFin->addDay();
+                }
+
+                // Bloquer si c'est plus de 15' avant la fin
+                if ($now->lt($heureFin->copy()->subMinutes(15))) {
+                    // On vérifie s'il y a une autorisation spéciale approuvée pour aujourd'hui
+                    $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
+                        ->whereDate('date_reference', $dateRef->toDateString())
+                        ->where('status', 'approved')
+                        ->exists();
+
+                    if (!$hasAuth) {
+                        return response()->json([
+                            'status' => 'error',
+                            'errors' => ["Vous devez patienter jusqu'aux heures prévues de sortie."],
+                        ], 200);
+                    } else {
+                        $specialAuthComment = "Sortie validée avec autorisation spéciale.";
+                    }
+                }
+            }
+        }
+
         $startedAt = Carbon::parse($presence->started_at);
         $dureeMinutes = $startedAt->diffInMinutes($now);
         $dureeFormat = $this->formatDuration($dureeMinutes);
@@ -268,6 +326,10 @@ class PresenceController extends Controller
         if ($coordonnees) {
             $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
             $commentLine = $this->buildGenericCommentLine('Check-out', $geo);
+        }
+
+        if ($specialAuthComment !== "") {
+            $commentLine = $commentLine !== "" ? ($commentLine . "\n" . $specialAuthComment) : $specialAuthComment;
         }
 
         $presence->update([
@@ -636,10 +698,10 @@ class PresenceController extends Controller
             $h = PresenceHoraire::find($planningYesterday->horaire_id);
             if ($h) {
                 try {
-                    $heureDebut = Carbon::createFromTimeString($h->started_at);
-                    $heureFin = Carbon::createFromTimeString($h->ended_at);
+                    $heureDebut = Carbon::createFromTimeString($h->getRawOriginal('started_at'));
+                    $heureFin = Carbon::createFromTimeString($h->getRawOriginal('ended_at'));
                     if ($heureFin->lt($heureDebut)) {
-                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->ended_at);
+                        $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($h->getRawOriginal('ended_at'));
                         if ($now->lt($limiteFin)) {
                             return $h;
                         }
@@ -682,12 +744,12 @@ class PresenceController extends Controller
 
     private function getDateReference(Carbon $now, PresenceHoraire $horaire): Carbon
     {
-        $heureDebut = Carbon::createFromTimeString($horaire->started_at);
-        $heureFin = Carbon::createFromTimeString($horaire->ended_at);
+        $heureDebut = Carbon::createFromTimeString($horaire->getRawOriginal('started_at'));
+        $heureFin = Carbon::createFromTimeString($horaire->getRawOriginal('ended_at'));
         $dateReference = $now->copy()->startOfDay();
 
         if ($heureFin->lt($heureDebut)) {
-            $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($horaire->ended_at);
+            $limiteFin = $now->copy()->startOfDay()->setTimeFromTimeString($horaire->getRawOriginal('ended_at'));
             if ($now->lt($limiteFin)) {
                 $dateReference = $now->copy()->subDay()->startOfDay();
             }

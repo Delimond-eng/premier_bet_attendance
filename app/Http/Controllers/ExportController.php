@@ -567,36 +567,20 @@ class ExportController extends Controller
         }
 
         if (!empty($data['from']) && !empty($data['to'])) {
+            $filters['from'] = $data['from'];
+            $filters['to'] = $data['to'];
+            $matrix = $service->buildMonthlyMatrix(0, 0, $filters);
             $start = Carbon::parse($data['from'])->startOfDay();
             $end = Carbon::parse($data['to'])->endOfDay();
-
-            // Re-use internal buildMatrixForRange method logic if necessary,
-            // but we'll reflect it by calling AttendanceReportService with range.
-            // Actually buildMonthlyMatrix works for month, let's add a range method or reflect it.
-            // For now, let's use a workaround as the service has private buildMatrixForRange
-            // Let's assume we use reflection or update the service.
-            // BETTER: Use built-in support for range in service if I can update it.
-
-            // Workaround: Call private method via reflection or just call building logic here.
-            // Since I am an AI I can update the service. I already updated the service to handle host.
-            // I should have added a buildRangeMatrix. Let's assume buildMonthlyMatrix is adjusted or I add one.
-
-            // I will use buildMatrixForRange logic (copied) if not accessible.
-            // But let's assume we want to call a public method.
-
-            // Reflecting on AttendanceReportService.php, buildMonthlyMatrix calls buildMatrixForRange.
-            // I'll update buildMonthlyMatrix to accept range optionally or add a new method.
-
-            $matrix = $service->buildMonthlyMatrix(0, 0, $filters + ['from' => $data['from'], 'to' => $data['to']]);
-            $month = null; $year = null;
             $periodLabel = $start->toDateString() . ' au ' . $end->toDateString();
+            $month = null; $year = null;
         } else {
             $month = (int) ($data['month'] ?? Carbon::now()->month);
             $year = (int) ($data['year'] ?? Carbon::now()->year);
             $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
-            $periodLabel = Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y');
             $start = Carbon::createFromDate($year, $month, 1)->startOfMonth();
             $end = $start->copy()->endOfMonth();
+            $periodLabel = $start->translatedFormat('F Y');
         }
 
         $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents'], $tab);
@@ -632,7 +616,7 @@ class ExportController extends Controller
 
             $title = 'Rapport détaillé des présences';
             $sheetTitle = 'Détails Période';
-            $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '');
+            $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
             $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'H. Norm', 'H. Sup', 'Total Preste'];
             $table = [];
@@ -655,7 +639,7 @@ class ExportController extends Controller
             }
             $title = 'Résumé des présences';
             $sheetTitle = 'Résumé Période';
-            $filenameBase = 'resume_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '');
+            $filenameBase = 'resume_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         }
 
         $meta = [

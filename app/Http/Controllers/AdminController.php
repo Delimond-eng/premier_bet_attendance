@@ -1410,13 +1410,13 @@ class AdminController extends Controller
     public function fetchAgents(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'per_page' => 'nullable|integer|min:1|max:200',
+            'per_page' => 'nullable|integer|min:1|max:1000',
             'search' => 'nullable|string',
             'station_id' => 'nullable|integer|exists:sites,id',
         ]);
 
         $perPage = (int) ($data['per_page'] ?? 10);
-        $perPage = max(min($perPage, 200), 1);
+        $perPage = max(min($perPage, 1000), 1);
 
         $search = $data['search'] ?? null;
         $stationId = $data['station_id'] ?? null;

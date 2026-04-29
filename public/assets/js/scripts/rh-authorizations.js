@@ -19,7 +19,7 @@ function initOrRefreshDatatable(tableEl) {
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[1, "desc"]],
+        order: [[2, "desc"]], // Sort by date
         info: true,
         language: {
             search: " ",
@@ -53,12 +53,29 @@ new Vue({
                 id: "",
                 agent_id: "",
                 date_reference: "",
-                type: "",
+                type: "retard",
+                type_select: "retard",
+                type_autre: "",
                 minutes: "",
                 reason: "",
                 status: "pending",
             },
         };
+    },
+
+    watch: {
+        'form.type_select'(val) {
+            if (val !== 'autre') {
+                this.form.type = val;
+            } else {
+                this.form.type = this.form.type_autre;
+            }
+        },
+        'form.type_autre'(val) {
+            if (this.form.type_select === 'autre') {
+                this.form.type = val;
+            }
+        }
     },
 
     mounted() {
@@ -70,9 +87,37 @@ new Vue({
 
     methods: {
         async init() {
-            const { data } = await get("/agents/data?per_page=200");
-            this.agents = data?.agents?.data ?? [];
+            try {
+                // Utilisation de reference pour avoir TOUS les agents sans pagination
+                const { data } = await get("/rh/conges/reference");
+                this.agents = data?.agents ?? [];
+
+                this.$nextTick(() => {
+                    this.initSelect2();
+                });
+            } catch (e) {
+                console.error("Erreur chargement agents", e);
+            }
             await this.load();
+        },
+
+        initSelect2() {
+            const $ = window.$;
+            const self = this;
+            const el = $(".select2-agent");
+            if (el.length && $.fn.select2) {
+                if (el.hasClass("select2-hidden-accessible")) {
+                    el.select2('destroy');
+                }
+
+                el.select2({
+                    dropdownParent: $("#auth_modal"),
+                    width: '100%',
+                    placeholder: "--Sélectionner agent--"
+                }).on("change", function() {
+                    self.form.agent_id = $(this).val();
+                });
+            }
         },
 
         async load() {
@@ -90,16 +135,26 @@ new Vue({
         },
 
         edit(a) {
+            const standardTypes = ['retard', 'absence', 'depart', 'maladie'];
+            const isAutre = !standardTypes.includes(a.type);
+
             this.form = {
                 id: a.id,
                 agent_id: a.agent_id,
                 date_reference: a.date_reference ?? "",
                 type: a.type ?? "",
+                type_select: isAutre ? "autre" : (a.type || "retard"),
+                type_autre: isAutre ? a.type : "",
                 minutes: a.minutes ?? "",
                 reason: a.reason ?? "",
                 status: a.status ?? "pending",
             };
-            window.$("#auth_modal").modal("show");
+
+            this.$nextTick(() => {
+                const $ = window.$;
+                $(".select2-agent").val(a.agent_id).trigger("change");
+                $("#auth_modal").modal("show");
+            });
         },
 
         reset() {
@@ -107,22 +162,41 @@ new Vue({
                 id: "",
                 agent_id: "",
                 date_reference: "",
-                type: "",
+                type: "retard",
+                type_select: "retard",
+                type_autre: "",
                 minutes: "",
                 reason: "",
                 status: "pending",
             };
+            const $ = window.$;
+            $(".select2-agent").val("").trigger("change");
         },
 
         async save() {
+            if (!this.form.agent_id || !this.form.date_reference) {
+                alert("Veuillez remplir les champs obligatoires (Agent et Date).");
+                return;
+            }
+
             this.isLoading = true;
             try {
+                if (this.form.type_select !== 'autre') {
+                    this.form.type = this.form.type_select;
+                } else {
+                    this.form.type = this.form.type_autre;
+                }
+
                 const { data } = await postJson("/rh/authorizations/store", this.form);
-                if (data?.errors) return;
+                if (data?.errors) {
+                    alert(data.errors.join("\n"));
+                    return;
+                }
                 window.$("#auth_modal").modal("hide");
                 this.reset();
-                this.isLoading = false;
                 await this.load();
+            } catch(e) {
+                console.error(e);
             } finally {
                 this.isLoading = false;
             }
@@ -134,8 +208,6 @@ new Vue({
             this.isLoading = true;
             try {
                 const { data } = await postJson("/rh/authorizations/delete", { id: a.id });
-                if (data?.errors) return;
-                this.isLoading = false;
                 await this.load();
             } finally {
                 this.isLoading = false;

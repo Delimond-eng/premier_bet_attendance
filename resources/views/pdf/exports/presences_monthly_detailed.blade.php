@@ -75,6 +75,24 @@
             padding: 4px 0;
         }
 
+        .day-header-multi {
+            line-height: 1;
+            padding: 4px 0 !important;
+        }
+
+        .day-header-multi .day-num {
+            display: block;
+            font-size: 10px;
+            font-weight: 900;
+        }
+
+        .day-header-multi .month-num {
+            display: block;
+            font-size: 6px;
+            opacity: 0.8;
+            font-weight: normal;
+        }
+
         /* Colonnes STATISTIQUES */
         .col-stat-summary {
             width: 25px;
@@ -135,10 +153,18 @@
                     <th class="col-agent-identity">Agent</th>
                     @foreach(($days ?? []) as $day)
                         @php
-                            // Si format Y-m-d, on affiche juste le jour pour gagner de la place
-                            $label = strlen($day) > 2 ? substr($day, -2) : $day;
+                            $isMulti = strpos($day, '/') !== false;
+                            $dayNum = $isMulti ? explode('/', $day)[0] : $day;
+                            $monthNum = $isMulti ? explode('/', $day)[1] : '';
                         @endphp
-                        <th class="col-day-cell">{{ $label }}</th>
+                        <th class="col-day-cell {{ $isMulti ? 'day-header-multi' : '' }}">
+                            @if($isMulti)
+                                <span class="day-num">{{ $dayNum }}</span>
+                                <span class="month-num">{{ $monthNum }}</span>
+                            @else
+                                {{ $dayNum }}
+                            @endif
+                        </th>
                     @endforeach
                     <th class="col-stat-summary">TOT</th>
                     <th class="col-stat-summary">PRS</th>
