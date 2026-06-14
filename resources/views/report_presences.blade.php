@@ -17,6 +17,12 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                <div v-if="show_matricule_filter" class="mb-2" style="width: 160px;">
+                    <select class="form-select" v-model="filters.matricule_prefix">
+                        <option value="">Sous-traitance</option>
+                        <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
+                    </select>
+                </div>
                 <div class="flex-fill mb-2" style="width: 260px;">
                     <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                         <option value="">Toutes les stations</option>
@@ -27,7 +33,7 @@
                     <input type="date" class="form-control" v-model="filters.date">
                 </div>
                 <div class="me-2 mb-2">
-                    <button class="btn btn-primary" @click="load">Charger</button>
+                    <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>
                 </div>
                 <div class="mb-2">
                     <div class="dropdown">

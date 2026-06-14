@@ -227,8 +227,8 @@
                                     </td>
                                     <td class="text-end">
                                         <div class="dropdown">
-                                            <button class="btn btn-soft-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                                Actions
+                                            <button class="btn btn-info btn-sm" type="button" data-bs-toggle="dropdown">
+                                                Actions <i class="ti ti-chevron-down"></i>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow-lg">
                                                 @can('agents.view')
@@ -236,6 +236,9 @@
                                                 @endcan
                                                 @can('plannings.view')
                                                     <li><a class="dropdown-item" :href="'{{ route('rh.plannings.view') }}?agent_id='+data.id"><i class="ti ti-calendar-event me-2 text-info"></i>Gérer planning</a></li>
+                                                @endcan
+                                                @can('authorizations.create')
+                                                    <li><a class="dropdown-item" href="javascript:void(0);" data-action="authorize-delay" :data-id="data.id"><i class="ti ti-clock-plus me-2 text-warning"></i>Autoriser retard</a></li>
                                                 @endcan
                                                 @can('agents.update')
                                                     <li><a class="dropdown-item" href="javascript:void(0);" data-action="edit" :data-id="data.id"><i class="ti ti-edit me-2 text-success"></i>Modifier</a></li>
@@ -423,6 +426,45 @@
                 </div>
             </div>
         @endcan
+
+        <!-- Modal Autoriser Retard -->
+        <div class="modal fade" id="modal_authorize_delay" aria-modal="true" role="dialog">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Autorisation spéciale de retard</h5>
+                        <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                            <i class="ti ti-x"></i>
+                        </button>
+                    </div>
+                    <form @submit.prevent="submitAuthorizeDelay">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Agent</label>
+                                <input type="text" class="form-control" :value="selectedAgent?.fullname" readonly disabled>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" v-model="authorizeDelayForm.date" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Motif / Commentaire</label>
+                                <textarea class="form-control" v-model="authorizeDelayForm.comment" rows="3" placeholder="Raison du retard..."></textarea>
+                            </div>
+                            <div class="alert alert-info fs-12">
+                                <i class="ti ti-info-circle me-1"></i> Cette autorisation sera créée et <strong>approuvée automatiquement</strong>.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-light border me-2" data-bs-dismiss="modal">Annuler</button>
+                            <button type="submit" class="btn btn-primary" :disabled="isAuthorizing">
+                                @{{ isAuthorizing ? 'Traitement...' : 'Confirmer l\'autorisation' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 @endsection
 

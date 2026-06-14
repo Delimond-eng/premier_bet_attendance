@@ -905,12 +905,10 @@ class AdminController extends Controller
             }
         }
 
-        // Autorisations spéciales sur la période (au jour), sans dépendre d'un libellé exact.
-        // On exclut "retard/absence" qui sont des cas opérationnels distincts.
+        // Autorisations spéciales sur la période (au jour).
         $authSpeciales = AttendanceAuthorization::query()
             ->whereBetween('date_reference', [$fromDate, $toDate])
             ->where('status', 'approved')
-            ->whereNotIn('type', ['retard', 'absence'])
             ->count();
 
         $missedPunches = PresenceAgents::query()

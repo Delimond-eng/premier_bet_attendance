@@ -42,10 +42,11 @@ new Vue({
             isLoading: false,
             isSaving: false,
             isImporting: false,
+            isAuthorizing: false,
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
             groups: [],
             agents: [],
-            selectedAgentId: "",
+            selectedAgent: null,
             stats: {
                 total: 0,
                 actif: 0,
@@ -72,6 +73,10 @@ new Vue({
                 groupe_id: "",
                 file: null,
             },
+            authorizeDelayForm: {
+                date: new Date().toISOString().substr(0, 10),
+                comment: "",
+            }
         };
     },
 
@@ -162,6 +167,21 @@ new Vue({
             if (modal) modal.hide();
         },
 
+        getAuthorizeDelayModal() {
+            const el = document.getElementById("modal_authorize_delay");
+            if (!el) return null;
+            if (window.bootstrap && window.bootstrap.Modal) {
+                return window.bootstrap.Modal.getOrCreateInstance(el);
+            }
+            if (window.$ && window.$.fn && window.$.fn.modal) {
+                return {
+                    show: () => window.$(el).modal("show"),
+                    hide: () => window.$(el).modal("hide"),
+                };
+            }
+            return null;
+        },
+
         onTableClick(e) {
             const target = e?.target;
             if (!target || typeof target.closest !== "function") return;
@@ -178,6 +198,7 @@ new Vue({
 
             if (action === "edit") this.editAgent(agent);
             else if (action === "remove") this.removeAgent(agent);
+            else if (action === "authorize-delay") this.prepareAuthorizeDelay(agent);
         },
 
         async load(force = false) {
@@ -399,6 +420,46 @@ new Vue({
                 this.isSaving = false;
             }
         },
+
+        prepareAuthorizeDelay(agent) {
+            this.selectedAgent = agent;
+            this.authorizeDelayForm = {
+                date: new Date().toISOString().substr(0, 10),
+                comment: "",
+            };
+            const modal = this.getAuthorizeDelayModal();
+            if (modal) modal.show();
+        },
+
+        async submitAuthorizeDelay() {
+            if (this.isAuthorizing) return;
+            if (!this.selectedAgent) return;
+
+            this.isAuthorizing = true;
+            try {
+                const payload = {
+                    agent_id: this.selectedAgent.id,
+                    date: this.authorizeDelayForm.date,
+                    comment: this.authorizeDelayForm.comment,
+                    type: 'retard',
+                };
+
+                const { data } = await post("/rh/authorizations/special", payload);
+                if (data?.errors) {
+                    alert((data.errors || []).join("\n"));
+                    return;
+                }
+
+                alert("L'autorisation de retard a été enregistrée et approuvée.");
+                const modal = this.getAuthorizeDelayModal();
+                if (modal) modal.hide();
+                await this.load(true);
+            } catch (e) {
+                alert("Erreur lors de l'enregistrement de l'autorisation.");
+            } finally {
+                this.isAuthorizing = false;
+            }
+        }
     },
 
     computed: {

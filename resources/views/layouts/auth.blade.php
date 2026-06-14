@@ -10,13 +10,13 @@
         <meta name="keywords" content="mobile">
         <meta name="author" content="SALAMA GROUP LTD">
         <meta name="robots" content="noindex, nofollow">
-        <title>RD Tech Attendance </title>
+        <title>SALAMA ATTENDANCE</title>
 
             <!-- Favicon -->
-        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/logo-4.svg') }}">
+        <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/salama.png') }}">
 
         <!-- Apple Touch Icon -->
-        <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/img/apple-touch-icon.png') }}">
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/img/salama.png') }}">
 
         <!-- Bootstrap CSS -->
         <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">

@@ -81,7 +81,7 @@ class PresenceController extends Controller
             }
 
             if (!$stationId) {
-                return response()->json(['status' => 'error', 'errors' => ['Station introuvable pour ce pointage.']], 200);
+                return response()->json(['status' => 'error', 'errors' => ['Station introuvable for ce pointage.']], 200);
             }
         }
 
@@ -92,7 +92,7 @@ class PresenceController extends Controller
             if ($data['key'] === 'check-in' && !$horaire) {
                 return response()->json([
                     'status' => 'error',
-                    'errors' => ['Horaire introuvable pour cet agent sur cette station.'],
+                    'errors' => ['Horaire introuvable for cet agent sur cette station.'],
                 ], 200);
             }
             if ($horaire) {
@@ -103,7 +103,7 @@ class PresenceController extends Controller
                     $heureRef = $dateReference->copy()->setTimeFromTimeString($horaire->started_at);
                     $toleranceMinutes = (int) ($horaire->tolerence_minutes ?? 15);
                     if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
-                        // On vérifie s'il y a une autorisation spéciale approuvée pour aujourd'hui
+                        // On vérifie s'il y a une autorisation spéciale approuvée for aujourd'hui
                         $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
                             ->whereDate('date_reference', $dateReference->toDateString())
                             ->where('status', 'approved')
@@ -132,7 +132,7 @@ class PresenceController extends Controller
             if (!$openPresence) {
                 return response()->json([
                     'status' => 'error',
-                    'errors' => ["Impossible de confirmer: Aucun pointage d'entrée (check-in) actif trouvé pour aujourd'hui."],
+                    'errors' => ["Impossible de confirmer: Aucun pointage d'entrée (check-in) actif trouvé for aujourd'hui."],
                 ], 200);
             }
         }
@@ -214,7 +214,7 @@ class PresenceController extends Controller
             ->first();
 
         if ($existing && $existing->started_at) {
-            return response()->json(['status' => 'error', 'errors' => ['Pointage d’entrée déjà effectué pour cette période.']], 200);
+            return response()->json(['status' => 'error', 'errors' => ['Pointage d’entrée déjà effectué for cette période.']], 200);
         }
 
         $retard = 'non';
@@ -225,7 +225,7 @@ class PresenceController extends Controller
             if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
                 $retard = 'oui';
 
-                // On vérifie s'il y a une autorisation spéciale pour mentionner dans le commentaire
+                // On vérifie s'il y a une autorisation spéciale for mentionner dans le commentaire
                 $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
                     ->whereDate('date_reference', $dateReference->toDateString())
                     ->where('status', 'approved')
@@ -277,41 +277,57 @@ class PresenceController extends Controller
             ->first();
 
         if (!$presence) {
-            return response()->json(['status' => 'error', 'errors' => ['Aucun pointage d’entrée ouvert trouvé.']], 200);
+            return response()->json([
+                'status' => 'error',
+                'errors' => ['Aucun pointage d’entrée ouvert trouvé.']
+            ], 200);
         }
 
         $specialAuthComment = "";
+
         // BLOQUER SI SORTIE PRECOCE (ELECTROCOOL UNIQUEMENT)
         $host = request()->getHost();
+
         if (str_contains($host, 'electrocool') && $presence->horaire_id) {
+
             $horaire = PresenceHoraire::find($presence->horaire_id);
+
             if ($horaire) {
+
                 $dateRef = Carbon::parse($presence->getRawOriginal('date_reference'));
-                $hStart = $horaire->getRawOriginal('started_at');
-                $hEnd = $horaire->getRawOriginal('ended_at');
 
-                $heureFin = $dateRef->copy()->setTimeFromTimeString($hEnd);
-                $heureDebut = $dateRef->copy()->setTimeFromTimeString($hStart);
+                // NE PAS APPLIQUER LE BLOCAGE LE SAMEDI
+                if (!$dateRef->isSaturday()) {
 
-                if ($heureFin->lt($heureDebut)) {
-                    $heureFin->addDay();
-                }
+                    $hStart = $horaire->getRawOriginal('started_at');
+                    $hEnd = $horaire->getRawOriginal('ended_at');
 
-                // Bloquer si c'est plus de 15' avant la fin
-                if ($now->lt($heureFin->copy()->subMinutes(15))) {
-                    // On vérifie s'il y a une autorisation spéciale approuvée pour aujourd'hui
-                    $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
-                        ->whereDate('date_reference', $dateRef->toDateString())
-                        ->where('status', 'approved')
-                        ->exists();
+                    $heureFin = $dateRef->copy()->setTimeFromTimeString($hEnd);
+                    $heureDebut = $dateRef->copy()->setTimeFromTimeString($hStart);
 
-                    if (!$hasAuth) {
-                        return response()->json([
-                            'status' => 'error',
-                            'errors' => ["Vous devez patienter jusqu'aux heures prévues de sortie."],
-                        ], 200);
-                    } else {
-                        $specialAuthComment = "Sortie validée avec autorisation spéciale.";
+                    if ($heureFin->lt($heureDebut)) {
+                        $heureFin->addDay();
+                    }
+
+                    // Bloquer si c'est plus de 15 min avant la fin
+                    if ($now->lt($heureFin->copy()->subMinutes(15))) {
+
+                        // Vérifier autorisation spéciale
+                        $hasAuth = AttendanceAuthorization::where('agent_id', $agent->id)
+                            ->whereDate('date_reference', $dateRef->toDateString())
+                            ->where('status', 'approved')
+                            ->exists();
+
+                        if (!$hasAuth) {
+                            return response()->json([
+                                'status' => 'error',
+                                'errors' => [
+                                    "Vous devez patienter jusqu'aux heures prévues de sortie."
+                                ],
+                            ], 200);
+                        } else {
+                            $specialAuthComment = "Sortie validée avec autorisation spéciale.";
+                        }
                     }
                 }
             }
@@ -323,13 +339,16 @@ class PresenceController extends Controller
 
         $existingComment = trim((string) ($presence->commentaires ?? ''));
         $commentLine = "";
+
         if ($coordonnees) {
             $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
             $commentLine = $this->buildGenericCommentLine('Check-out', $geo);
         }
 
         if ($specialAuthComment !== "") {
-            $commentLine = $commentLine !== "" ? ($commentLine . "\n" . $specialAuthComment) : $specialAuthComment;
+            $commentLine = $commentLine !== ""
+                ? ($commentLine . "\n" . $specialAuthComment)
+                : $specialAuthComment;
         }
 
         $presence->update([
@@ -766,7 +785,7 @@ class PresenceController extends Controller
     }
 
     /**
-     * Utilisé pour charger le journal de pointage (Web Admin)
+     * Utilisé for charger le journal de pointage (Web Admin)
      */
     public function getPresencesBySiteAndDate(Request $request): JsonResponse
     {
@@ -814,6 +833,7 @@ class PresenceController extends Controller
             'station_id' => 'nullable|integer',
             'agent_id' => 'nullable|integer',
             'group_id' => 'nullable|integer',
+            'matricule_prefix' => 'nullable|string',
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
@@ -822,6 +842,7 @@ class PresenceController extends Controller
             'station_id' => $data['station_id'] ?? null,
             'agent_id' => $data['agent_id'] ?? null,
             'group_id' => $data['group_id'] ?? null,
+            'matricule_prefix' => $data['matricule_prefix'] ?? null,
         ];
 
         $matrix = $service->buildDailyMatrix(Carbon::parse($date), $filters);
@@ -892,7 +913,12 @@ class PresenceController extends Controller
         $presencesQuery = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date)
-            ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', $data['station_id']));
+            ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', $data['station_id']))
+            ->when(!empty($data['matricule_prefix']), function($q) use ($data) {
+                $q->whereHas('agent', function($qq) use ($data) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $data['matricule_prefix'] . '%');
+                });
+            });
 
         $perPage = (int) ($data['per_page'] ?? 25);
         $presences = $presencesQuery->orderByDesc('started_at')->paginate($perPage);
@@ -908,9 +934,35 @@ class PresenceController extends Controller
 
         $this->attachPresenceMotifs($presences->getCollection(), $date);
 
+        $host = $request->getHost();
+        $showMatriculeFilter = str_contains($host, 'premierbet') || str_contains($host, 'electrocool') || $host === '127.0.0.1';
+        $prefixes = [];
+
+        if ($showMatriculeFilter) {
+            $prefixes = Agent::withoutGlobalScopes()
+                ->whereNotNull('matricule')
+                ->get(['matricule'])
+                ->map(function ($a) {
+                    $m = (string) $a->matricule;
+                    if (str_contains($m, '-')) {
+                        return explode('-', $m)[0];
+                    }
+                    if (preg_match('/^[A-Za-z]+/', $m, $matches)) {
+                        return strtoupper($matches[0]);
+                    }
+                    return strtoupper(substr($m, 0, 2));
+                })
+                ->unique()
+                ->filter()
+                ->values()
+                ->all();
+        }
+
         return response()->json([
             'status' => 'success',
             'date' => $date,
+            'show_matricule_filter' => $showMatriculeFilter,
+            'prefixes' => $prefixes,
             'count' => [
                 'agents' => count($matrix['agents']),
                 'agents_expected' => $expectedAgents,
@@ -1369,11 +1421,12 @@ class PresenceController extends Controller
             $matrix = $service->buildMonthlyMatrix($month, $year, $filters);
         }
 
-        $showMatriculeFilter = str_contains($request->getHost(), 'premierbet');
+        $host = $request->getHost();
+        $showMatriculeFilter = str_contains($host, 'premierbet') || str_contains($host, 'electrocool') || $host === '127.0.0.1';
         $prefixes = [];
 
         if ($showMatriculeFilter) {
-            $prefixes = Agent::query()
+            $prefixes = Agent::withoutGlobalScopes()
                 ->whereNotNull('matricule')
                 ->get(['matricule'])
                 ->map(function ($a) {
@@ -1432,7 +1485,7 @@ class PresenceController extends Controller
 
         $base = Carbon::parse($data['date'] ?? Carbon::today()->toDateString());
         $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : $base->copy()->startOfDay();
-        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->endOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->startOfDay() : $base->copy()->startOfDay();
         if ($start->gt($end)) [$start, $end] = [$end, $start];
 
         $rows = $service->buildAbsenceRows($start, $end, $data['station_id'] ?? null);

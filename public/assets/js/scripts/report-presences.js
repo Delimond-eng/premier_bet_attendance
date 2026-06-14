@@ -35,14 +35,6 @@ function initOrRefreshDatatable(tableEl) {
     });
 }
 
-function formatOvertime(minutes) {
-    if (!minutes || minutes <= 0) return "0h";
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}m`;
-}
-
 new Vue({
     el: "#App",
 
@@ -55,9 +47,12 @@ new Vue({
         return {
             isLoading: false,
             sites: [],
+            prefixes: [],
+            show_matricule_filter: false,
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
                 station_id: "",
+                matricule_prefix: "",
             },
             count: {
                 agents: 0,
@@ -110,30 +105,20 @@ new Vue({
                 String(this.filters.station_id || "");
             this.filters.station_id = stationId;
 
-            // Destroy current DataTables before Vue updates grouped tables.
-            const tables = this.$refs.tables;
-            if (Array.isArray(tables)) {
-                tables.forEach((t) => destroyDatatable(t));
-            } else if (tables) {
-                destroyDatatable(tables);
-            }
-
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
             if (stationId) params.set("station_id", stationId);
+            if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             params.set("per_page", "200");
 
             try {
                 const { data } = await get(`/reports/daily/data?${params.toString()}`);
 
                 this.count = data?.count ?? this.count;
-                this.rows = (data?.presences?.data ?? []).map(r => {
-                    // Try to extract overtime from comments or meta if not in row directly
-                    // But our backend now includes it in buildDailyMatrix if we use it.
-                    // Actually dailyReport uses matrix but then fetches from PresenceAgents query.
-                    // We need to match rows with matrix data if we want overtime in daily report list.
-                    return r;
-                });
+                this.prefixes = data?.prefixes ?? [];
+                this.show_matricule_filter = !!data?.show_matricule_filter;
+
+                this.rows = (data?.presences?.data ?? []);
                 this.stationStatsById = this.buildStationStatsMap(data?.count_by_station ?? []);
                 this.grouped = this.groupByStation(this.rows, this.stationStatsById);
 
@@ -201,7 +186,6 @@ new Vue({
                 if (g.station_id && statsById[g.station_id]) {
                     g.stats = { ...g.stats, ...statsById[g.station_id] };
                 } else {
-                    // fallback : on calcule ce qu'on peut depuis les lignes
                     const presences = g.rows.filter((x) => !!x.started_at).length;
                     const retards = g.rows.filter((x) => x.retard === "oui").length;
                     g.stats.presences = presences;
@@ -220,6 +204,7 @@ new Vue({
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/daily/export/pdf?${params.toString()}`;
         },
 
@@ -227,6 +212,7 @@ new Vue({
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/daily/export/excel?${params.toString()}`;
         },
     },

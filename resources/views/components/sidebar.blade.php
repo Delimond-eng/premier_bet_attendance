@@ -91,41 +91,48 @@
                     </ul>
                 </li>
 
-                <li class="menu-title"><span>ALERTES</span></li>
+                <!-- ALERTES REGROUPEES -->
+                <li class="menu-title"><span>NOTIFICATIONS</span></li>
                 @php
                     $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
                     try {
-                        // On demande les alertes journalieres par defaut avec un seuil de 1
                         $alertMenuCounts = app(\App\Services\CumulativeAlertService::class)->getSidebarCounts(1);
                     } catch (\Throwable $e) {
                         $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
                     }
+                    $totalAlerts = array_sum($alertMenuCounts);
                 @endphp
-
                 <li>
-
                     <ul>
-                        <li>
-                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type', 'absences') === 'absences' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'absences', 'period' => 'daily', 'threshold' => 1]) }}">
-                                <i class="ti ti-calendar-off"></i>
-                                <span>Alerte des absences</span>
-                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['absences'] ?? 0) }}</span>
+                        <li class="submenu">
+                            <a href="javascript:void(0);" class="@active(['reports.alerts.*'])">
+                                <i class="ti ti-bell-ringing"></i>
+                                <span>Alertes & Suivi</span>
+                                @if($totalAlerts > 0)
+                                <span class="badge badge-danger fs-10 fw-medium text-white ms-2">{{ $totalAlerts }}</span>
+                                @endif
+                                <span class="menu-arrow"></span>
                             </a>
-                        </li>
-                        <li>
-                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type') === 'retards' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'retards', 'period' => 'daily', 'threshold' => 1]) }}">
-                                <i class="ti ti-calendar-stats"></i>
-                                <span>Alerte des retards</span>
-                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['retards'] ?? 0) }}</span>
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="subdrop {{ request()->routeIs('reports.alerts.view') && request()->query('type') === 'departs' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'departs', 'period' => 'daily']) }}">
-                                <i class="ti ti-calendar-clock"></i>
-                                <span>Departs anticipes</span>
-                                <span class="badge badge-danger fs-10 fw-medium text-white ms-s">{{ (int) ($alertMenuCounts['departs'] ?? 0) }}</span>
-                            </a>
+                            <ul>
+                                <li>
+                                    <a class="{{ request()->query('type') === 'absences' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'absences', 'period' => 'daily', 'threshold' => 1]) }}">
+                                        Absences
+                                        <span class="badge badge-soft-danger ms-auto">{{ $alertMenuCounts['absences'] }}</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="{{ request()->query('type') === 'retards' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'retards', 'period' => 'daily', 'threshold' => 1]) }}">
+                                        Retards
+                                        <span class="badge badge-soft-danger ms-auto">{{ $alertMenuCounts['retards'] }}</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="{{ request()->query('type') === 'departs' ? 'active' : '' }}" href="{{ route('reports.alerts.view', ['type' => 'departs', 'period' => 'daily']) }}">
+                                        Départs anticipés
+                                        <span class="badge badge-soft-danger ms-auto">{{ $alertMenuCounts['departs'] }}</span>
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                     </ul>
                 </li>

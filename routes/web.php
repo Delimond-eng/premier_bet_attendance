@@ -203,6 +203,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/authorizations/store', [HRController::class, 'authorizationsStore'])
             ->name('authorizations.store')
             ->middleware('canany:authorizations.create,authorizations.update');
+        Route::post('/authorizations/special', [HRController::class, 'specialAuthorizationStore'])
+            ->name('authorizations.special')
+            ->middleware('can:authorizations.create');
         Route::post('/authorizations/delete', [HRController::class, 'authorizationsDelete'])
             ->name('authorizations.delete');
 

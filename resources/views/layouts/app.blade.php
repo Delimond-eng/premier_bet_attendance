@@ -8,7 +8,10 @@
 	<meta name="author" content="SALAMA GROUP LTD">
 	<title>SALAMA ATTENDANCE | Web Admin</title>
 
-    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/icon.jpg') }}">
+    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('assets/img/salama.png') }}">
+
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/img/salama.png') }}">
 
 
     <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">

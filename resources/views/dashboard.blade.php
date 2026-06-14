@@ -48,7 +48,7 @@
                             <h2 class="card-title mb-0">Status Présences Agent</h2>
                             <a :href="detailsUrl" class="btn btn-md btn-light" @click.prevent="goDetails">Voir détails</a>
                         </div>
-                        <div id="status-chart" class="mb-3"></div>
+                        <div id="status-chart" class="mb-3" v-pre></div>
                         <div class="row">
                             <div class="col-4">
                                 <div class="text-center">
@@ -100,7 +100,7 @@
                         </div>
                         <div class="row">
                             <div class="col-sm-5">
-                                <div id="leave-chart"></div>
+                                <div id="leave-chart" v-pre></div>
                             </div>
                             <div class="col-sm-7">
                                 <div>
@@ -292,7 +292,7 @@
                             </div>
                         </div>
                         <div class="d-sm-flex align-items-center flex-sm-row flex-column">
-                            <div id="attendance-chart" class="w-100">
+                            <div id="attendance-chart" class="w-100" v-pre>
                                 <canvas id="attendance-chart-js" height="180"></canvas>
                             </div>
                             <div class="flex-shrink-0">

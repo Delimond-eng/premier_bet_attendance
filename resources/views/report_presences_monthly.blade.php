@@ -61,7 +61,7 @@
                             <label class="form-check-label fs-12" for="useRange">Intervalle</label>
                         </div>
 
-                        <select class="form-select" v-model="filters.matricule_prefix" style="width: 160px;">
+                        <select v-if="show_matricule_filter" class="form-select" v-model="filters.matricule_prefix" style="width: 160px;">
                             <option value="">Sous-traitance</option>
                             <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
                         </select>
@@ -71,7 +71,7 @@
                                 <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                             </select>
                         </div>
-                        <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? 'Chargement...' : 'Charger' }}</button>
+                        <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>
                     </div>
                 </div>
             </div>
