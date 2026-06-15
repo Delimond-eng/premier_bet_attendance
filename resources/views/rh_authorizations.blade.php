@@ -16,9 +16,11 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                @can('authorizations.create')
                 <button class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#auth_modal" @click="reset">
                     <i class="ti ti-circle-plus me-2"></i>Ajouter
                 </button>
+                @endcan
             </div>
         </div>
 
@@ -60,9 +62,15 @@
                             <td>@{{ a.type }}</td>
                             <td>@{{ a.minutes ?? '--' }}</td>
                             <td>@{{ statusLabel(a.status) }}</td>
-                            <td>
-                                <a href="javascript:void(0);" class="me-2 text-info" @click="edit(a)"><i class="ti ti-edit"></i></a>
-                                <a href="javascript:void(0);" class="text-danger" @click="remove(a)"><i class="ti ti-trash"></i></a>
+                            <td class="text-end">
+                                <div class="action-icon d-inline-flex">
+                                    @can('authorizations.update')
+                                    <a href="javascript:void(0);" class="me-2 text-info" @click="edit(a)"><i class="ti ti-edit"></i></a>
+                                    @endcan
+                                    @can('authorizations.delete')
+                                    <a href="javascript:void(0);" class="text-danger" @click="remove(a)"><i class="ti ti-trash"></i></a>
+                                    @endcan
+                                </div>
                             </td>
                         </tr>
                         </tbody>
@@ -71,6 +79,7 @@
             </div>
         </div>
 
+        @canany(['authorizations.create', 'authorizations.update'])
         <div class="modal fade" id="auth_modal" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
@@ -150,6 +159,7 @@
                 </div>
             </div>
         </div>
+        @endcanany
     </div>
 @endsection
 

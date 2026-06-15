@@ -21,11 +21,13 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
+                @can('groupes.create')
                 <div class="mb-2">
                     <a href="#" data-bs-toggle="modal" data-bs-target="#add_group" class="btn btn-primary d-flex align-items-center">
                         <i class="ti ti-circle-plus me-2"></i>Ajout groupe
                     </a>
                 </div>
+                @endcan
 
             </div>
         </div>
@@ -84,8 +86,12 @@
                                 </td>
                                 <td>
                                     <div class="action-icon d-inline-flex">
+                                        @can('groupes.update')
                                         <a href="javascript:void(0);" class="me-2 text-info" @click="edit(g)"><i class="ti ti-edit"></i></a>
+                                        @endcan
+                                        @can('groupes.delete')
                                         <a href="javascript:void(0);" class="text-danger" @click="remove(g)"><i class="ti ti-trash"></i></a>
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
@@ -96,6 +102,7 @@
             </div>
         </div>
 
+        @canany(['groupes.create', 'groupes.update'])
         <div class="modal fade" id="add_group" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
@@ -136,18 +143,6 @@
                                         <small class="text-muted">Les horaires affichés correspondent à la station choisie.</small>
                                     </div>
                                 </div>
-                                <!--
-                                <div class="col-md-12">
-                                    <div class="mb-3">
-                                        <label class="form-label">Statut</label>
-                                        <select class="form-select" v-model="form.status">
-                                            <option value="actif">Actif</option>
-                                            <option value="inactif">Inactif</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                -->
-
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -160,6 +155,7 @@
                 </div>
             </div>
         </div>
+        @endcanany
 
     </div>
 @endsection
@@ -167,5 +163,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/groupes.js") }}"></script>
 @endpush
-
-

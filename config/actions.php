@@ -39,13 +39,13 @@ return [
     'groupes' => [
         'entity' => 'groupes',
         'label'  => 'Groupes',
-        'actions' => ['view', 'create', 'update'],
+        'actions' => ['view', 'create', 'update', 'delete'],
     ],
 
     'plannings' => [
         'entity' => 'plannings',
         'label'  => 'Plannings rotatifs',
-        'actions' => ['view', 'create', 'update', 'import', 'export'],
+        'actions' => ['view', 'create', 'update', 'import', 'export', 'delete'],
     ],
 
     'presences' => [
@@ -146,5 +146,11 @@ return [
         'entity' => 'logs',
         'label'  => 'Journal acces',
         'actions' => ['view'],
+    ],
+
+    'devices' => [
+        'entity' => 'devices',
+        'label'  => 'Terminaux (Appareils)',
+        'actions' => ['view', 'update', 'sync'],
     ],
 ];

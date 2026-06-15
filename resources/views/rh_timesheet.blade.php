@@ -16,6 +16,7 @@
                 </nav>
             </div>
 
+            @can('timesheet.export')
             <div class="dropdown">
                 <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="ti ti-file-export me-1"></i>Exporter
@@ -29,6 +30,7 @@
                     </li>
                 </ul>
             </div>
+            @endcan
         </div>
 
         <div class="card">
@@ -86,8 +88,8 @@
             </div>
         </div>
     </div>
-@endsection 
- 
-@push("scripts") 
-    <script type="module" src="{{ asset("assets/js/scripts/rh-timesheet.js") . '?v=' . filemtime(public_path('assets/js/scripts/rh-timesheet.js')) }}"></script> 
+@endsection
+
+@push("scripts")
+    <script type="module" src="{{ asset("assets/js/scripts/rh-timesheet.js") . '?v=' . filemtime(public_path('assets/js/scripts/rh-timesheet.js')) }}"></script>
 @endpush

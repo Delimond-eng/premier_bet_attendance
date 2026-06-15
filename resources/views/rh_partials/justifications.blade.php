@@ -3,14 +3,14 @@
         <h5>Liste des justifications</h5>
         <span class="text-muted" v-if="isLoading">Chargement...</span>
     </div>
-<div class="card-body">
-    <div class="table-responsive">
-        <table class="table" ref="table">
-        <thead class="thead-light">
-        <tr>
-            <th>Agent</th>
-            <th>Station</th>
-            <th>Date</th>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table" ref="table">
+                <thead class="thead-light">
+                <tr>
+                    <th>Agent</th>
+                    <th>Station</th>
+                    <th>Date</th>
                     <th>Type</th>
                     <th>Statut</th>
                     <th></th>
@@ -34,9 +34,15 @@
                     <td>@{{ j.date_reference_label ?? j.date_reference }}</td>
                     <td><span class="badge badge-soft-warning">@{{ kindLabel(j.kind) }}</span></td>
                     <td><span class="badge" :class="{'badge-success' : j.status ==='approved', 'badge-danger' : j.status ==='rejected', 'badge-warning' : j.status ==='pending',}">@{{ statusLabel(j.status) }}</span></td>
-                    <td>
-                        <a href="javascript:void(0);" class="me-2 text-info" @click="edit(j)"><i class="ti ti-edit"></i></a>
-                        <a href="javascript:void(0);" class="text-danger" @click="remove(j)"><i class="ti ti-trash"></i></a>
+                    <td class="text-end">
+                        <div class="action-icon d-inline-flex">
+                            @can('justifications.update')
+                            <a href="javascript:void(0);" class="me-2 text-info" @click="edit(j)"><i class="ti ti-edit"></i></a>
+                            @endcan
+                            @can('justifications.delete')
+                            <a href="javascript:void(0);" class="text-danger" @click="remove(j)"><i class="ti ti-trash"></i></a>
+                            @endcan
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -45,6 +51,7 @@
     </div>
 </div>
 
+@canany(['justifications.create', 'justifications.update'])
 <div class="modal fade" id="justif_modal" aria-modal="true" role="dialog">
     <div class="modal-dialog modal-dialog-centered modal-md">
         <div class="modal-content">
@@ -100,3 +107,4 @@
         </div>
     </div>
 </div>
+@endcanany

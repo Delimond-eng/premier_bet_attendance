@@ -108,8 +108,9 @@
         .code-1-R { background-color: #e0f2fe; color: #075985; }
         .code-A   { background-color: #fee2e2; color: #991b1b; }
         .code-OFF { background-color: #f1f5f9; color: #94a3b8; }
-        .code-C   { background-color: #eff6ff; color: #1e40af; }
+        .code-CONGE { background-color: #eff6ff; color: #1e40af; }
         .code-AS  { background-color: #faf5ff; color: #6b21a8; }
+        .code-M   { background-color: #fff9c4; color: #856404; }
         .code-fut { color: #cbd5e1; background-color: #ffffff; }
 
         tbody tr:nth-child(even) { background-color: #ffffff; }
@@ -187,7 +188,7 @@
                         @foreach(($days ?? []) as $day)
                             @php
                                 $code = $r['days'][$day] ?? '--';
-                                $class = 'code-' . str_replace('1-R', '1-R', $code);
+                                $class = 'code-' . $code;
                                 if ($code == '--') $class = 'code-fut';
                             @endphp
                             <td class="col-day-cell {{ $class }}">
@@ -211,8 +212,9 @@
             <div class="legend-item"><span class="swatch code-1-R"></span> <strong>1-R</strong> : Retard</div>
             <div class="legend-item"><span class="swatch code-A"></span> <strong>A</strong> : Absent / Justifié</div>
             <div class="legend-item"><span class="swatch code-OFF"></span> <strong>OFF / REPOS</strong></div>
-            <div class="legend-item"><span class="swatch code-C"></span> <strong>C</strong> : Congé</div>
+            <div class="legend-item"><span class="swatch code-CONGE"></span> <strong>CONGE</strong> : Congé</div>
             <div class="legend-item"><span class="swatch code-AS"></span> <strong>AS</strong> : Autorisation</div>
+            <div class="legend-item"><span class="swatch code-M"></span> <strong>M</strong> : Maladie</div>
         </div>
     </div>
 @endsection

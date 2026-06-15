@@ -92,6 +92,7 @@
                 </li>
 
                 <!-- ALERTES REGROUPEES -->
+                @canany(['rapport_absences.view', 'rapport_retards.view', 'rapport_presences.view'])
                 <li class="menu-title"><span>NOTIFICATIONS</span></li>
                 @php
                     $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
@@ -136,6 +137,7 @@
                         </li>
                     </ul>
                 </li>
+                @endcanany
 
                 <li class="menu-title"><span>RH</span></li>
 
@@ -246,15 +248,20 @@
                         @endcanany
                     </ul>
                 </li>
-                @if(Auth::user()->hasRole("admin"))
+
+                @canany(['devices.view', 'users.view', 'roles.view', 'logs.view'])
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
+                        @can('devices.view')
                         <li class="@active(['admin.devices.index'])">
                             <a href="{{ route('admin.devices.index') }}">
                                 <i class="ti ti-device-mobile"></i><span>Gestion Terminaux</span>
                             </a>
                         </li>
+                        @endcan
+
+                        @if(Auth::user()->hasRole('admin'))
                         @canany(['users.view', 'roles.view', 'logs.view'])
                         <li class="submenu">
                             <a href="javascript:void(0);" class="@active(['admin.*'])">
@@ -274,9 +281,10 @@
                             </ul>
                         </li>
                         @endcanany
+                        @endif
                     </ul>
                 </li>
-                @endif
+                @endcanany
 
             </ul>
         </div>

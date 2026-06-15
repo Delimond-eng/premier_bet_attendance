@@ -2,6 +2,7 @@
 
 @section("content")
     <div class="content" id="App" v-cloak>
+        <!-- Breadcrumb -->
         <div class="d-md-flex d-block align-items-center justify-content-between page-breadcrumb mb-3">
             <div class="my-auto mb-2">
                 <h2 class="mb-1">Rapport des présences (hebdomadaire)</h2>
@@ -16,6 +17,7 @@
                 </nav>
             </div>
 
+            @can('rapport_presences.export')
             <div class="dropdown">
                 <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="ti ti-file-export me-1"></i>Exporter
@@ -29,6 +31,7 @@
                     </li>
                 </ul>
             </div>
+            @endcan
         </div>
 
         <div class="card">

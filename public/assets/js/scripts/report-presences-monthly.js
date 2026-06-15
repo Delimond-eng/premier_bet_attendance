@@ -75,7 +75,7 @@ function computeSummary(matrix, agentsByKey = {}) {
                 acc.retard_justifie += 1;
             } else if (s === "absent") acc.absent += 1;
             else if (s === "conge") acc.conge += 1;
-            else if (s === "autorisation") acc.autorisation += 1;
+            else if (s === "autorisation" || s === "maladie") acc.autorisation += 1;
             else if (s === "absence_justifiee") acc.absence_justifiee += 1;
 
             if (day.overtime_minutes) {
@@ -104,9 +104,11 @@ function mapDayStatus(status) {
     case "off":
         return { code: "OFF", cellClass: "bg-secondary text-white", bucket: "off" };
     case "conge":
-        return { code: "C", cellClass: "bg-primary text-white", bucket: "conge" };
+        return { code: "CONGE", cellClass: "bg-primary text-white", bucket: "conge" };
     case "autorisation":
         return { code: "AS", cellClass: "bg-dark text-white", bucket: "autorisation" };
+    case "maladie":
+        return { code: "M", cellClass: "bg-warning text-dark", bucket: "autorisation" };
     case "future":
         return { code: "--", cellClass: "bg-light text-muted", bucket: null };
     case "unplanned":

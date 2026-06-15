@@ -238,7 +238,7 @@
                                                     <li><a class="dropdown-item" :href="'{{ route('rh.plannings.view') }}?agent_id='+data.id"><i class="ti ti-calendar-event me-2 text-info"></i>Gérer planning</a></li>
                                                 @endcan
                                                 @can('authorizations.create')
-                                                    <li><a class="dropdown-item" href="javascript:void(0);" data-action="authorize-delay" :data-id="data.id"><i class="ti ti-clock-plus me-2 text-warning"></i>Autoriser retard</a></li>
+                                                    <li><a class="dropdown-item" href="javascript:void(0);" data-action="authorize-special" :data-id="data.id"><i class="ti ti-clock-plus me-2 text-warning"></i>Autorisation spéciale</a></li>
                                                 @endcan
                                                 @can('agents.update')
                                                     <li><a class="dropdown-item" href="javascript:void(0);" data-action="edit" :data-id="data.id"><i class="ti ti-edit me-2 text-success"></i>Modifier</a></li>
@@ -257,7 +257,7 @@
             </div>
         </div>
 
-
+        @canany(['agents.create', 'agents.update'])
         <div class="modal fade" id="add_employee"  aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content">
@@ -378,6 +378,7 @@
                 </div>
             </div>
         </div>
+        @endcanany
 
         @can('agents.import')
             <div class="modal fade" id="import_agents_excel" aria-modal="true" role="dialog">
@@ -427,12 +428,13 @@
             </div>
         @endcan
 
-        <!-- Modal Autoriser Retard -->
+        <!-- Modal Autorisation Spéciale -->
+        @can('authorizations.create')
         <div class="modal fade" id="modal_authorize_delay" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Autorisation spéciale de retard</h5>
+                        <h5 class="modal-title">Autorisation spéciale</h5>
                         <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
                             <i class="ti ti-x"></i>
                         </button>
@@ -443,13 +445,40 @@
                                 <label class="form-label">Agent</label>
                                 <input type="text" class="form-control" :value="selectedAgent?.fullname" readonly disabled>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Date <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" v-model="authorizeDelayForm.date" required>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Date <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" v-model="authorizeDelayForm.date" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Type d'autorisation <span class="text-danger">*</span></label>
+                                        <select class="form-select" v-model="authorizeDelayForm.type_select">
+                                            <option value="retard">Retard</option>
+                                            <option value="absence">Absence</option>
+                                            <option value="depart">Départ (Sortie)</option>
+                                            <option value="maladie">Maladie</option>
+                                            <option value="autre">Autre...</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
+
+                            <div class="mb-3" v-if="authorizeDelayForm.type_select === 'autre'">
+                                <label class="form-label">Préciser le type <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" v-model="authorizeDelayForm.type_autre" placeholder="Ex: Formation, Mission, etc." required>
+                            </div>
+
+                            <div class="mb-3" v-if="authorizeDelayForm.type_select === 'retard' || authorizeDelayForm.type_select === 'depart'">
+                                <label class="form-label">Minutes</label>
+                                <input type="number" min="0" class="form-control" v-model="authorizeDelayForm.minutes" placeholder="Optionnel">
+                            </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Motif / Commentaire</label>
-                                <textarea class="form-control" v-model="authorizeDelayForm.comment" rows="3" placeholder="Raison du retard..."></textarea>
+                                <textarea class="form-control" v-model="authorizeDelayForm.comment" rows="3" placeholder="Raison de l'autorisation..."></textarea>
                             </div>
                             <div class="alert alert-info fs-12">
                                 <i class="ti ti-info-circle me-1"></i> Cette autorisation sera créée et <strong>approuvée automatiquement</strong>.
@@ -465,6 +494,7 @@
                 </div>
             </div>
         </div>
+        @endcan
     </div>
 @endsection
 

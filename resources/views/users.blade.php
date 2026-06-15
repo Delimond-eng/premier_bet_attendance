@@ -96,7 +96,7 @@
                                 <span :class="data.role ==='admin' ? 'badge-pink-transparent' : 'badge-info-transparent'"
                                       class=" badge badge-md p-2 fs-10">@{{ data.role }}</span>
                             </td>
-                            <td> <span class="badge badge-purple">@{{ data.station?.name ?? '-' }}</span> </td>
+                            <td> <span class="badge badge-purple">@{{ data.station?.name ?? 'Toutes les stations' }}</span> </td>
                             <td>
                                 <span class="badge badge-success d-inline-flex align-items-center badge-xs">
                                     <i class="ti ti-point-filled me-1"></i>Active
@@ -171,10 +171,10 @@
                                     <div class="mb-3">
                                         <label class="form-label">Station</label>
                                         <select class="form-select" v-model="form.station_id">
-                                            <option value="">--Sélectionner une station--</option>
+                                            <option value="">--Toutes les stations (Accès global)--</option>
                                             <option v-for="s in allSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                                         </select>
-                                        <small class="text-muted">Obligatoire pour les utilisateurs non admin</small>
+                                        <small class="text-muted">Optionnel. Si vide, l'utilisateur verra toutes les stations.</small>
                                     </div>
                                 </div>
                             </div>
@@ -256,5 +256,3 @@
     </script>
     <script type="module" src="{{ asset("assets/js/scripts/user.js") }}"></script>
 @endpush
-
-

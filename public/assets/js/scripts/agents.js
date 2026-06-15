@@ -75,6 +75,9 @@ new Vue({
             },
             authorizeDelayForm: {
                 date: new Date().toISOString().substr(0, 10),
+                type_select: "retard",
+                type_autre: "",
+                minutes: "",
                 comment: "",
             }
         };
@@ -198,7 +201,7 @@ new Vue({
 
             if (action === "edit") this.editAgent(agent);
             else if (action === "remove") this.removeAgent(agent);
-            else if (action === "authorize-delay") this.prepareAuthorizeDelay(agent);
+            else if (action === "authorize-special") this.prepareAuthorizeDelay(agent);
         },
 
         async load(force = false) {
@@ -425,6 +428,9 @@ new Vue({
             this.selectedAgent = agent;
             this.authorizeDelayForm = {
                 date: new Date().toISOString().substr(0, 10),
+                type_select: "retard",
+                type_autre: "",
+                minutes: "",
                 comment: "",
             };
             const modal = this.getAuthorizeDelayModal();
@@ -437,11 +443,16 @@ new Vue({
 
             this.isAuthorizing = true;
             try {
+                const type = this.authorizeDelayForm.type_select === 'autre'
+                    ? this.authorizeDelayForm.type_autre
+                    : this.authorizeDelayForm.type_select;
+
                 const payload = {
                     agent_id: this.selectedAgent.id,
                     date: this.authorizeDelayForm.date,
                     comment: this.authorizeDelayForm.comment,
-                    type: 'retard',
+                    type: type,
+                    minutes: this.authorizeDelayForm.minutes,
                 };
 
                 const { data } = await post("/rh/authorizations/special", payload);
@@ -450,7 +461,7 @@ new Vue({
                     return;
                 }
 
-                alert("L'autorisation de retard a été enregistrée et approuvée.");
+                alert("L'autorisation a été enregistrée et approuvée.");
                 const modal = this.getAuthorizeDelayModal();
                 if (modal) modal.hide();
                 await this.load(true);

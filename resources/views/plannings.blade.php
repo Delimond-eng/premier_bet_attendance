@@ -28,14 +28,12 @@
                     <div style="min-width: 190px;">
                         <input type="date" class="form-control" v-model="weekDate" @change="fetchPlanning()">
                     </div>
-                    {{--
-                    <button type="button" class="btn btn-primary d-flex align-items-center" @click="openImportModal">
-                        <i class="ti ti-upload me-2"></i> Charger le planning excel
-                    </button>
-                    --}}
+
+                    @can('plannings.create')
                     <button type="button" class="btn btn-info d-flex align-items-center ms-2" @click="openModal">
                         <i class="ti ti-user-edit me-2"></i> Planning Agent
                     </button>
+                    @endcan
                 </div>
             </div>
         </div>
@@ -51,9 +49,11 @@
                     <button type="button" class="btn btn-white border" @click="goNext" :disabled="isLoading || !canNext">
                         Suivant<i class="ti ti-chevron-right ms-1"></i>
                     </button>
+                    @can('plannings.create')
                     <button type="button" class="btn btn-info-light border" @click="duplicatePrevWeek" :disabled="isLoading || !canDuplicatePrev">
                         <i class="ti ti-copy me-1"></i>Régénérer le planning
                     </button>
+                    @endcan
                 </div>
             </div>
             <div class="card-body p-0">
@@ -63,7 +63,9 @@
                             <tr>
                                 <th class="text-start" style="min-width: 200px;">Agent</th>
                                 <th v-for="d in days" :key="d.date">@{{ d.label }}</th>
+                                @canany(['plannings.update', 'plannings.delete'])
                                 <th style="width: 100px;">Actions</th>
+                                @endcanany
                             </tr>
                         </thead>
                         <tbody>
@@ -89,18 +91,24 @@
                                             <span v-else class="text-muted">--</span>
                                         </div>
                                     </td>
+                                    @canany(['plannings.update', 'plannings.delete'])
                                     <td>
                                         <div class="dropdown">
                                             <button class="btn btn-soft-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                                 Actions
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end">
+                                                @can('plannings.update')
                                                 <li><a class="dropdown-item" href="javascript:void(0);" @click="editIndividualPlanning(r.agent, g.key)"><i class="ti ti-edit me-2"></i>Modifier</a></li>
+                                                @endcan
+                                                @can('plannings.delete')
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li><a class="dropdown-item text-danger" href="javascript:void(0);" @click="deleteAgentPlanning(r.agent, g.key)"><i class="ti ti-trash me-2"></i>Supprimer</a></li>
+                                                @endcan
                                             </ul>
                                         </div>
                                     </td>
+                                    @endcanany
                                 </tr>
                             </template>
                         </tbody>
@@ -109,41 +117,7 @@
             </div>
         </div>
 
-        <!-- Import Modal (Commented out in view, but keeping HTML structure if needed later) -->
-        <div class="modal fade" id="importModal" tabindex="-1" ref="importModalEl">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Importer le planning hebdomadaire</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="alert alert-soft-primary mb-3">Semaine cible : <strong>@{{ weekDate }}</strong></div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">1. Station de travail (Rotation)</label>
-                            <p class="text-muted small">Les agents seront planifiés dans cette station.</p>
-                            <select class="form-select" v-model="importModal.stationId">
-                                <option value="">Choisir une station...</option>
-                                <option v-for="s in stations" :key="s.id" :value="s.id">@{{ s.name }}</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">2. Fichier Excel/CSV</label>
-                            <input type="file" class="form-control" accept=".xlsx,.xls,.csv" @change="onImportFileChange">
-                            <small class="text-muted d-block mt-1">Format requis: MATRICULE + LUNDI à DIMANCHE</small>
-                        </div>
-                    </div>
-                    <div class="modal-footer bg-light">
-                        <button type="button" class="btn btn-white border" data-bs-dismiss="modal">Fermer</button>
-                        <button type="button" class="btn btn-primary" @click="submitImport" :disabled="!importModal.file || !importModal.stationId || isUploading">
-                            <span v-if="isUploading" class="spinner-border spinner-border-sm me-1"></span>
-                            @{{ isUploading ? 'Importation...' : 'Lancer l\'importation' }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        @can('plannings.create')
         <!-- Agent Planning Modal -->
         <div class="modal fade" id="agentModal" tabindex="-1" ref="modalEl">
             <div class="modal-dialog modal-xl">
@@ -208,6 +182,7 @@
                 </div>
             </div>
         </div>
+        @endcan
     </div>
 @endsection
 

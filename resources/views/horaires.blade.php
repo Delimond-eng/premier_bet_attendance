@@ -21,6 +21,7 @@
             </div>
 
             <div class="d-flex align-items-center gap-2">
+                @can('horaires.export')
                 <div class="dropdown">
                     <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="ti ti-file-export me-1"></i>Exporter
@@ -34,10 +35,13 @@
                         </li>
                     </ul>
                 </div>
+                @endcan
 
+                @can('horaires.create')
                 <a href="#" data-bs-toggle="modal" data-bs-target="#add_horaire" class="btn btn-primary d-flex align-items-center">
                     <i class="ti ti-circle-plus me-2"></i>Ajout horaire
                 </a>
+                @endcan
             </div>
         </div>
         <!-- /Breadcrumb -->
@@ -97,8 +101,12 @@
                                 <td><span class="badge badge-purple">@{{ h.tolerence_minutes }} min</span></td>
                                 <td>
                                     <div class="action-icon d-inline-flex">
+                                        @can('horaires.update')
                                         <a href="javascript:void(0);" class="me-2 text-info" @click="edit(h)"><i class="ti ti-edit"></i></a>
+                                        @endcan
+                                        @can('horaires.delete')
                                         <a href="javascript:void(0);" class="text-danger" @click="remove(h)"><i class="ti ti-trash"></i></a>
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
@@ -109,6 +117,7 @@
             </div>
         </div>
 
+        @canany(['horaires.create', 'horaires.update'])
         <div class="modal fade" id="add_horaire" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
@@ -177,6 +186,7 @@
                 </div>
             </div>
         </div>
+        @endcanany
 
     </div>
 @endsection
@@ -184,6 +194,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/horaires.js") }}"></script>
 @endpush
-
-
-

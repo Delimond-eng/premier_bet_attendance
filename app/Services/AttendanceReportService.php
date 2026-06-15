@@ -148,9 +148,10 @@ class AttendanceReportService
                         }
 
                         if ($hasConge) {
-                            $row[$dayLabel] = ['status' => 'conge', 'arrivee' => 'CONGÉ', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'conge', 'arrivee' => 'CONGE', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
                         } elseif ($auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first()) {
-                            $row[$dayLabel] = ['status' => 'autorisation', 'arrivee' => strtoupper($auth->type), 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $status = (strtolower($auth->type) === 'maladie') ? 'maladie' : 'autorisation';
+                            $row[$dayLabel] = ['status' => $status, 'arrivee' => strtoupper($auth->type), 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
                         } elseif ($plan && $plan->is_rest_day) {
                             $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'duration_minutes' => 0];
                         } else {

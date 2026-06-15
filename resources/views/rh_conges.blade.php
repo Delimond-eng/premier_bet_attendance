@@ -16,9 +16,11 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                @can('conges.create')
                 <button class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#conge_type_modal" @click="reset">
                     <i class="ti ti-circle-plus me-2"></i>Ajouter type
                 </button>
+                @endcan
             </div>
         </div>
 
@@ -46,8 +48,12 @@
                                 <span class="badge" :class="typeStatusClass(t.status)">@{{ typeStatusLabel(t.status) }}</span>
                             </td>
                             <td class="text-end">
+                                @can('conges.update')
                                 <a href="javascript:void(0);" class="me-2 text-info" @click="edit(t)"><i class="ti ti-edit"></i></a>
+                                @endcan
+                                @can('conges.delete')
                                 <a href="javascript:void(0);" class="text-danger" @click="remove(t)"><i class="ti ti-trash"></i></a>
+                                @endcan
                             </td>
                         </tr>
                         </tbody>
@@ -56,6 +62,7 @@
             </div>
         </div>
 
+        @canany(['conges.create', 'conges.update'])
         <div class="modal fade" id="conge_type_modal" aria-modal="true" role="dialog">
             <div class="modal-dialog modal-dialog-centered modal-md">
                 <div class="modal-content">
@@ -101,10 +108,10 @@
                 </div>
             </div>
         </div>
+        @endcanany
     </div>
 @endsection
 
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/rh-conges.js") }}"></script>
 @endpush
-

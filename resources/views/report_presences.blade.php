@@ -35,6 +35,8 @@
                 <div class="me-2 mb-2">
                     <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>
                 </div>
+
+                @can('rapport_presences.export')
                 <div class="mb-2">
                     <div class="dropdown">
                         <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
@@ -50,6 +52,7 @@
                         </ul>
                     </div>
                 </div>
+                @endcan
             </div>
         </div>
         <!-- /Breadcrumb -->

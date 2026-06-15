@@ -17,11 +17,13 @@
             </nav>
         </div>
         <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
+            @can('devices.sync')
             <div class="mb-2">
                 <button type="button" id="btnTestFcm" class="btn btn-dark d-flex align-items-center">
                     <i class="ti ti-broadcast me-2"></i> Tester Connexion (Terminaux)
                 </button>
             </div>
+            @endcan
         </div>
     </div>
     <!-- /Breadcrumb -->
@@ -63,18 +65,22 @@
                                     <td>{{ $device->last_seen_at ? $device->last_seen_at->diffForHumans() : 'Jamais' }}</td>
                                     <td class="text-end">
                                         <div class="d-flex justify-content-end gap-2">
+                                            @can('devices.update')
                                             <button class="btn btn-info btn-sm btn-edit"
                                                     data-id="{{ $device->id }}"
                                                     data-name="{{ $device->device_name }}"
                                                     title="Modifier nom">
                                                 <i class="ti ti-edit"></i>
                                             </button>
+                                            @endcan
+                                            @can('devices.sync')
                                             <button class="btn btn-primary btn-sm btn-sync"
                                                     data-id="{{ $device->id }}"
                                                     data-name="{{ $device->device_name ?? $device->imei }}"
                                                     title="Sync Biométrie">
                                                 <i class="ti ti-refresh"></i>
                                             </button>
+                                            @endcan
                                         </div>
                                     </td>
                                 </tr>
@@ -91,6 +97,7 @@
     </div>
 </div>
 
+@can('devices.update')
 <!-- Modal Editer Device -->
 <div class="modal fade" id="editDeviceModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -117,7 +124,9 @@
         </div>
     </div>
 </div>
+@endcan
 
+@can('devices.sync')
 <!-- Modal de Synchronisation -->
 <div class="modal fade" id="syncModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -207,6 +216,7 @@
         </div>
     </div>
 </div>
+@endcan
 @endsection
 
 @push('scripts')

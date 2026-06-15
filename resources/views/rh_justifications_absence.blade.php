@@ -16,9 +16,11 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                @can('justifications.create')
                 <button class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#justif_modal" @click="reset">
                     <i class="ti ti-circle-plus me-2"></i>Ajouter
                 </button>
+                @endcan
             </div>
         </div>
 
@@ -29,4 +31,3 @@
 @push("scripts")
     <script type="module" src="{{ asset("assets/js/scripts/rh-justifications.js") }}"></script>
 @endpush
-

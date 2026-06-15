@@ -155,7 +155,7 @@ class UserController extends Controller
                 'email' => 'required|email|unique:users,email,' . $userId,
                 'password' => $userId ? 'nullable|string|min:6' : 'required|string|min:6',
                 'role' => 'required|string|exists:roles,name',
-                'station_id' => 'nullable|integer|exists:sites,id|required_unless:role,admin',
+                'station_id' => 'nullable|integer|exists:sites,id',
                 'user_id' => 'nullable|exists:users,id',
                 'permissions' => 'nullable|array',
             ]);

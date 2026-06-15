@@ -1262,7 +1262,7 @@ class ExportController extends Controller
                 }
                 else if ($s === 'absent') $acc['absent'] += 1;
                 else if ($s === 'conge') $acc['conge'] += 1;
-                else if ($s === 'autorisation') $acc['autorisation'] += 1;
+                else if ($s === 'autorisation' || $s === 'maladie') $acc['autorisation'] += 1;
                 else if ($s === 'absence_justifiee') $acc['absence_justifiee'] += 1;
 
                 if (isset($cell['overtime_minutes'])) {
@@ -1312,6 +1312,8 @@ class ExportController extends Controller
                 return ['code' => 'C', 'bucket' => 'conge'];
             case "autorisation":
                 return ['code' => 'AS', 'bucket' => 'autorisation'];
+            case "maladie":
+                return ['code' => 'M', 'bucket' => 'autorisation'];
             case "future":
                 return ['code' => '--', 'bucket' => null];
             case "unplanned":
@@ -1542,7 +1544,7 @@ class ExportController extends Controller
         $rows = $query
             ->orderByDesc('date_maintenance')
             ->orderByDesc('started_at')
-            ->get();
+            ?->get();
 
         $headers = [
             'Date',
@@ -1613,7 +1615,7 @@ class ExportController extends Controller
                     $res['total_retard']++;
                 }
                 elseif ($status === 'conge') $res['total_conge']++;
-                elseif ($status === 'autorisation') $res['total_autorisation']++;
+                elseif ($status === 'autorisation' || $status === 'maladie') $res['total_autorisation']++;
 
                 $res['total_overtime_minutes'] += ($cell['overtime_minutes'] ?? 0);
             }

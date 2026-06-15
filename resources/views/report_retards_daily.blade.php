@@ -16,6 +16,7 @@
                 </nav>
             </div>
 
+            @can('rapport_retards.export')
             <div class="dropdown">
                 <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="ti ti-file-export me-1"></i>Exporter
@@ -29,6 +30,7 @@
                     </li>
                 </ul>
             </div>
+            @endcan
         </div>
 
         <div class="card">
