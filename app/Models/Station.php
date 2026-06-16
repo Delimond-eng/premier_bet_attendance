@@ -42,4 +42,9 @@ class Station extends Model
     {
         return $this->hasMany(MaintenanceAgent::class, 'station_id');
     }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class, 'station_id');
+    }
 }

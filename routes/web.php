@@ -29,7 +29,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
     // Generic delete endpoint used by some Vue scripts (kept, but protected).
     Route::post('/table/delete', [AdminController::class, 'triggerDelete'])
         ->name('table.delete')
-        ->middleware('canany:stations.delete,agents.delete,horaires.delete,groupes.delete,plannings.delete,conges.delete,attributions.delete,authorizations.delete,justifications.delete,users.delete,roles.delete');
+        ->middleware('canany:stations.delete,agents.delete,horaires.delete,groupes.delete,plannings.delete,conges.delete,attributions.delete,authorizations.delete,justifications.delete,users.delete,roles.delete,tasks.delete');
 
     // Dashboard
     Route::get('/', [HomeController::class, 'index'])
@@ -48,14 +48,30 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Tasks Management
     Route::prefix('tasks')->name('tasks.')->group(function () {
-        Route::get('/', [TaskController::class, 'index'])->name('index');
-        Route::get('/data', [TaskController::class, 'fetchTasks'])->name('data');
-        Route::post('/store', [TaskController::class, 'store'])->name('store');
-        Route::get('/monitoring', [TaskController::class, 'monitoring'])->name('monitoring');
-        Route::get('/monitoring/data', [TaskController::class, 'fetchMonitoringData'])->name('monitoring.data');
-        Route::get('/reports', [TaskController::class, 'reports'])->name('reports');
-        Route::get('/export/pdf', [ExportController::class, 'taskReportPdf'])->name('export.pdf');
-        Route::get('/export/excel', [ExportController::class, 'taskReportExcel'])->name('export.excel');
+        Route::get('/', [TaskController::class, 'index'])
+            ->name('index')
+            ->middleware('can:tasks.view');
+        Route::get('/data', [TaskController::class, 'fetchTasks'])
+            ->name('data')
+            ->middleware('can:tasks.view');
+        Route::post('/store', [TaskController::class, 'store'])
+            ->name('store')
+            ->middleware('canany:tasks.create,tasks.update');
+        Route::get('/monitoring', [TaskController::class, 'monitoring'])
+            ->name('monitoring')
+            ->middleware('can:tasks.view');
+        Route::get('/monitoring/data', [TaskController::class, 'fetchMonitoringData'])
+            ->name('monitoring.data')
+            ->middleware('can:tasks.view');
+        Route::get('/reports', [TaskController::class, 'reports'])
+            ->name('reports')
+            ->middleware('can:tasks.view');
+        Route::get('/export/pdf', [ExportController::class, 'taskReportPdf'])
+            ->name('export.pdf')
+            ->middleware('can:tasks.export');
+        Route::get('/export/excel', [ExportController::class, 'taskReportExcel'])
+            ->name('export.excel')
+            ->middleware('can:tasks.export');
     });
 
 

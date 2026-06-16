@@ -140,6 +140,7 @@
                 @endcanany
 
                 <!-- MAINTENANCE & TACHES -->
+                @can('tasks.view')
                 <li class="menu-title"><span>OPERATIONS</span></li>
                 <li>
                     <ul>
@@ -162,6 +163,7 @@
                         </li>
                     </ul>
                 </li>
+                @endcan
 
                 <li class="menu-title"><span>RH</span></li>
 

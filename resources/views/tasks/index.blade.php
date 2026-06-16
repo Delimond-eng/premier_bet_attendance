@@ -44,11 +44,13 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap">
+                @can('tasks.create')
                 <div class="mb-2">
                     <a href="javascript:void(0);" class="btn btn-primary d-flex align-items-center" @click="openCreateOffcanvas">
                         <i class="ti ti-circle-plus me-2"></i>Nouvelle Mission
                     </a>
                 </div>
+                @endcan
             </div>
         </div>
 
@@ -148,9 +150,13 @@
                                         <button class="btn btn-soft-secondary btn-sm" data-bs-toggle="dropdown"><i class="ti ti-dots-vertical"></i></button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow-lg">
                                             <li><a class="dropdown-item" href="javascript:void(0);" @click="viewDetails(task)"><i class="ti ti-eye me-2 text-primary"></i>Détails & Preuves</a></li>
+                                            @can('tasks.update')
                                             <li><a class="dropdown-item" href="javascript:void(0);" @click="editTask(task)"><i class="ti ti-edit me-2 text-info"></i>Modifier</a></li>
+                                            @endcan
+                                            @can('tasks.delete')
                                             <li><hr class="dropdown-divider"></li>
                                             <li><a class="dropdown-item text-danger" href="javascript:void(0);" @click="deleteTask(task)"><i class="ti ti-trash me-2"></i>Supprimer</a></li>
+                                            @endcan
                                         </ul>
                                     </div>
                                 </td>

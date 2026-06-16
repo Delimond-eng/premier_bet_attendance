@@ -10,7 +10,7 @@
                 <nav>
                     <ol class="breadcrumb mb-0">
                         <li class="breadcrumb-item">
-                            <a href="https://smarthr.co.in/demo/html/template/index.html"><i class="ti ti-smart-home"></i></a>
+                            <a href="/"><i class="ti ti-smart-home"></i></a>
                         </li>
                         <li class="breadcrumb-item">
                             TBD
@@ -320,7 +320,6 @@
                     <div class="card-body">
                         <div class="border rounded border-start border-start-primary d-flex align-items-center justify-content-between p-2 gap-2 flex-wrap mb-3">
                             <h2 class="card-title mb-0">(@{{ latestCheckins.length }}) Derniers arrivées en temps réel</h2>
-
                         </div>
                         <div v-if="isLoading" class="p-2 bg-light rounded border d-flex align-items-center justify-content-between mb-2">
                             <div class="text-muted">Chargement...</div>
@@ -331,7 +330,7 @@
                         <div v-for="item in latestCheckins.slice(0, 5)" :key="item.id" class="p-2 bg-light rounded border-bottom d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
                                     <a href="javascript:void(0);" class="avatar flex-shrink-0">
-                                        <img v-if="item.agent.photo" :src="item.agent?.photo ?? '{{asset("assets/img/avatar.jpg")}}'" :data-zoom="item.agent?.photo" class="rounded-circle" alt="user">
+                                        <img :src="item.agent?.photo ?? '{{asset("assets/img/avatar/avatar-04.png")}}'" :data-zoom="item.agent?.photo" class="rounded-circle" alt="user">
                                     </a>
                                     <div class="ms-2">
                                         <p class="fs-14 fw-medium text-truncate mb-1"><a href="#">@{{ item.agent?.fullname ?? 'Agent' }}</a></p>
@@ -344,8 +343,6 @@
                                     <span class="badge badge-success-transparent rounded-pill" v-else>À l'heure</span>
                                 </div>
                             </div>
-
-
                     </div> <!-- end card body -->
                 </div> <!-- end card -->
             </div> <!-- end col -->
@@ -413,7 +410,7 @@
                             <div class="d-flex align-items-center">
                                 <a href="javascript:void(0);" class="avatar flex-shrink-0">
                                     <img v-if="m.agent?.photo" :src="m.agent.photo" :data-zoom="m.agent.photo" class="rounded-circle" alt="agent">
-                                    <img v-else src="{{asset("assets/img/avatar.jpg")}}" class="rounded-circle" alt="agent">
+                                    <img v-else src="{{ asset("assets/img/profiles/avatar-01.jpg") }}" class="rounded-circle" alt="agent">
                                 </a>
                                 <div class="ms-2">
                                     <p class="fs-14 fw-medium text-truncate mb-1">@{{ m.agent?.fullname ?? 'Agent' }}</p>
@@ -507,7 +504,6 @@
             </div>
         </div>
         @endif
-
     </div>
 @endsection
 

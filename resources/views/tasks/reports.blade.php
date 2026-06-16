@@ -55,12 +55,18 @@
                     </div>
                 </div>
                 <div class="d-flex gap-2 justify-content-end mt-4 pt-3 border-top">
+                    @can('tasks.export')
                     <button class="btn btn-primary d-flex align-items-center" @click="exportPdf">
                         <i class="ti ti-file-type-pdf me-2 fs-18"></i>Générer PV d'intervention
                     </button>
                     <button class="btn btn-success d-flex align-items-center" @click="exportExcel">
                         <i class="ti ti-file-type-xls me-2 fs-18"></i>Exporter Suivi Excel
                     </button>
+                    @else
+                    <div class="alert alert-light-warning d-flex align-items-center mb-0 py-2">
+                        <i class="ti ti-info-circle me-2"></i> Vous n'avez pas les permissions pour exporter ces rapports.
+                    </div>
+                    @endcan
                 </div>
             </div>
         </div>

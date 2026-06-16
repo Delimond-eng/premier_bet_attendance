@@ -96,6 +96,12 @@ return [
         'actions' => ['view', 'export'],
     ],
 
+    'tasks' => [
+        'entity' => 'tasks',
+        'label'  => 'Gestion des Tâches',
+        'actions' => ['view', 'create', 'update', 'delete', 'export'],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | REPORTS
