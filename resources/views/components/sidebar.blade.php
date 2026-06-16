@@ -78,7 +78,7 @@
                             <ul>
                                 @can('dashboard_admin.view')
                                 <li><a class="@active(['dashboard'])" href="{{ route('dashboard') }}">Vue globale</a></li>
-                                @if(str_contains(request()->getHost(), 'electrocool'))
+                                @if(str_contains(request()->getHost(), 'electrocool') || str_contains(request()->getHost(), '127.0.0.1'))
                                 <li><a class="@active(['dashboard.maintenance.view'])" href="{{ route('dashboard.maintenance.view') }}">Statistiques maintenance</a></li>
                                 @endif
                                 @endcan
@@ -223,7 +223,7 @@
                                 <li><a class="@active(['reports.presences'])" href="{{ route('reports.presences') }}">Presences journalieres</a></li>
                                 <li><a class="@active(['reports.weekly.view'])" href="{{ route('reports.weekly.view') }}">Presences hebdomadaire</a></li>
                                 <li><a class="@active(['reports.monthly.view'])" href="{{ route('reports.monthly.view') }}">Presences mensuelles</a></li>
-                                @if(str_contains(request()->getHost(), 'electrocool'))
+                                @if(str_contains(request()->getHost(), 'electrocool') || str_contains(request()->getHost(), 'chanimetal') || str_contains(request()->getHost(), '127.0.0.1'))
                                 <li><a class="@active(['reports.maintenance.view'])" href="{{ route('reports.maintenance.view') }}">Rapport de maintenance</a></li>
                                 @endif
 
