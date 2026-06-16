@@ -8,6 +8,7 @@ use App\Http\Controllers\HRController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,20 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Map View
     Route::get('/map', fn () => view('map'))->name('map.view')->middleware('can:stations.view');
+
+
+    // Tasks Management
+    Route::prefix('tasks')->name('tasks.')->group(function () {
+        Route::get('/', [TaskController::class, 'index'])->name('index');
+        Route::get('/data', [TaskController::class, 'fetchTasks'])->name('data');
+        Route::post('/store', [TaskController::class, 'store'])->name('store');
+        Route::get('/monitoring', [TaskController::class, 'monitoring'])->name('monitoring');
+        Route::get('/monitoring/data', [TaskController::class, 'fetchMonitoringData'])->name('monitoring.data');
+        Route::get('/reports', [TaskController::class, 'reports'])->name('reports');
+        Route::get('/export/pdf', [ExportController::class, 'taskReportPdf'])->name('export.pdf');
+        Route::get('/export/excel', [ExportController::class, 'taskReportExcel'])->name('export.excel');
+    });
+
 
     // Stations
     Route::prefix('stations')->name('stations.')->group(function () {

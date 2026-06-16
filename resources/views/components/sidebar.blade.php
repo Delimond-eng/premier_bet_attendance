@@ -139,6 +139,30 @@
                 </li>
                 @endcanany
 
+                <!-- MAINTENANCE & TACHES -->
+                <li class="menu-title"><span>OPERATIONS</span></li>
+                <li>
+                    <ul>
+                        <li class="submenu">
+                            <a href="javascript:void(0);" class="@active(['tasks.*', 'maintenance.*', 'dashboard.maintenance.view'])">
+                                <i class="ti ti-tool"></i>
+                                <span>Maintenance & Tâches</span>
+                                <span class="menu-arrow"></span>
+                            </a>
+                            <ul>
+                                @can('dashboard_admin.view')
+                                    @if(str_contains(request()->getHost(), 'chanimetal'))
+                                    <li><a class="@active(['dashboard.maintenance.view'])" href="{{ route('dashboard.maintenance.view') }}">Statistiques Maintenance</a></li>
+                                    @endif
+                                @endcan
+                                <li><a class="@active(['tasks.index'])" href="{{ route('tasks.index') }}">Configuration des Tâches</a></li>
+                                <li><a class="@active(['tasks.monitoring'])" href="{{ route('tasks.monitoring') }}">Suivi de Progression</a></li>
+                                <li><a class="@active(['tasks.reports'])" href="{{ route('tasks.reports') }}">Rapports d'Intervention</a></li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+
                 <li class="menu-title"><span>RH</span></li>
 
                 <li>

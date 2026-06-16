@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
+use App\Models\Task;
 use App\Models\MaintenanceAgent;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
@@ -1721,5 +1722,86 @@ class ExportController extends Controller
 
         $distance = $finDistance ?? $debutDistance;
         return $distance !== null ? ($distance . ' m') : 'Distance indisponible';
+    }
+
+    public function taskReportPdf(Request $request): Response
+    {
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'status' => 'nullable|string'
+        ]);
+
+        $query = Task::with(['agents', 'station', 'subtasks', 'evidences.agent']);
+
+        if ($request->station_id) $query->where('station_id', $request->station_id);
+        if ($request->status) $query->where('status', $request->status);
+        if ($request->from) $query->whereDate('start_date', '>=', $request->from);
+        if ($request->to) $query->whereDate('due_date', '<=', $request->to);
+
+        $tasks = $query->latest()->get();
+        $station = $request->station_id ? Station::find($request->station_id) : null;
+
+        $pdf = Pdf::loadView('pdf.exports.tasks_report', [
+            'title' => 'Rapport d\'Intervention Technique',
+            'tasks' => $tasks,
+            'station' => $station,
+            'from' => $request->from,
+            'to' => $request->to
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download('rapport_interventions_' . now()->format('dmY_His') . '.pdf');
+    }
+
+    public function taskReportExcel(Request $request): StreamedResponse
+    {
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'station_id' => 'nullable|integer|exists:sites,id',
+            'status' => 'nullable|string'
+        ]);
+
+        $query = Task::with(['agents', 'station', 'subtasks', 'evidences.agent']);
+
+        if ($request->station_id) $query->where('station_id', $request->station_id);
+        if ($request->status) $query->where('status', $request->status);
+        if ($request->from) $query->whereDate('start_date', '>=', $request->from);
+        if ($request->to) $query->whereDate('due_date', '<=', $request->to);
+
+        $tasks = $query->latest()->get();
+        $station = $request->station_id ? Station::find($request->station_id) : null;
+
+        $headers = ['Titre', 'Description', 'Site', 'Priorité', 'Début', 'Échéance', 'Progression', 'Statut', 'Agents'];
+        $table = [];
+        foreach ($tasks as $t) {
+            $agents = $t->is_global ? 'Global' : $t->agents->pluck('fullname')->implode(', ');
+            $table[] = [
+                (string) $t->title,
+                (string) $t->description,
+                (string) ($t->station?->name ?? ''),
+                (string) strtoupper($t->priority),
+                $t->start_date ? $t->start_date->format('d/m/Y') : '',
+                $t->due_date ? $t->due_date->format('d/m/Y') : '',
+                (int) $t->progress . '%',
+                (string) $t->status,
+                (string) $agents
+            ];
+        }
+
+        $meta = [
+            'Période: ' . ($request->from ?? 'Début') . ' au ' . ($request->to ?? 'Fin'),
+            'Station: ' . ($station?->name ?? 'Toutes'),
+            'Lignes: ' . count($table),
+        ];
+
+        return $this->downloadXlsx(
+            filename: 'suivi_interventions_' . now()->format('dmY_His') . '.xlsx',
+            sheetTitle: 'Interventions',
+            metaLines: $meta,
+            headers: $headers,
+            rows: $table,
+        );
     }
 }

@@ -7,6 +7,7 @@
 /public/patrols
 /storage/*.key
 /vendor
+/old
 .env.backup
 .env
 .env.production
