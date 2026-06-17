@@ -81,6 +81,14 @@
                                                 <i class="ti ti-refresh"></i>
                                             </button>
                                             @endcan
+                                            @can('devices.delete')
+                                            <button class="btn btn-danger btn-sm btn-delete"
+                                                    data-id="{{ $device->id }}"
+                                                    data-name="{{ $device->device_name ?? $device->imei }}"
+                                                    title="Supprimer">
+                                                <i class="ti ti-trash"></i>
+                                            </button>
+                                            @endcan
                                         </div>
                                     </td>
                                 </tr>
@@ -286,6 +294,40 @@ $(document).ready(function() {
             },
             complete: function() {
                 btn.prop('disabled', false).text('Enregistrer');
+            }
+        });
+    });
+
+    // --- SUPPRESSION DEVICE ---
+    $(document).on('click', '.btn-delete', function() {
+        let id = $(this).data('id');
+        let name = $(this).data('name');
+
+        Swal.fire({
+            title: 'Supprimer ce terminal ?',
+            text: `Voulez-vous vraiment supprimer "${name}" ? Cette action est irréversible.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Oui, supprimer',
+            cancelButtonText: 'Annuler'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `/admin/devices/${id}/delete`,
+                    method: 'POST',
+                    data: { _token: '{{ csrf_token() }}' },
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire('Supprimé', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Erreur', 'Impossible de supprimer le terminal.', 'error');
+                    }
+                });
             }
         });
     });

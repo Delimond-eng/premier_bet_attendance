@@ -42,6 +42,26 @@ class DeviceManagementController extends Controller
         ]);
     }
 
+    public function destroy(MobileDevice $device)
+    {
+        try {
+            $device->delete();
+            return response()->json([
+                'success' => true,
+                'message' => 'Terminal supprimé avec succès.'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Erreur suppression terminal", [
+                'error' => $e->getMessage(),
+                'device' => $device->id
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function sync(Request $request, MobileDevice $device)
     {
         $request->validate([

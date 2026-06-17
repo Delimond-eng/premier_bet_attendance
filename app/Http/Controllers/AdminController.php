@@ -12,10 +12,12 @@ use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\MaintenanceAgent;
+use App\Models\MobileDevice;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
 use App\Models\User;
+use App\Services\FcmService;
 use App\Support\ManagerStationContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -418,16 +420,40 @@ class AdminController extends Controller
 
             $agent = Agent::updateOrCreate(['id' => $request->id], $data);
 
-            if ($before && (int) $before->site_id !== (int) $agent->site_id) {
-                AgentHistory::create([
-                    'date' => Carbon::now(),
-                    'agent_id' => $agent->id,
-                    'site_id' => $agent->site_id,
-                    'site_provenance_id' => $before->site_id,
-                    'status' => 'mutation',
-                ]);
-            }
+            if ($before) {
+                // Gestion du changement de matricule pour la biométrie
+                if ($before->matricule !== $agent->matricule) {
+                    $biometric = AgentBiometric::where('agent_id', $agent->id)->first();
+                    if ($biometric) {
+                        $oldMatricule = $before->matricule;
 
+                        // On met à jour le matricule dans la table biométrique
+                        $biometric->update(['matricule' => $agent->matricule]);
+
+                        // On notifie tous les terminaux de supprimer l'ancien matricule
+                        try {
+                            $fcmService = app(FcmService::class);
+                            $devices = MobileDevice::whereNotNull('firebase_token')->get();
+                            foreach ($devices as $device) {
+                                $fcmService->sendBiometricDelete($device->firebase_token, [$oldMatricule]);
+                            }
+                            Log::info("Commande biometric_delete envoyée pour l'ancien matricule: $oldMatricule");
+                        } catch (\Exception $e) {
+                            Log::error("Erreur lors de l'envoi de la commande biometric_delete: " . $e->getMessage());
+                        }
+                    }
+                }
+
+                if ((int) $before->site_id !== (int) $agent->site_id) {
+                    AgentHistory::create([
+                        'date' => Carbon::now(),
+                        'agent_id' => $agent->id,
+                        'site_id' => $agent->site_id,
+                        'site_provenance_id' => $before->site_id,
+                        'status' => 'mutation',
+                    ]);
+                }
+            }
             return response()->json(['status' => 'success', 'result' => $agent]);
         } catch (\Throwable $e) {
             Log::error('createAgent failed', ['error' => $e->getMessage()]);
@@ -548,7 +574,7 @@ class AdminController extends Controller
                 if ($fullname === '') {
                     $stats['skipped'] += 1;
                     if (count($errors) < 50) {
-                        $errors[] = "Ligne {$rowIndex}: noms manquants.";
+                        $errors[] = "LOMS manquants.";
                     }
                     continue;
                 }

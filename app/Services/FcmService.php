@@ -105,4 +105,24 @@ class FcmService
             ]
         ]);
     }
+
+    /**
+     * Envoyer une commande biometric_delete pour supprimer les empreintes d'un ou plusieurs agents.
+     */
+    public function sendBiometricDelete(string $token, array $matricules)
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'data' => [
+                    'type' => 'biometric_delete',
+                    'matricules' => json_encode($matricules),
+                    'sent_at' => now()->toIso8601String(),
+                ],
+                'android' => [
+                    'priority' => 'high',
+                ],
+            ]
+        ]);
+    }
 }
