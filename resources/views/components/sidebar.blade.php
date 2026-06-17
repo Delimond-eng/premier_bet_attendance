@@ -140,6 +140,7 @@
                 @endcanany
 
                 <!-- MAINTENANCE & TACHES -->
+                @if(!str_contains(request()->getHost(), 'electrocool'))
                 @can('tasks.view')
                 <li class="menu-title"><span>OPERATIONS</span></li>
                 <li>
@@ -164,6 +165,7 @@
                     </ul>
                 </li>
                 @endcan
+                @endif
 
                 <li class="menu-title"><span>RH</span></li>
 
