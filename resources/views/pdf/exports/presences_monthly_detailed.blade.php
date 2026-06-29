@@ -45,7 +45,7 @@
 
         /* COLONNE AGENT */
         .col-agent-identity {
-            width: 220px !important;
+            width: 200px !important;
             text-align: left !important;
             padding: 8px 10px !important;
             background-color: #f8fafc;
@@ -95,9 +95,18 @@
 
         /* Colonnes STATISTIQUES */
         .col-stat-summary {
-            width: 25px;
+            width: 22px;
             font-weight: 800;
-            font-size: 8px;
+            font-size: 7px;
+            background-color: #f1f5f9;
+            border-left: 1px solid #94a3b8;
+            text-align: center;
+        }
+
+        .col-stat-summary-large {
+            width: 35px;
+            font-weight: 800;
+            font-size: 7px;
             background-color: #f1f5f9;
             border-left: 1px solid #94a3b8;
             text-align: center;
@@ -167,13 +176,14 @@
                             @endif
                         </th>
                     @endforeach
-                    <th class="col-stat-summary">TOT</th>
-                    <th class="col-stat-summary">PRS</th>
-                    <th class="col-stat-summary">ABS</th>
-                    <th class="col-stat-summary">RET</th>
-                    <th class="col-stat-summary">CNG</th>
-                    <th class="col-stat-summary">HS</th>
-                    <th class="col-stat-summary">OFF</th>
+                    <th class="col-stat-summary" title="Total jours">TOT</th>
+                    <th class="col-stat-summary" title="Présences">PRS</th>
+                    <th class="col-stat-summary" title="Absences">ABS</th>
+                    <th class="col-stat-summary" title="Retards (nombre)">RET</th>
+                    <th class="col-stat-summary-large" title="Retard Cumulé">R.CUM</th>
+                    <th class="col-stat-summary" title="Congés">CNG</th>
+                    <th class="col-stat-summary-large" title="Heures Supplémentaires">H.SUP</th>
+                    <th class="col-stat-summary" title="Repos">OFF</th>
                 </tr>
             </thead>
             <tbody>
@@ -199,8 +209,9 @@
                         <td class="col-stat-summary" style="color: #166534;">{{ $r['total_presences'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #991b1b;">{{ $r['total_absences'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #075985;">{{ $r['total_retards'] ?? 0 }}</td>
+                        <td class="col-stat-summary-large" style="color: #991b1b;">{{ $r['late_display'] ?? '0h' }}</td>
                         <td class="col-stat-summary">{{ $r['total_conges'] ?? 0 }}</td>
-                        <td class="col-stat-summary" style="background-color: #fffbeb;">{{ $r['overtime_display'] ?? '0h' }}</td>
+                        <td class="col-stat-summary-large" style="background-color: #fffbeb;">{{ $r['overtime_display'] ?? '0h' }}</td>
                         <td class="col-stat-summary">{{ $r['total_off'] ?? 0 }}</td>
                     </tr>
                 @endforeach
@@ -211,10 +222,11 @@
             <div class="legend-item"><span class="swatch code-1"></span> <strong>1</strong> : Présent</div>
             <div class="legend-item"><span class="swatch code-1-R"></span> <strong>1-R</strong> : Retard</div>
             <div class="legend-item"><span class="swatch code-A"></span> <strong>A</strong> : Absent / Justifié</div>
-            <div class="legend-item"><span class="swatch code-OFF"></span> <strong>OFF / REPOS</strong></div>
-            <div class="legend-item"><span class="swatch code-CONGE"></span> <strong>CONGE</strong> : Congé</div>
+            <div class="legend-item"><span class="swatch code-OFF"></span> <strong>OFF</strong> : Repos</div>
+            <div class="legend-item"><span class="swatch code-CONGE"></span> <strong>C</strong> : Congé</div>
             <div class="legend-item"><span class="swatch code-AS"></span> <strong>AS</strong> : Autorisation</div>
             <div class="legend-item"><span class="swatch code-M"></span> <strong>M</strong> : Maladie</div>
+            <div class="legend-item"><strong>R.CUM</strong> : Retard Cumulé | <strong>H.SUP</strong> : Heures Supplémentaires</div>
         </div>
     </div>
 @endsection

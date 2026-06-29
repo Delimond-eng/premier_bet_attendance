@@ -221,13 +221,13 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->name('conges.store')
             ->middleware('canany:conges.create,conges.update');
         Route::post('/conges/delete', [HRController::class, 'congesDelete'])
-            ->name('conges.delete')
-            ->middleware('can:conges.delete');
+            ->name('conges.delete');
 
         Route::get('/conges/reference', [HRController::class, 'referenceData'])
             ->name('conges.reference')
             ->middleware('canany:conges.view,attributions.view,authorizations.view,justifications.view');
 
+        // Authorizations
         Route::get('/authorizations', [HRController::class, 'authorizationsIndex'])
             ->name('authorizations.index')
             ->middleware('can:authorizations.view');
@@ -302,6 +302,10 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/alerts/cumulative/view', fn () => view('report_alerts_cumulative'))
             ->name('reports.alerts.view')
             ->middleware('canany:rapport_absences.view,rapport_retards.view,rapport_presences.view');
+        Route::get('/alerts/unassigned/view', fn () => view('report_unassigned_stations'))
+            ->name('reports.alerts.unassigned.view')
+            ->middleware('can:rapport_presences.view');
+
         Route::get('/weekly', fn () => view('report_presences_weekly'))
             ->name('reports.weekly.view')
             ->middleware('can:rapport_presences.view');
@@ -330,6 +334,10 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/alerts/cumulative/data', [PresenceController::class, 'cumulativeAlertsReport'])
             ->name('reports.alerts.data')
             ->middleware('canany:rapport_absences.view,rapport_retards.view,rapport_presences.view');
+        Route::get('/alerts/unassigned/data', [PresenceController::class, 'unassignedStationsReport'])
+            ->name('reports.alerts.unassigned.data')
+            ->middleware('can:rapport_presences.view');
+
         Route::get('/weekly/data', [PresenceController::class, 'weeklyReport'])
             ->name('reports.weekly.data')
             ->middleware('can:rapport_presences.view');
@@ -361,6 +369,12 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/alerts/cumulative/export/excel', [ExportController::class, 'cumulativeAlertsExcel'])
             ->name('reports.alerts.export.excel')
             ->middleware('canany:rapport_absences.export,rapport_retards.export,rapport_presences.export');
+        Route::get('/alerts/unassigned/export/pdf', [ExportController::class, 'unassignedStationsPdf'])
+            ->name('reports.alerts.unassigned.export.pdf')
+            ->middleware('can:rapport_presences.export');
+        Route::get('/alerts/unassigned/export/excel', [ExportController::class, 'unassignedStationsExcel'])
+            ->name('reports.alerts.unassigned.export.excel')
+            ->middleware('can:rapport_presences.export');
         Route::get('/weekly/export/pdf', [ExportController::class, 'weeklyPresenceSummaryPdf'])
             ->name('reports.weekly.export.pdf')
             ->middleware('can:rapport_presences.export');
@@ -401,6 +415,7 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/devices/{device}/update', [DeviceManagementController::class, 'update'])->name('devices.update');
         Route::post('/devices/{device}/delete', [DeviceManagementController::class, 'destroy'])->name('devices.destroy');
         Route::post('/devices/{device}/sync', [DeviceManagementController::class, 'sync'])->name('devices.sync');
+        Route::post('/biometrics/{id}/delete', [DeviceManagementController::class, 'destroyBiometric'])->name('biometrics.destroy');
     });
 
     // Users/Roles management APIs (Vue)

@@ -13,18 +13,19 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 18%;">Agent</th>
+            <th style="width: 15%;">Agent</th>
             <th style="width: 10%;">Station</th>
-            <th style="width: 6%;">Près.</th>
-            <th style="width: 6%;">Ret.</th>
-            <th style="width: 6%;">Abs.</th>
-            <th style="width: 6%;">Congé</th>
-            <th style="width: 8%;">Auto.</th>
-            <th style="width: 8%;">Just. R.</th>
-            <th style="width: 8%;">Just. A.</th>
-            <th style="width: 8%;">H. Norm.</th>
-            <th style="width: 8%;">H. Sup</th>
-            <th style="width: 8%;">Total Pr.</th>
+            <th style="width: 5%;">Près.</th>
+            <th style="width: 5%;">Ret.</th>
+            <th style="width: 5%;">Abs.</th>
+            <th style="width: 5%;">Congé</th>
+            <th style="width: 7%;">Auto.</th>
+            <th style="width: 7%;">Just. R.</th>
+            <th style="width: 7%;">Just. A.</th>
+            <th style="width: 8%;">Ret. Cumul.</th>
+            <th style="width: 7%;">H. Norm.</th>
+            <th style="width: 7%;">H. Sup</th>
+            <th style="width: 7%;">Total Pr.</th>
         </tr>
         </thead>
         <tbody>
@@ -43,6 +44,7 @@
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>
                 <td>{{ $r['absence_justifiee'] ?? 0 }}</td>
+                <td class="text-center" style="color: #991b1b;"><strong>{{ $r['late_display'] ?? '0h' }}</strong></td>
                 <td class="text-center"><strong>{{ $r['normal_hours_display'] ?? '0h' }}</strong></td>
                 <td class="text-center"><strong>{{ $r['overtime_display'] ?? '0h' }}</strong></td>
                 <td>{{ $r['total_preste'] ?? 0 }}</td>

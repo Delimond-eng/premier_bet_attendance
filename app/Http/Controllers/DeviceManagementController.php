@@ -125,4 +125,21 @@ class DeviceManagementController extends Controller
             'message' => "Test envoyé à $successCount terminal(aux). Vérifiez les logs pour les détails."
         ]);
     }
+
+    public function destroyBiometric($id)
+    {
+        try {
+            $bio = AgentBiometric::findOrFail($id);
+            $bio->delete();
+            return response()->json([
+                'success' => true,
+                'message' => 'Donnée biométrique supprimée avec succès.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression : ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -127,13 +127,14 @@ class AttendanceReportService
                         'depart' => $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '--:--',
                         'horaire' => $p->horaire?->libelle ?? '--',
                         'overtime_minutes' => $this->calculateOvertime($p, $p->horaire),
+                        'late_minutes' => $this->calculateLateMinutes($p, $p->horaire),
                         'duration_minutes' => $p->ended_at ? Carbon::parse($p->getRawOriginal('started_at') ?? $p->started_at)->diffInMinutes(Carbon::parse($p->getRawOriginal('ended_at') ?? $p->ended_at)) : 0
                     ];
                 } else {
                     if ($isElectrocool && $cursor->isSunday()) {
-                        $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'REPOS', 'depart' => '', 'horaire' => 'REPOS', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                        $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'REPOS', 'depart' => '', 'horaire' => 'REPOS', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                     } elseif ($cursor->gt($today)) {
-                        $row[$dayLabel] = ['status' => 'future', 'arrivee' => '--:--', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                        $row[$dayLabel] = ['status' => 'future', 'arrivee' => '--:--', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                     } else {
                         $plan = optional($plannings->get($agent->id . '|' . $isoDate))->first();
 
@@ -148,14 +149,14 @@ class AttendanceReportService
                         }
 
                         if ($hasConge) {
-                            $row[$dayLabel] = ['status' => 'conge', 'arrivee' => 'CONGE', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'conge', 'arrivee' => 'CONGE', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                         } elseif ($auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first()) {
                             $status = (strtolower($auth->type) === 'maladie') ? 'maladie' : 'autorisation';
-                            $row[$dayLabel] = ['status' => $status, 'arrivee' => strtoupper($auth->type), 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => $status, 'arrivee' => strtoupper($auth->type), 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                         } elseif ($plan && $plan->is_rest_day) {
-                            $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                         } else {
-                            $row[$dayLabel] = ['status' => 'absent', 'arrivee' => 'ABS', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'absent', 'arrivee' => 'ABS', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                         }
                     }
                 }
@@ -182,6 +183,20 @@ class AttendanceReportService
 
         $triggerThreshold = $schedEnd->copy()->addHour();
         return $actualEnd->gt($triggerThreshold) ? (int) $schedEnd->diffInMinutes($actualEnd) : 0;
+    }
+
+    public function calculateLateMinutes(PresenceAgents $presence, ?PresenceHoraire $horaire): int
+    {
+        if ($presence->retard !== 'oui' || !$horaire) return 0;
+
+        $startedAt = Carbon::parse($presence->getRawOriginal('started_at') ?? $presence->started_at);
+        $scheduledStartStr = (string)($horaire->getRawOriginal('started_at') ?? $horaire->started_at);
+        if (!$scheduledStartStr) return 0;
+
+        $refDate = Carbon::parse($presence->getRawOriginal('date_reference') ?? $presence->date_reference);
+        $schedStart = $refDate->copy()->setTimeFromTimeString($scheduledStartStr);
+
+        return (int) max(0, $schedStart->diffInMinutes($startedAt, false));
     }
 
     public function formatOvertime(int $minutes): string

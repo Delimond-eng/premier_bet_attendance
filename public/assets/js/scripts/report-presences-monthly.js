@@ -61,6 +61,7 @@ function computeSummary(matrix, agentsByKey = {}) {
             absence_justifiee: 0,
             total_preste: 0,
             total_overtime_minutes: 0,
+            total_late_minutes: 0,
         };
         Object.keys(days).forEach((d) => {
             const day = days[d] || {};
@@ -81,10 +82,14 @@ function computeSummary(matrix, agentsByKey = {}) {
             if (day.overtime_minutes) {
                 acc.total_overtime_minutes += day.overtime_minutes;
             }
+            if (day.late_minutes) {
+                acc.total_late_minutes += day.late_minutes;
+            }
         });
 
         acc.total_preste = acc.present + acc.absence_justifiee;
         acc.overtime_display = formatOvertime(acc.total_overtime_minutes);
+        acc.late_display = formatOvertime(acc.total_late_minutes);
         rows.push(acc);
     });
     return rows;
@@ -137,6 +142,7 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             total_off: 0,
             total_others: 0,
             total_overtime_minutes: 0,
+            total_late_minutes: 0,
         };
 
         dayKeys.forEach((day) => {
@@ -149,6 +155,10 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
 
             if (dayData.overtime_minutes) {
                 row.total_overtime_minutes += dayData.overtime_minutes;
+            }
+
+            if (dayData.late_minutes) {
+                row.total_late_minutes += dayData.late_minutes;
             }
 
             if (!mapped.bucket) return;
@@ -174,6 +184,7 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
         });
 
         row.overtime_display = formatOvertime(row.total_overtime_minutes);
+        row.late_display = formatOvertime(row.total_late_minutes);
         rows.push(row);
     });
 

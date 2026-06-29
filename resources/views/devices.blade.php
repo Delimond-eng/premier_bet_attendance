@@ -171,6 +171,7 @@
                                 <th>AGENT</th>
                                 <th>QUALITÉ</th>
                                 <th>DERNIÈRE MAJ</th>
+                                <th class="text-end">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody id="biometricAgentsList">
@@ -205,10 +206,15 @@
                                     @endif
                                 </td>
                                 <td>{{ $bio->updated_at->format('d/m/Y H:i') }}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-danger btn-sm btn-delete-biometric" data-id="{{ $bio->id }}" data-name="{{ $bio->agent->fullname ?? $bio->matricule }}" title="Supprimer donnée biométrique">
+                                        <i class="ti ti-trash"></i>
+                                    </button>
+                                </td>
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="5" class="text-center py-4">Aucun embedding biométrique trouvé en base.</td>
+                                <td colspan="6" class="text-center py-4">Aucun embedding biométrique trouvé en base.</td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -383,6 +389,44 @@ $(document).ready(function() {
             },
             complete: function() {
                 btn.prop('disabled', false).html('<i class="ti ti-send me-1"></i> Envoyer la synchronisation');
+            }
+        });
+    });
+
+    // --- SUPPRESSION BIOMETRIE ---
+    $(document).on('click', '.btn-delete-biometric', function() {
+        let id = $(this).data('id');
+        let name = $(this).data('name');
+
+        Swal.fire({
+            title: 'Supprimer l\'empreinte ?',
+            text: `Voulez-vous supprimer les données biométriques de "${name}" ?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Oui, supprimer',
+            cancelButtonText: 'Annuler'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: `/admin/biometrics/${id}/delete`,
+                    method: 'POST',
+                    data: { _token: '{{ csrf_token() }}' },
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire('Supprimé', response.message, 'success').then(() => {
+                                $(`.btn-delete-biometric[data-id="${id}"]`).closest('tr').fadeOut(300, function() {
+                                    $(this).remove();
+                                });
+                            });
+                        } else {
+                            Swal.fire('Erreur', response.message, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Erreur', 'Une erreur est survenue lors de la suppression.', 'error');
+                    }
+                });
             }
         });
     });

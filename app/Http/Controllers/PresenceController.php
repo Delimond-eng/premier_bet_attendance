@@ -99,7 +99,7 @@ class PresenceController extends Controller
                 $dateReference = $this->getDateReference($now, $horaire);
                 // BLOQUER SI EN RETARD (PREMIERBET & ELECTROCOOL)
                 $host = $request->getHost();
-                if ($data['key'] === 'check-in' && (str_contains($host, 'premierbet') || str_contains($host, 'electrocool'))) {
+                if ($data['key'] === 'check-in' && (str_contains($host, 'premierbet'))) {
                     $heureRef = $dateReference->copy()->setTimeFromTimeString($horaire->started_at);
                     $toleranceMinutes = (int) ($horaire->tolerence_minutes ?? 15);
                     if ($now->gt($heureRef->copy()->addMinutes($toleranceMinutes))) {
@@ -1567,6 +1567,65 @@ class PresenceController extends Controller
             'retards' => $alerts['retards'] ?? [],
             'departs' => $alerts['departs'] ?? [],
             'counts' => ['absences' => count($alerts['absences'] ?? []), 'retards' => count($alerts['retards'] ?? []), 'departs' => count($alerts['departs'] ?? [])],
+        ]);
+    }
+
+    public function unassignedStationsReport(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+        ]);
+
+        $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
+        $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : Carbon::today()->endOfDay();
+
+        $presences = PresenceAgents::withoutGlobalScopes()
+            ->with(['agent.station', 'stationCheckIn', 'horaire'])
+            ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
+            ->orderByDesc('started_at')
+            ->get();
+
+        $filtered = [];
+
+        // Cache for plannings and stations to avoid heavy DB calls in loop
+        $agentIds = $presences->pluck('agent_id')->unique()->all();
+        $plannings = AgentGroupPlanning::withoutGlobalScopes()
+            ->with('station')
+            ->whereIn('agent_id', $agentIds)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->get()
+            ->groupBy(['agent_id', 'date']);
+
+        $stationsById = Station::withoutGlobalScopes()->get()->keyBy('id');
+
+        foreach ($presences as $p) {
+            $agent = $p->agent;
+            if (!$agent) continue;
+
+            $dateRef = $p->getRawOriginal('date_reference');
+
+            // 1. Resolve planning for this day and horaire
+            $dayPlannings = $plannings->get($agent->id)?->get($dateRef) ?? collect();
+            $pHoraireId = $p->horaire_id;
+
+            $planning = $dayPlannings->first(function($pl) use ($pHoraireId) {
+                return $pl->horaire_id == $pHoraireId || is_null($pl->horaire_id);
+            });
+
+            $expectedStationId = $planning ? $planning->site_id : $agent->site_id;
+
+            if ($p->station_check_in_id != $expectedStationId) {
+                $p->expected_station = $stationsById->get($expectedStationId);
+                $filtered[] = $p;
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'presences' => $filtered,
         ]);
     }
 

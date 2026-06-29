@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\AgentGroupPlanning;
 use App\Models\PresenceAgents;
 use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class CumulativeAlertService
 {
@@ -202,7 +204,7 @@ class CumulativeAlertService
     /**
      * Counts for current day badges in sidebar by default.
      *
-     * @return array{absences:int,retards:int,departs:int}
+     * @return array{absences:int,retards:int,departs:int,unassigned:int}
      */
     public function getSidebarCounts(int $threshold = 1): array
     {
@@ -212,10 +214,57 @@ class CumulativeAlertService
 
         $alerts = $this->buildAlerts($start, $end, $stationId, $threshold);
 
+        $unassignedCount = 0;
+        if (str_contains(request()->getHost(), 'premierbet') || request()->getHost() === '127.0.0.1') {
+            $today = Carbon::today()->toDateString();
+
+            $presences = PresenceAgents::withoutGlobalScopes()
+                ->whereDate('date_reference', $today)
+                ->whereNotNull('station_check_in_id')
+                ->get(['id', 'agent_id', 'station_check_in_id', 'horaire_id']);
+
+            if ($presences->isNotEmpty()) {
+                $agentIds = $presences->pluck('agent_id')->unique()->all();
+
+                $plannings = AgentGroupPlanning::withoutGlobalScopes()
+                    ->whereIn('agent_id', $agentIds)
+                    ->whereDate('date', $today)
+                    ->get()
+                    ->groupBy('agent_id');
+
+                $agents = Agent::withoutGlobalScopes()
+                    ->whereIn('id', $agentIds)
+                    ->get(['id', 'site_id'])
+                    ->keyBy('id');
+
+                foreach ($presences as $p) {
+                    $agent = $agents->get($p->agent_id);
+                    if (!$agent) continue;
+
+                    $dayPlannings = $plannings->get($p->agent_id) ?? collect();
+
+                    $planning = $dayPlannings->first(fn($pl) => $pl->horaire_id == $p->horaire_id);
+                    if (!$planning) {
+                        $planning = $dayPlannings->first(fn($pl) => is_null($pl->horaire_id));
+                    }
+
+                    $expectedStationId = $planning ? $planning->site_id : $agent->site_id;
+
+                    if ($p->station_check_in_id != $expectedStationId) {
+                        if ($stationId && $expectedStationId != $stationId) {
+                            continue;
+                        }
+                        $unassignedCount++;
+                    }
+                }
+            }
+        }
+
         return [
             'absences' => count($alerts['absences'] ?? []),
             'retards' => count($alerts['retards'] ?? []),
             'departs' => count($alerts['departs'] ?? []),
+            'unassigned' => $unassignedCount,
         ];
     }
 

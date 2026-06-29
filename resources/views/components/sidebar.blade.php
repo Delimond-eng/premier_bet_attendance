@@ -95,11 +95,11 @@
                 @canany(['rapport_absences.view', 'rapport_retards.view', 'rapport_presences.view'])
                 <li class="menu-title"><span>NOTIFICATIONS</span></li>
                 @php
-                    $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
+                    $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0, 'unassigned' => 0];
                     try {
                         $alertMenuCounts = app(\App\Services\CumulativeAlertService::class)->getSidebarCounts(1);
                     } catch (\Throwable $e) {
-                        $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0];
+                        $alertMenuCounts = ['absences' => 0, 'retards' => 0, 'departs' => 0, 'unassigned' => 0];
                     }
                     $totalAlerts = array_sum($alertMenuCounts);
                 @endphp
@@ -133,6 +133,14 @@
                                         <span class="badge badge-soft-danger ms-auto">{{ $alertMenuCounts['departs'] }}</span>
                                     </a>
                                 </li>
+                                @if(str_contains(request()->getHost(), 'premierbet') || str_contains(request()->getHost(), '127.0.0.1'))
+                                <li>
+                                    <a class="@active(['reports.alerts.unassigned.view'])" href="{{ route('reports.alerts.unassigned.view') }}">
+                                        Stations non affectées
+                                        <span class="badge badge-soft-danger ms-auto">{{ $alertMenuCounts['unassigned'] }}</span>
+                                    </a>
+                                </li>
+                                @endif
                             </ul>
                         </li>
                     </ul>
@@ -140,7 +148,6 @@
                 @endcanany
 
                 <!-- MAINTENANCE & TACHES -->
-                @if(!str_contains(request()->getHost(), 'electrocool'))
                 @can('tasks.view')
                 <li class="menu-title"><span>OPERATIONS</span></li>
                 <li>
@@ -165,7 +172,6 @@
                     </ul>
                 </li>
                 @endcan
-                @endif
 
                 <li class="menu-title"><span>RH</span></li>
 
