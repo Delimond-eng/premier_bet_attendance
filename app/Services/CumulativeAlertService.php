@@ -88,6 +88,7 @@ class CumulativeAlertService
         $earlyDepartureAlerts = [];
 
         foreach ($months as $monthStart) {
+            // buildMonthlyMatrix respecte déjà matricule_prefix
             $matrix = $this->attendanceService->buildMonthlyMatrix(
                 month: (int) $monthStart->month,
                 year: (int) $monthStart->year,
@@ -127,6 +128,8 @@ class CumulativeAlertService
                     'schedule_id' => null,
                     'schedule_label' => null,
                 ];
+
+                if ($agent['id'] === null) continue; // Sécurité si agent non trouvé/filtré
 
                 if ($absenceCount >= $threshold) {
                     $absenceAlerts[] = $this->buildAlertRow($agent, $monthStart, $absenceCount, $threshold, 'absences');
@@ -211,6 +214,7 @@ class CumulativeAlertService
         $start = Carbon::today()->startOfDay();
         $end = Carbon::today()->startOfDay();
         $stationId = ManagerStationContext::stationId();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $alerts = $this->buildAlerts($start, $end, $stationId, $threshold);
 
@@ -218,10 +222,17 @@ class CumulativeAlertService
         if (str_contains(request()->getHost(), 'premierbet') || request()->getHost() === '127.0.0.1') {
             $today = Carbon::today()->toDateString();
 
-            $presences = PresenceAgents::withoutGlobalScopes()
+            $presencesQuery = PresenceAgents::withoutGlobalScopes()
                 ->whereDate('date_reference', $today)
-                ->whereNotNull('station_check_in_id')
-                ->get(['id', 'agent_id', 'station_check_in_id', 'horaire_id']);
+                ->whereNotNull('station_check_in_id');
+
+            if ($userPrefix !== null) {
+                $presencesQuery->whereHas('agent', function($q) use ($userPrefix) {
+                    $q->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            }
+
+            $presences = $presencesQuery->get(['id', 'agent_id', 'station_check_in_id', 'horaire_id']);
 
             if ($presences->isNotEmpty()) {
                 $agentIds = $presences->pluck('agent_id')->unique()->all();
@@ -374,6 +385,7 @@ class CumulativeAlertService
     {
         $monthFrom = $monthStart->copy()->startOfMonth()->startOfDay();
         $monthTo = $monthStart->copy()->endOfMonth()->startOfDay();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $from = $globalStart->gt($monthFrom) ? $globalStart->copy() : $monthFrom->copy();
         $to = $globalEnd->lt($monthTo) ? $globalEnd->copy() : $monthTo->copy();
@@ -382,24 +394,32 @@ class CumulativeAlertService
             return ['counts' => [], 'agents' => [], 'details' => []];
         }
 
-        $rows = PresenceAgents::withoutGlobalScopes()
+        $rowsQuery = PresenceAgents::withoutGlobalScopes()
             ->with([
                 'agent' => function ($query) {
                     $query->withoutGlobalScopes()
-                        ->with(['station', 'groupe.horaire', 'horaire']);
+                        ->with(['station' => fn($q) => $q->withoutGlobalScopes(), 'groupe.horaire', 'horaire']);
                 },
-                'horaire',
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
             ])
             ->whereBetween('date_reference', [$from->toDateString(), $to->toDateString()])
-            ->whereNotNull('ended_at')
-            ->when($stationId !== null, function ($q) use ($stationId) {
-                $q->where(function ($qq) use ($stationId) {
-                    $qq->where('site_id', (int) $stationId)
-                        ->orWhere('station_check_in_id', (int) $stationId)
-                        ->orWhere('station_check_out_id', (int) $stationId);
-                });
-            })
-            ->get();
+            ->whereNotNull('ended_at');
+
+        if ($userPrefix !== null) {
+            $rowsQuery->whereHas('agent', function ($q) use ($userPrefix) {
+                $q->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+            });
+        }
+
+        if ($stationId !== null) {
+            $rowsQuery->where(function ($q) use ($stationId) {
+                $q->where('site_id', (int) $stationId)
+                    ->orWhere('station_check_in_id', (int) $stationId)
+                    ->orWhere('station_check_out_id', (int) $stationId);
+            });
+        }
+
+        $rows = $rowsQuery->get();
 
         $counts = [];
         $agents = [];

@@ -40,7 +40,7 @@ class SendDatabaseBackup extends Command
 
         // Formatage du nom du fichier
         $date = Carbon::now()->format('d-m-Y_H-i-s');
-        $filename = "salama-mamba-{$date}.sql";
+        $filename = "Electrocool-{$date}.sql";
 
         $backupDir = storage_path("app/backups");
         $backupPath = "{$backupDir}/{$filename}";

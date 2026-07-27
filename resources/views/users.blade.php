@@ -61,7 +61,7 @@
                             <th>Date création</th>
                             <th>Date modif.</th>
                             <th>Role</th>
-                            <th>Station</th>
+                            <th>Station / Sous-traitance</th>
                             <th>Status</th>
                             <th></th>
                         </tr>
@@ -96,7 +96,11 @@
                                 <span :class="data.role ==='admin' ? 'badge-pink-transparent' : 'badge-info-transparent'"
                                       class=" badge badge-md p-2 fs-10">@{{ data.role }}</span>
                             </td>
-                            <td> <span class="badge badge-purple">@{{ data.station?.name ?? 'Toutes les stations' }}</span> </td>
+                            <td>
+                                <span v-if="data.station" class="badge badge-purple mb-1">@{{ data.station.name }}</span>
+                                <span v-if="data.matricule_prefix" class="badge badge-info d-block">Sous-traitance: @{{ data.matricule_prefix }}</span>
+                                <span v-if="!data.station && !data.matricule_prefix" class="text-muted">Accès global</span>
+                            </td>
                             <td>
                                 <span class="badge badge-success d-inline-flex align-items-center badge-xs">
                                     <i class="ti ti-point-filled me-1"></i>Active
@@ -109,7 +113,7 @@
                                         <a href="#" class="me-2" @click="editUser(data)"><i  class="ti ti-edit"></i></a>
                                     @endcan
                                     @can('users.delete')
-                                        <a href="#" data-bs-toggle="modal" data-bs-target="#delete_modal"><i class="ti ti-trash"></i></a>
+                                        <a href="#" @click="prepareDelete(data)"><i class="ti ti-trash"></i></a>
                                     @endcan
                                 </div>
                             </td>
@@ -162,7 +166,7 @@
                                     <div class="mb-3">
                                         <label class="form-label">Rôle</label>
                                         <select class="form-select" v-model="form.role">
-                                            <option value="" hidden selected>--Sélectionner un rôle</option>
+                                            <option value="" hidden selected>--Sélectionner un rôle--</option>
                                             <option v-for="(data, i) in allRoles" :value="data.name">@{{ data.name }}</option>
                                         </select>
                                     </div>
@@ -175,6 +179,16 @@
                                             <option v-for="s in allSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                                         </select>
                                         <small class="text-muted">Optionnel. Si vide, l'utilisateur verra toutes les stations.</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" v-if="isTraitanceRole">
+                                    <div class="mb-3">
+                                        <label class="form-label">Sous-traitance (Préfixe Matricule)</label>
+                                        <select class="form-select" v-model="form.matricule_prefix">
+                                            <option value="">--Sélectionner la sous-traitance--</option>
+                                            <option v-for="p in allPrefixes" :key="p" :value="p">@{{ p }}</option>
+                                        </select>
+                                        <small class="text-info">L'utilisateur ne verra que les agents dont le matricule commence par ce préfixe.</small>
                                     </div>
                                 </div>
                             </div>
@@ -247,6 +261,28 @@
             </div>
         </div>
         @endcan
+
+        <!-- Delete Modal -->
+        <div class="modal fade" id="delete_modal">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-body text-center">
+                        <span class="avatar avatar-xl bg-transparent-danger text-danger mb-3">
+                            <i class="ti ti-trash-x fs-36"></i>
+                        </span>
+                        <h4 class="mb-1">Confirmer la suppression</h4>
+                        <p class="mb-3">Êtes-vous sûr de vouloir supprimer l'utilisateur <strong>@{{ userToDelete?.name }}</strong> ? Cette action est irréversible.</p>
+                        <div class="d-flex justify-content-center gap-2">
+                            <button type="button" class="btn btn-white border" data-bs-dismiss="modal">Annuler</button>
+                            <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="isLoading">
+                                @{{ isLoading ? 'Suppression...' : 'Supprimer' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- /Delete Modal -->
     </div>
 @endsection
 

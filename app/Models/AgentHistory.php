@@ -63,13 +63,20 @@ class AgentHistory extends Model
 
     protected static function booted(): void
     {
-        static::addGlobalScope('manager_station', function (Builder $builder) {
+        static::addGlobalScope('manager_restriction', function (Builder $builder) {
+            // Restriction par station
             $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
-                return;
+            if ($stationId !== null) {
+                $builder->where($builder->qualifyColumn('site_id'), $stationId);
             }
 
-            $builder->where($builder->qualifyColumn('site_id'), $stationId);
+            // Restriction par sous-traitance (préfixe matricule)
+            $prefix = ManagerStationContext::matriculePrefix();
+            if ($prefix !== null) {
+                $builder->whereHas('agent', function ($q) use ($prefix) {
+                    $q->withoutGlobalScopes()->where('matricule', 'like', $prefix . '%');
+                });
+            }
         });
     }
 
@@ -90,7 +97,7 @@ class AgentHistory extends Model
      * @return BelongsTo
     */
     public function site() : BelongsTo{
-        return $this->belongsTo(Site::class, foreignKey:"site_id",);
+        return $this->belongsTo(Station::class, foreignKey:"site_id",);
     }
 
      /**
@@ -98,7 +105,7 @@ class AgentHistory extends Model
      * @return BelongsTo
     */
     public function from() : BelongsTo{
-        return $this->belongsTo(Site::class, foreignKey:"site_provenance_id",);
+        return $this->belongsTo(Station::class, foreignKey:"site_provenance_id",);
     }
 
 

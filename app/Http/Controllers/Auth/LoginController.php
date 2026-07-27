@@ -52,6 +52,13 @@ class LoginController extends Controller
 
         // Tentative de connexion
         if (Auth::attempt($request->only('email', 'password'), $request->filled('remember'))) {
+            $user = Auth::user();
+
+            // Mettre à jour last_seen_at immédiatement après la connexion
+            \App\Models\User::where('id', $user->id)->update([
+                'last_seen_at' => now()
+            ]);
+
             // Si la connexion réussit, renvoyer un JSON avec `result`
             return response()->json([
                 'result' => [

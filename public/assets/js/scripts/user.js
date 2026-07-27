@@ -9,14 +9,17 @@ new Vue({
             search: "",
             users: [],
             roles: [],
+            prefixes: [], // Pour stocker les préfixes de sous-traitance
             actions: [],
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
+            userToDelete: null,
             form: {
                 name: "",
                 email: "",
                 password: "",
                 role: "",
                 station_id: "",
+                matricule_prefix: "",
                 user_id: "",
                 permissions: [],
             },
@@ -54,13 +57,14 @@ new Vue({
         },
 
         viewAllRoles() {
-            if (location.pathname === "/admin/roles") {
+            if (location.pathname === "/admin/roles" || location.pathname === "/admin/users") {
                 this.isDataLoading = true;
             }
             get("/roles/all")
                 .then(({ data, status }) => {
                     this.isDataLoading = false;
                     this.roles = data.roles;
+                    this.prefixes = data.prefixes ?? []; // Récupération des préfixes
                 })
                 .catch((err) => {
                     this.isDataLoading = false;
@@ -86,14 +90,14 @@ new Vue({
                     // Gestion des erreurs
                     if (data.errors !== undefined) {
                         this.error = data.errors;
-                        console.log(data.errors);
+                        alert(Array.isArray(data.errors) ? data.errors.join("\n") : data.errors);
                     }
 
                     if (data.message !== undefined) {
                         this.error = null;
-                        console.log(data.message);
                         this.viewAllUsers();
                         $("#add_users").modal("hide");
+                        this.reset();
                     }
                 })
                 .catch((err) => {
@@ -110,13 +114,12 @@ new Vue({
 
                     if (data.errors) {
                         this.error = data.errors;
-                        console.log(data.errors);
+                        alert(Array.isArray(data.errors) ? data.errors.join("\n") : data.errors);
                         return;
                     }
 
                     if (data.message) {
                         this.error = null;
-                        console.log(data.message);
                         this.formRole = { name: "", permissions: [] }; // Reset form
                         this.viewAllRoles(); // Recharge la liste des rôles
                         $("#role-create").modal("hide");
@@ -136,13 +139,12 @@ new Vue({
 
                     if (data.errors) {
                         this.error = data.errors;
-                        console.log(data.errors);
+                        alert(Array.isArray(data.errors) ? data.errors.join("\n") : data.errors);
                         return;
                     }
 
                     if (data.message) {
                         this.error = null;
-                        console.log(data.message);
                         this.reset(); // Reset form
                         this.viewAllUsers(); // Recharge la liste des rôles
                         $("#access_users").modal("hide");
@@ -169,8 +171,33 @@ new Vue({
             this.form.email = user.email;
             this.form.role = user.role;
             this.form.station_id = user.station_id ?? "";
+            this.form.matricule_prefix = user.matricule_prefix ?? "";
             this.form.user_id = user.id;
             $("#add_users").modal("show");
+        },
+
+        prepareDelete(user) {
+            this.userToDelete = user;
+            $("#delete_modal").modal("show");
+        },
+
+        confirmDelete() {
+            if (!this.userToDelete) return;
+            this.isLoading = true;
+            postJson("/user/delete", { user_id: this.userToDelete.id })
+                .then(({ data }) => {
+                    this.isLoading = false;
+                    if (data.status === "error") {
+                        alert(data.errors.join("\n"));
+                    } else {
+                        $("#delete_modal").modal("hide");
+                        this.viewAllUsers();
+                    }
+                })
+                .catch(err => {
+                    this.isLoading = false;
+                    alert("Une erreur est survenue lors de la suppression.");
+                });
         },
 
         getAccess(user) {
@@ -192,6 +219,7 @@ new Vue({
                 password: "",
                 role: "",
                 station_id: "",
+                matricule_prefix: "",
                 user_id: "",
                 permissions: [],
             };
@@ -208,17 +236,30 @@ new Vue({
         "form.role"(value) {
             if (value === "admin") {
                 this.form.station_id = "";
+                this.form.matricule_prefix = "";
+            }
+            if (!this.isTraitanceRole) {
+                this.form.matricule_prefix = "";
             }
         },
     },
 
     computed: {
+        isTraitanceRole() {
+            if (!this.form.role) return false;
+            return this.form.role.toLowerCase().includes("traitance");
+        },
+
         allActions() {
             return this.actions;
         },
 
         allRoles() {
             return this.roles;
+        },
+
+        allPrefixes() {
+            return this.prefixes;
         },
 
         allUsers() {

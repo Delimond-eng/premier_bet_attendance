@@ -32,15 +32,22 @@ class AttendanceJustification extends Model
 
     protected static function booted(): void
     {
-        static::addGlobalScope('manager_station', function (Builder $builder) {
+        static::addGlobalScope('manager_restriction', function (Builder $builder) {
+            // Restriction par station
             $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
-                return;
+            if ($stationId !== null) {
+                $builder->whereHas('agent', function (Builder $query) use ($stationId) {
+                    $query->withoutGlobalScopes()->where('site_id', $stationId);
+                });
             }
 
-            $builder->whereHas('agent', function (Builder $query) use ($stationId) {
-                $query->withoutGlobalScopes()->where('site_id', $stationId);
-            });
+            // Restriction par sous-traitance (préfixe matricule)
+            $prefix = ManagerStationContext::matriculePrefix();
+            if ($prefix !== null) {
+                $builder->whereHas('agent', function ($q) use ($prefix) {
+                    $q->withoutGlobalScopes()->where('matricule', 'like', $prefix . '%');
+                });
+            }
         });
     }
 

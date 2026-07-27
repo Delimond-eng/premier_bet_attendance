@@ -31,37 +31,6 @@
         </a>
     </div>
 
-    <div class="modern-profile p-3 pb-0">
-        <div class="text-center rounded bg-light p-3 mb-4 user-profile">
-            <div class="avatar avatar-lg online mb-3">
-                <img src="{{ asset('assets/img/profiles/avatar-02.jpg') }}" alt="Img" class="img-fluid rounded-circle">
-            </div>
-            <h6 class="fs-12 fw-normal mb-1">{{ Auth::user()->name }}</h6>
-            <p class="fs-10">{{ Auth::user()->getRoleNames()->first() ?? Auth::user()->role }}</p>
-        </div>
-    </div>
-
-    <div class="sidebar-header p-3 pb-0 pt-2">
-        <div class="text-center rounded bg-light p-2 mb-4 sidebar-profile d-flex align-items-center">
-            <div class="avatar avatar-md onlin">
-                <img src="{{ asset('assets/img/profiles/avatar-02.jpg') }}" alt="Img" class="img-fluid rounded-circle">
-            </div>
-            <div class="text-start sidebar-profile-info ms-2">
-                <h6 class="fs-12 fw-normal mb-1">{{ Auth::user()->name }}</h6>
-                <p class="fs-10">{{ Auth::user()->getRoleNames()->first() ?? Auth::user()->role }}</p>
-            </div>
-        </div>
-        <div class="input-group input-group-flat d-inline-flex mb-4">
-            <span class="input-icon-addon">
-                <i class="ti ti-search"></i>
-            </span>
-            <input type="text" class="form-control" placeholder="Recherche...">
-            <span class="input-group-text">
-                <kbd>CTRL + / </kbd>
-            </span>
-        </div>
-    </div>
-
     <div class="sidebar-inner slimscroll">
         <div id="sidebar-menu" class="sidebar-menu">
             <ul>
@@ -148,6 +117,7 @@
                 @endcanany
 
                 <!-- MAINTENANCE & TACHES -->
+                @if(!str_contains(request()->getHost(), 'premierbet') && !str_contains(request()->getHost(), 'electrocool'))
                 @can('tasks.view')
                 <li class="menu-title"><span>OPERATIONS</span></li>
                 <li>
@@ -172,6 +142,7 @@
                     </ul>
                 </li>
                 @endcan
+                @endif
 
                 <li class="menu-title"><span>RH</span></li>
 
@@ -246,36 +217,28 @@
                         </li>
                         @endcanany
 
-                        @canany(['timesheet.view', 'conges.view', 'attributions.view', 'authorizations.view', 'justifications.view'])
+                        @canany(['conges.view', 'attributions.view', 'authorizations.view', 'justifications.view', 'timesheet.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(['rh.*'])">
-                                <i class="ti ti-user-screen"></i><span>Ressources humaines</span>
+                            <a href="javascript:void(0);" class="@active(['rh.conges.*', 'rh.attributions.*', 'rh.authorizations.*', 'rh.justifications.*', 'rh.timesheet.*'])">
+                                <i class="ti ti-users-group"></i><span>Administration RH</span>
                                 <span class="menu-arrow"></span>
                             </a>
                             <ul>
-                                @can('timesheet.view')
-                                <li><a class="@active(['rh.timesheet.view'])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
+                                @can('conges.view')
+                                <li><a class="@active(['rh.conges.view'])" href="{{ route('rh.conges.view') }}">Types de congés</a></li>
                                 @endcan
-                                <li class="submenu">
-                                    <a href="javascript:void(0);" class="@active(['rh.conges.view', 'rh.attributions.view'])">
-                                        Conges & attribution
-                                        <span class="menu-arrow"></span>
-                                    </a>
-                                    <ul>
-                                        @can('conges.view')
-                                        <li><a class="@active(['rh.conges.view'])" href="{{ route('rh.conges.view') }}">Conges</a></li>
-                                        @endcan
-                                        @can('attributions.view')
-                                        <li><a class="@active(['rh.attributions.view'])" href="{{ route('rh.attributions.view') }}">Attribution agent</a></li>
-                                        @endcan
-                                    </ul>
-                                </li>
+                                @can('attributions.view')
+                                <li><a class="@active(['rh.attributions.view'])" href="{{ route('rh.attributions.view') }}">Assignation congés</a></li>
+                                @endcan
                                 @can('authorizations.view')
-                                <li><a class="@active(['rh.authorizations.view'])" href="{{ route('rh.authorizations.view') }}">Autorisation speciale</a></li>
+                                <li><a class="@active(['rh.authorizations.view'])" href="{{ route('rh.authorizations.view') }}">Autorisations</a></li>
                                 @endcan
                                 @can('justifications.view')
-                                <li><a class="@active(['rh.justifications.retard.view'])" href="{{ route('rh.justifications.retard.view') }}">Justification retard</a></li>
-                                <li><a class="@active(['rh.justifications.absence.view'])" href="{{ route('rh.justifications.absence.view') }}">Justification absence</a></li>
+                                <li><a class="@active(['rh.justifications.retard.view'])" href="{{ route('rh.justifications.retard.view') }}">Justifications retard</a></li>
+                                <li><a class="@active(['rh.justifications.absence.view'])" href="{{ route('rh.justifications.absence.view') }}">Justifications absence</a></li>
+                                @endcan
+                                @can('timesheet.view')
+                                <li><a class="@active(['rh.timesheet.view'])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
                                 @endcan
                             </ul>
                         </li>
@@ -283,7 +246,7 @@
                     </ul>
                 </li>
 
-                @canany(['devices.view', 'users.view', 'roles.view', 'logs.view'])
+                 @canany(['devices.view', 'users.view', 'roles.view', 'logs.view'])
                 <li class="menu-title"><span>ADMINISTRATION</span></li>
                 <li>
                     <ul>
@@ -319,7 +282,6 @@
                     </ul>
                 </li>
                 @endcanany
-
             </ul>
         </div>
     </div>

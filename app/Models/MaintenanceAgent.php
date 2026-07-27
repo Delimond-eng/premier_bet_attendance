@@ -35,20 +35,28 @@ class MaintenanceAgent extends Model
 
     protected static function booted(): void
     {
-        static::addGlobalScope('manager_station', function (Builder $builder) {
+        static::addGlobalScope('manager_restriction', function (Builder $builder) {
             $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
-                return;
-            }
+            $prefix = ManagerStationContext::matriculePrefix();
 
-            // A manager should see maintenances performed at their station
-            // OR maintenances performed by agents assigned to their station.
-            $builder->where(function (Builder $q) use ($stationId) {
-                $q->where($q->qualifyColumn('station_id'), $stationId)
-                    ->orWhereHas('agent', function (Builder $qq) use ($stationId) {
-                        $qq->where('site_id', $stationId);
-                    });
-            });
+            if ($stationId !== null || $prefix !== null) {
+                $builder->where(function (Builder $q) use ($stationId, $prefix) {
+                    // Restriction par station (affectation de l'agent ou station de l'intervention)
+                    if ($stationId !== null) {
+                        $q->where($q->qualifyColumn('station_id'), $stationId)
+                            ->orWhereHas('agent', function (Builder $qq) use ($stationId) {
+                                $qq->withoutGlobalScopes()->where('site_id', $stationId);
+                            });
+                    }
+
+                    // Restriction par sous-traitance (préfixe matricule)
+                    if ($prefix !== null) {
+                        $q->whereHas('agent', function ($qqq) use ($prefix) {
+                            $qqq->withoutGlobalScopes()->where('matricule', 'like', $prefix . '%');
+                        });
+                    }
+                });
+            }
         });
     }
 

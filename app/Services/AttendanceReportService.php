@@ -11,6 +11,7 @@ use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
+use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -57,6 +58,8 @@ class AttendanceReportService
         $today = Carbon::now('Africa/Kinshasa')->startOfDay();
         $host = request()->getHost();
         $isElectrocool = str_contains($host, 'electrocool') || $host === '127.0.0.1';
+        $managerStationId = ManagerStationContext::stationId();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $days = [];
         $cursor = $start->copy();
@@ -65,36 +68,56 @@ class AttendanceReportService
             $cursor->addDay();
         }
 
-        $agentsQuery = Agent::query()
-            ->with(['station', 'groupe', 'horaire'])
-            ->when(!empty($filters['station_id']), function ($q) use ($filters, $start, $end) {
+        // Utilisation de withoutGlobalScopes pour permettre de voir les agents planifiés venant d'ailleurs
+        $agentsQuery = Agent::withoutGlobalScopes()
+            ->with([
+                'station' => fn($q) => $q->withoutGlobalScopes(),
+                'groupe' => fn($q) => $q->withoutGlobalScopes(),
+                'horaire' => fn($q) => $q->withoutGlobalScopes()
+            ])
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                // FORCER le préfixe de l'utilisateur connecté même si scope désactivé
+                $q->where('matricule', 'like', $userPrefix . '%');
+            })
+            ->when(!empty($filters['station_id']), function ($q) use ($filters, $start, $end, $managerStationId) {
                 $sid = (int) $filters['station_id'];
+                if ($managerStationId !== null) { $sid = $managerStationId; }
+
                 $q->where(function ($sub) use ($sid, $start, $end) {
                     $sub->where('site_id', $sid)
-                        ->orWhereHas('plannings', fn($pq) => $pq->where('site_id', $sid)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
+                        ->orWhereHas('plannings', fn($pq) => $pq->withoutGlobalScopes()->where('site_id', $sid)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
                 });
             })
-            ->when(!empty($filters['matricule_prefix']), fn($q) => $q->where('matricule', 'like', $filters['matricule_prefix'] . '%'))
+            ->when(empty($filters['station_id']) && $managerStationId !== null, function($q) use ($managerStationId, $start, $end) {
+                $q->where(function ($sub) use ($managerStationId, $start, $end) {
+                    $sub->where('site_id', $managerStationId)
+                        ->orWhereHas('plannings', fn($pq) => $pq->withoutGlobalScopes()->where('site_id', $managerStationId)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
+                });
+            })
+            ->when(!empty($filters['matricule_prefix']), function($q) use ($filters) {
+                $prefix = trim((string)$filters['matricule_prefix']);
+                $q->where('matricule', 'like', $prefix . '%');
+            })
             ->orderBy('fullname');
 
         $agents = $agentsQuery->get();
         $agentIds = $agents->pluck('id')->all();
 
-        // Chargement des données avec clés de dates normalisées
-        $presences = PresenceAgents::query()
-            ->with('horaire')
+        // Chargement des données sans Global Scopes mais avec restriction manuelle si nécessaire
+        $presences = PresenceAgents::withoutGlobalScopes()
+            ->with(['horaire' => fn($q) => $q->withoutGlobalScopes()])
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
             ->get()
             ->groupBy(fn($p) => $p->agent_id . '|' . Carbon::parse($p->date_reference)->toDateString());
 
-        $plannings = AgentGroupPlanning::query()
+        $plannings = AgentGroupPlanning::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->get()
             ->groupBy(fn($p) => $p->agent_id . '|' . Carbon::parse($p->date)->toDateString());
 
-        $conges = Conge::query()
+        $conges = Conge::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->where('status', 'approved')
             ->whereDate('date_fin', '>=', $start->toDateString())
@@ -102,7 +125,7 @@ class AttendanceReportService
             ->get()
             ->groupBy('agent_id');
 
-        $authorizations = AttendanceAuthorization::query()
+        $authorizations = AttendanceAuthorization::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->where('status', 'approved')
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
@@ -120,15 +143,30 @@ class AttendanceReportService
                 $p = optional($presences->get($agent->id . '|' . $isoDate))->first();
 
                 if ($p && $p->started_at) {
-                    $status = ($p->retard === 'oui') ? 'retard' : 'present';
+                    $auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first();
+                    $hasExitAuth = $auth && in_array(strtolower($auth->type), ['depart', 'sortie']);
+                    $isMissingExit = empty($p->ended_at) && $cursor->lt($today);
+
+                    if ($isMissingExit && !$hasExitAuth) {
+                        $status = 'absent';
+                        $depart = 'AN';
+                        $overtime = 0;
+                        $duration = 0;
+                    } else {
+                        $status = ($p->retard === 'oui') ? 'retard' : 'present';
+                        $depart = $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : ($hasExitAuth ? 'AUTH' : '--:--');
+                        $overtime = $this->calculateOvertime($p, $p->horaire);
+                        $duration = $p->ended_at ? Carbon::parse($p->getRawOriginal('started_at') ?? $p->started_at)->diffInMinutes(Carbon::parse($p->getRawOriginal('ended_at') ?? $p->ended_at)) : 0;
+                    }
+
                     $row[$dayLabel] = [
                         'status' => $status,
                         'arrivee' => Carbon::parse($p->started_at)->format('H:i'),
-                        'depart' => $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : '--:--',
+                        'depart' => $depart,
                         'horaire' => $p->horaire?->libelle ?? '--',
-                        'overtime_minutes' => $this->calculateOvertime($p, $p->horaire),
+                        'overtime_minutes' => $overtime,
                         'late_minutes' => $this->calculateLateMinutes($p, $p->horaire),
-                        'duration_minutes' => $p->ended_at ? Carbon::parse($p->getRawOriginal('started_at') ?? $p->started_at)->diffInMinutes(Carbon::parse($p->getRawOriginal('ended_at') ?? $p->ended_at)) : 0
+                        'duration_minutes' => $duration
                     ];
                 } else {
                     if ($isElectrocool && $cursor->isSunday()) {
@@ -137,8 +175,6 @@ class AttendanceReportService
                         $row[$dayLabel] = ['status' => 'future', 'arrivee' => '--:--', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                     } else {
                         $plan = optional($plannings->get($agent->id . '|' . $isoDate))->first();
-
-                        // Check Congé
                         $hasConge = false;
                         if (isset($conges[$agent->id])) {
                             foreach ($conges[$agent->id] as $c) {

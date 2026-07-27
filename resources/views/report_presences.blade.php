@@ -17,12 +17,16 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+
+                @if(Auth::user()->matricule_prefix === null)
                 <div v-if="show_matricule_filter" class="mb-2" style="width: 160px;">
-                    <select class="form-select" v-model="filters.matricule_prefix">
+                    <select class="form-select" v-model="filters.matricule_prefix" @change="load">
                         <option value="">Sous-traitance</option>
                         <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
                     </select>
                 </div>
+                @endif
+
                 <div class="flex-fill mb-2" style="width: 260px;">
                     <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                         <option value="">Toutes les stations</option>
@@ -30,7 +34,7 @@
                     </select>
                 </div>
                 <div class="me-2 mb-2">
-                    <input type="date" class="form-control" v-model="filters.date">
+                    <input type="date" class="form-control" v-model="filters.date" @change="load">
                 </div>
                 <div class="me-2 mb-2">
                     <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>

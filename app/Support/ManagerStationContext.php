@@ -30,9 +30,26 @@ class ManagerStationContext
         return (int) $user->station_id;
     }
 
+    /**
+     * Retourne le préfixe de matricule pour les utilisateurs de type sous-traitance.
+     */
+    public static function matriculePrefix(): ?string
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return null;
+        }
+
+        if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
+            return null;
+        }
+
+        return $user->matricule_prefix ?: null;
+    }
+
     public static function isScopedManager(): bool
     {
-        return self::stationId() !== null;
+        return self::stationId() !== null || self::matriculePrefix() !== null;
     }
 
     private static function isPresencePunchRequest(): bool

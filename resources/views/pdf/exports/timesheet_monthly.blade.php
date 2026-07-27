@@ -12,12 +12,13 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 28%;">Station</th>
+            <th style="width: 23%;">Station</th>
             <th style="width: 10%;">Agents</th>
             <th style="width: 10%;">Present</th>
             <th style="width: 10%;">Retard</th>
             <th style="width: 10%;">Absent</th>
-            <th style="width: 12%;">Conge</th>
+            <th style="width: 7%;">AN</th>
+            <th style="width: 10%;">Conge</th>
             <th style="width: 20%;">Autorisation</th>
         </tr>
         </thead>
@@ -29,6 +30,7 @@
                 <td>{{ $r['total_present'] ?? 0 }}</td>
                 <td>{{ $r['total_retard'] ?? 0 }}</td>
                 <td>{{ $r['total_absent'] ?? 0 }}</td>
+                <td style="color: #991b1b;"><strong>{{ $r['total_an'] ?? 0 }}</strong></td>
                 <td>{{ $r['total_conge'] ?? 0 }}</td>
                 <td>{{ $r['total_autorisation'] ?? 0 }}</td>
             </tr>

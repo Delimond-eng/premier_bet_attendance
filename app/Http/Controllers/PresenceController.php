@@ -17,6 +17,7 @@ use App\Services\AttendanceReportService;
 use App\Services\AbsenceReportService;
 use App\Services\CumulativeAlertService;
 use App\Services\LateReportService;
+use App\Support\ManagerStationContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -82,6 +83,16 @@ class PresenceController extends Controller
 
             if (!$stationId) {
                 return response()->json(['status' => 'error', 'errors' => ['Station introuvable for ce pointage.']], 200);
+            }
+
+            // Restriction station fixe
+            if ($agent->restrict_station && in_array($data['key'], ['check-in', 'check-out'])) {
+                if ((int)$stationId !== (int)$agent->site_id) {
+                    return response()->json([
+                        'status' => 'error',
+                        'errors' => ["Pointage interdit hors de votre station d'affectation."]
+                    ], 200);
+                }
             }
         }
 
@@ -796,10 +807,29 @@ class PresenceController extends Controller
 
         $date = $data['date'] ?? Carbon::today()->toDateString();
         $stationId = $data['station_id'] ?? null;
+        $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationId = ManagerStationContext::stationId();
 
         $query = PresenceAgents::withoutGlobalScopes()
-            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
+            ->with([
+                'agent' => fn($q) => $q->withoutGlobalScopes()->with(['station' => fn($qq) => $qq->withoutGlobalScopes()]),
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckIn' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckOut' => fn($q) => $q->withoutGlobalScopes(),
+                'assignedStation' => fn($q) => $q->withoutGlobalScopes()
+            ])
             ->whereDate('date_reference', $date);
+
+        // Appliquer manuellement les restrictions quand on utilise withoutGlobalScopes()
+        if ($userPrefix !== null) {
+            $query->whereHas('agent', function($q) use ($userPrefix) {
+                $q->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+            });
+        }
+
+        if ($managerStationId !== null) {
+            $query->where('site_id', $managerStationId);
+        }
 
         if ($stationId !== null) {
             $query->where(function ($q) use ($stationId) {
@@ -910,9 +940,24 @@ class PresenceController extends Controller
             if ($status === 'absence_justifiee') $absenceJustifiee += 1;
         }
 
+        $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationId = ManagerStationContext::stationId();
+
         $presencesQuery = PresenceAgents::withoutGlobalScopes()
-            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
+            ->with([
+                'agent' => fn($q) => $q->withoutGlobalScopes()->with(['station' => fn($qq) => $qq->withoutGlobalScopes()]),
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckIn' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckOut' => fn($q) => $q->withoutGlobalScopes(),
+                'assignedStation' => fn($q) => $q->withoutGlobalScopes()
+            ])
             ->whereDate('date_reference', $date)
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
+            ->when($managerStationId !== null, fn($q) => $q->where('site_id', $managerStationId))
             ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', $data['station_id']))
             ->when(!empty($data['matricule_prefix']), function($q) use ($data) {
                 $q->whereHas('agent', function($qq) use ($data) {
@@ -943,7 +988,7 @@ class PresenceController extends Controller
                 ->whereNotNull('matricule')
                 ->get(['matricule'])
                 ->map(function ($a) {
-                    $m = (string) $a->matricule;
+                    $m = trim((string) $a->matricule);
                     if (str_contains($m, '-')) {
                         return explode('-', $m)[0];
                     }
@@ -990,9 +1035,22 @@ class PresenceController extends Controller
             'station_id' => 'nullable|integer',
         ]);
 
+        $userPrefix = ManagerStationContext::matriculePrefix();
+
         $query = PresenceAgents::withoutGlobalScopes()
-            ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
+            ->with([
+                'agent' => fn($q) => $q->withoutGlobalScopes()->with(['station' => fn($qq) => $qq->withoutGlobalScopes()]),
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckIn' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckOut' => fn($q) => $q->withoutGlobalScopes(),
+                'assignedStation' => fn($q) => $q->withoutGlobalScopes()
+            ])
             ->where('agent_id', $data['agent_id'])
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
             ->when(!empty($data['from']), fn ($q) => $q->whereDate('date_reference', '>=', $data['from']))
             ->when(!empty($data['to']), fn ($q) => $q->whereDate('date_reference', '<=', $data['to']))
             ->when(!empty($data['station_id']), function ($q) use ($data) {
@@ -1430,7 +1488,7 @@ class PresenceController extends Controller
                 ->whereNotNull('matricule')
                 ->get(['matricule'])
                 ->map(function ($a) {
-                    $m = (string) $a->matricule;
+                    $m = trim((string) $a->matricule);
                     if (str_contains($m, '-')) {
                         return explode('-', $m)[0];
                     }

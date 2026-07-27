@@ -383,7 +383,7 @@ class ExportController extends Controller
             ? Station::query()->where('id', (int) $stationId)->orderBy('name')->get()
             : Station::query()->orderBy('name')->get();
 
-        $headers = ['Station', 'Agents', 'Present', 'Retard (H/M)', 'Absent', 'Conge', 'Autorisation', 'H. Sup'];
+        $headers = ['Station', 'Agents', 'Present', 'Retard (H/M)', 'Absent', 'AN', 'Conge', 'Autorisation', 'H. Sup'];
         $table = [];
         foreach ($stations as $s) {
             $matrix = $service->buildMonthlyMatrix($month, $year, ['station_id' => $s->id]);
@@ -394,6 +394,7 @@ class ExportController extends Controller
                 (int) $r['total_present'],
                 (string) $r['total_late_display'],
                 (int) $r['total_absent'],
+                (int) $r['total_an'],
                 (int) $r['total_conge'],
                 (int) $r['total_autorisation'],
                 (string) $r['total_overtime_display'],
@@ -595,7 +596,7 @@ class ExportController extends Controller
             foreach ($days as $d) {
                 $headers[] = $d;
             }
-            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'H.Sup', 'OFF']);
+            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'H.Sup', 'OFF']);
 
             $table = [];
             foreach ($summarized as $r) {
@@ -610,6 +611,7 @@ class ExportController extends Controller
                 $row[] = (int) $r['total_count'];
                 $row[] = (int) $r['total_presences'];
                 $row[] = (int) $r['total_absences'];
+                $row[] = (int) $r['total_an'];
                 $row[] = (int) $r['total_retards'];
                 $row[] = (string) $r['late_display'];
                 $row[] = (int) $r['total_autorisations'];
@@ -623,7 +625,7 @@ class ExportController extends Controller
             $sheetTitle = 'Détails Période';
             $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
-            $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
+            $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
             $table = [];
             foreach ($summarized as $r) {
                 $table[] = [
@@ -633,6 +635,7 @@ class ExportController extends Controller
                     (int) $r['present'],
                     (int) $r['retard'],
                     (int) $r['absent'],
+                    (int) $r['an'],
                     (int) $r['conge'],
                     (int) $r['autorisation'],
                     (int) $r['retard_justifie'],
@@ -831,7 +834,7 @@ class ExportController extends Controller
             sheetTitle: $payload['sheet_title'],
             metaLines: $payload['meta'],
             headers: $payload['headers'],
-            rows: $payload['table'],
+            rows: $table,
         );
     }
 
@@ -910,7 +913,7 @@ class ExportController extends Controller
             sheetTitle: $payload['sheet_title'],
             metaLines: $payload['meta'],
             headers: $payload['headers'],
-            rows: $payload['table'],
+            rows: $table,
         );
     }
 
@@ -1140,7 +1143,7 @@ class ExportController extends Controller
             sheetTitle: $payload['sheet_title'],
             metaLines: $payload['meta'],
             headers: $payload['headers'],
-            rows: $payload['table'],
+            rows: $table,
         );
     }
 
@@ -1235,6 +1238,7 @@ class ExportController extends Controller
                 'present' => 0,
                 'retard' => 0,
                 'absent' => 0,
+                'an' => 0,
                 'conge' => 0,
                 'autorisation' => 0,
                 'retard_justifie' => 0,
@@ -1248,6 +1252,7 @@ class ExportController extends Controller
                 'total_count' => 0,
                 'total_presences' => 0,
                 'total_absences' => 0,
+                'total_an' => 0,
                 'total_retards' => 0,
                 'total_autorisations' => 0,
                 'total_conges' => 0,
@@ -1257,10 +1262,14 @@ class ExportController extends Controller
 
             foreach (($days ?? []) as $dayKey => $cell) {
                 $s = $cell['status'] ?? null;
-                $mapped = $this->mapStatusToCode($s);
+                $depart = $cell['depart'] ?? null;
+                $mapped = $this->mapStatusToCode($s, $depart);
                 $acc['days'][$dayKey] = $mapped['code'];
 
-                if ($s === 'present') $acc['present'] += 1;
+                if ($depart === 'AN') {
+                    $acc['an'] += 1;
+                    $acc['absent'] += 1;
+                } else if ($s === 'present') $acc['present'] += 1;
                 else if ($s === 'retard') {
                     $acc['present'] += 1;
                     $acc['retard'] += 1;
@@ -1290,6 +1299,7 @@ class ExportController extends Controller
                     if ($mapped['bucket'] === 'presence') $acc['total_presences'] += 1;
                     elseif ($mapped['bucket'] === 'retard') { $acc['total_presences'] += 1; $acc['total_retards'] += 1; }
                     elseif ($mapped['bucket'] === 'absence') $acc['total_absences'] += 1;
+                    elseif ($mapped['bucket'] === 'an') { $acc['total_absences'] += 1; $acc['total_an'] += 1; }
                     elseif ($mapped['bucket'] === 'autorisation') $acc['total_autorisations'] += 1;
                     elseif ($mapped['bucket'] === 'conge') $acc['total_conges'] += 1;
                     elseif ($mapped['bucket'] === 'off') $acc['total_off'] += 1;
@@ -1309,8 +1319,12 @@ class ExportController extends Controller
         return $rows;
     }
 
-    private function mapStatusToCode(?string $status): array
+    private function mapStatusToCode(?string $status, ?string $depart = null): array
     {
+        if ($depart === 'AN') {
+            return ['code' => 'AN', 'bucket' => 'an'];
+        }
+
         switch ($status) {
             case "present":
                 return ['code' => '1', 'bucket' => 'presence'];
@@ -1614,6 +1628,7 @@ class ExportController extends Controller
             'agent_count' => count($agents),
             'total_present' => 0,
             'total_absent' => 0,
+            'total_an' => 0,
             'total_retard' => 0,
             'total_conge' => 0,
             'total_autorisation' => 0,
@@ -1624,14 +1639,23 @@ class ExportController extends Controller
         foreach ($data as $agentKey => $days) {
             foreach ($days as $cell) {
                 $status = $cell['status'] ?? '';
-                if ($status === 'present') $res['total_present']++;
-                elseif ($status === 'absent') $res['total_absent']++;
-                elseif ($status === 'retard' || $status === 'retard_justifie') {
+                $depart = $cell['depart'] ?? '';
+
+                if ($depart === 'AN') {
+                    $res['total_an']++;
+                    $res['total_absent']++;
+                } elseif ($status === 'present') {
+                    $res['total_present']++;
+                } elseif ($status === 'absent') {
+                    $res['total_absent']++;
+                } elseif ($status === 'retard' || $status === 'retard_justifie') {
                     $res['total_present']++;
                     $res['total_retard']++;
+                } elseif ($status === 'conge') {
+                    $res['total_conge']++;
+                } elseif ($status === 'autorisation' || $status === 'maladie') {
+                    $res['total_autorisation']++;
                 }
-                elseif ($status === 'conge') $res['total_conge']++;
-                elseif ($status === 'autorisation' || $status === 'maladie') $res['total_autorisation']++;
 
                 $res['total_overtime_minutes'] += ($cell['overtime_minutes'] ?? 0);
                 $res['total_late_minutes'] += ($cell['late_minutes'] ?? 0);

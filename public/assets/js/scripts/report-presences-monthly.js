@@ -55,6 +55,7 @@ function computeSummary(matrix, agentsByKey = {}) {
             present: 0,
             retard: 0,
             absent: 0,
+            an: 0,
             conge: 0,
             autorisation: 0,
             retard_justifie: 0,
@@ -66,7 +67,11 @@ function computeSummary(matrix, agentsByKey = {}) {
         Object.keys(days).forEach((d) => {
             const day = days[d] || {};
             const s = day.status;
-            if (s === "present") acc.present += 1;
+
+            if (day.depart === "AN") {
+                acc.an += 1;
+                acc.absent += 1;
+            } else if (s === "present") acc.present += 1;
             else if (s === "retard") {
                 acc.present += 1;
                 acc.retard += 1;
@@ -95,7 +100,11 @@ function computeSummary(matrix, agentsByKey = {}) {
     return rows;
 }
 
-function mapDayStatus(status) {
+function mapDayStatus(status, dayData = {}) {
+    if (dayData.depart === "AN") {
+        return { code: "AN", cellClass: "bg-danger-subtle text-danger border", bucket: "an" };
+    }
+
     switch (status) {
     case "present":
         return { code: "1", cellClass: "badge-success", bucket: "presence" };
@@ -136,6 +145,7 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             total_count: 0,
             total_presences: 0,
             total_absences: 0,
+            total_an: 0,
             total_retards: 0,
             total_autorisations: 0,
             total_conges: 0,
@@ -148,7 +158,7 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
         dayKeys.forEach((day) => {
             const dayData = days[day] || { status: "future" };
             const status = dayData.status;
-            const mapped = mapDayStatus(status);
+            const mapped = mapDayStatus(status, dayData);
 
             row.day_codes[day] = mapped.code;
             row.day_classes[day] = mapped.cellClass;
@@ -172,6 +182,9 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
                 row.total_retards += 1;
             } else if (mapped.bucket === "absence") {
                 row.total_absences += 1;
+            } else if (mapped.bucket === "an") {
+                row.total_absences += 1;
+                row.total_an += 1;
             } else if (mapped.bucket === "autorisation") {
                 row.total_autorisations += 1;
             } else if (mapped.bucket === "conge") {
@@ -203,7 +216,7 @@ new Vue({
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = today.getMonth() + 1;
-        const minYear = 2026;
+        const minYear = 2024;
 
         const qMonth = parseInt(getQueryParam("month") || "", 10);
         const qYear = parseInt(getQueryParam("year") || "", 10);
@@ -345,20 +358,11 @@ new Vue({
 
                 const agentsByKey = data?.agents ?? {};
 
-                let rows = computeSummary(this.matrix, agentsByKey);
-                let detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.dynamicDayKeys);
+                // Suppression du filtrage local par station_id car le serveur renvoie déjà les agents filtrés par activité/planning.
+                // Filtrer localement par site_id masquerait les agents planifiés mais rattachés à une autre station.
+                this.rows = computeSummary(this.matrix, agentsByKey);
+                this.detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.dynamicDayKeys);
 
-                if (stationId) {
-                    rows = rows.filter(
-                        (r) => String(r?.agent?.station_id ?? "") === String(stationId)
-                    );
-                    detailedRows = detailedRows.filter(
-                        (r) => String(r?.agent?.station_id ?? "") === String(stationId)
-                    );
-                }
-
-                this.rows = rows;
-                this.detailedRows = detailedRows;
                 this.$nextTick(() => setTimeout(() => this.refreshActiveTable(), 0));
             } catch (e) {
                 this.matrix = {};
@@ -391,7 +395,7 @@ new Vue({
 
         yearOptions() {
             const current = new Date().getFullYear();
-            const min = 2026;
+            const min = 2024;
             const years = [];
             for (let y = current; y >= min; y -= 1) {
                 years.push(y);

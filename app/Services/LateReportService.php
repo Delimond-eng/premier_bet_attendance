@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AttendanceJustification;
 use App\Models\PresenceAgents;
+use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -28,24 +29,34 @@ class LateReportService
             [$start, $end] = [$end, $start];
         }
 
-        $rows = PresenceAgents::withoutGlobalScopes()
+        $userPrefix = ManagerStationContext::matriculePrefix();
+
+        $rowsQuery = PresenceAgents::withoutGlobalScopes()
             ->with([
                 'agent' => function ($query) {
                     $query->withoutGlobalScopes()
-                        ->with(['station', 'groupe.horaire', 'horaire']);
+                        ->with(['station' => fn($q) => $q->withoutGlobalScopes(), 'groupe.horaire', 'horaire']);
                 },
-                'horaire',
-                'assignedStation',
-                'stationCheckIn',
-                'stationCheckOut',
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
+                'assignedStation' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckIn' => fn($q) => $q->withoutGlobalScopes(),
+                'stationCheckOut' => fn($q) => $q->withoutGlobalScopes(),
             ])
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
             ->whereNotNull('started_at')
-            ->where('retard', 'oui')
-            ->when($stationId !== null, function (Builder $query) use ($stationId) {
-                $this->applyPresenceStationFilter($query, (int) $stationId);
-            })
-            ->orderByDesc('date_reference')
+            ->where('retard', 'oui');
+
+        if ($userPrefix !== null) {
+            $rowsQuery->whereHas('agent', function($q) use ($userPrefix) {
+                $q->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+            });
+        }
+
+        if ($stationId !== null) {
+            $this->applyPresenceStationFilter($rowsQuery, (int) $stationId);
+        }
+
+        $rows = $rowsQuery->orderByDesc('date_reference')
             ->orderByDesc('started_at')
             ->get();
 
@@ -78,9 +89,11 @@ class LateReportService
 
         $output = [];
         foreach ($rows as $presence) {
-            $date = Carbon::parse($presence->date_reference)->toDateString();
             $agent = $presence->agent;
-            $horaire = $presence->horaire ?: ($agent?->groupe?->horaire ?: $agent?->horaire);
+            if (!$agent) continue; // Sécurité contre les erreurs r.agent is null
+
+            $date = Carbon::parse($presence->date_reference)->toDateString();
+            $horaire = $presence->horaire ?: ($agent->groupe?->horaire ?: $agent->horaire);
 
             $arrivalTime = $presence->started_at
                 ? Carbon::parse($presence->started_at)->format('H:i')
@@ -110,31 +123,31 @@ class LateReportService
             $effectiveStationName = $presence->stationCheckIn?->name
                 ?: $presence->stationCheckOut?->name
                 ?: $presence->assignedStation?->name
-                ?: $agent?->station?->name;
+                ?: $agent->station?->name;
 
             $effectiveStationId = $presence->station_check_in_id
                 ?: $presence->station_check_out_id
                 ?: $presence->site_id
-                ?: $agent?->site_id;
+                ?: $agent->site_id;
 
             $output[] = [
                 'key' => (string) $presence->id . '|' . $date,
                 'date' => $date,
                 'agent' => [
-                    'id' => $agent?->id,
-                    'fullname' => $agent?->fullname,
-                    'matricule' => $agent?->matricule,
-                    'photo' => $agent?->photo,
+                    'id' => $agent->id,
+                    'fullname' => $agent->fullname,
+                    'matricule' => $agent->matricule,
+                    'photo' => $agent->photo,
                     'station_id' => $effectiveStationId,
                     'station_name' => $effectiveStationName,
-                    'assigned_station_id' => $agent?->site_id,
-                    'assigned_station_name' => $agent?->station?->name ?: ($presence->assignedStation?->name ?? null),
+                    'assigned_station_id' => $agent->site_id,
+                    'assigned_station_name' => $agent->station?->name ?: ($presence->assignedStation?->name ?? null),
                     'check_in_station_id' => $presence->station_check_in_id,
                     'check_in_station_name' => $presence->stationCheckIn?->name,
                     'check_out_station_id' => $presence->station_check_out_id,
                     'check_out_station_name' => $presence->stationCheckOut?->name,
-                    'group_id' => $agent?->groupe?->id,
-                    'group_name' => $agent?->groupe?->libelle,
+                    'group_id' => $agent->groupe?->id,
+                    'group_name' => $agent->groupe?->libelle,
                     'schedule_id' => $horaire?->id,
                     'schedule_label' => $horaire?->libelle,
                 ],

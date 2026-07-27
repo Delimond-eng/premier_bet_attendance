@@ -8,6 +8,7 @@ use App\Models\AgentGroupAssignment;
 use App\Models\AgentGroupPlanning;
 use App\Models\PresenceHoraire;
 use App\Models\Station;
+use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,7 +41,16 @@ class PlanningController extends Controller
     public function getAgentsForStation(Request $request): JsonResponse
     {
         $stationId = $request->query('station_id');
+        $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationId = ManagerStationContext::stationId();
+
         $agents = Agent::withoutGlobalScopes()
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->where('matricule', 'like', $userPrefix . '%');
+            })
+            ->when($managerStationId !== null, function($q) use ($managerStationId) {
+                $q->where('site_id', $managerStationId);
+            })
             ->when($stationId, fn($q) => $q->where('site_id', (int) $stationId))
             ->orderBy('fullname')
             ->get(['id', 'fullname', 'matricule', 'site_id', 'groupe_id']);
@@ -175,16 +185,34 @@ class PlanningController extends Controller
     {
         $startOfWeek = Carbon::parse($request->date)->startOfWeek(Carbon::MONDAY);
         $endOfWeek = $startOfWeek->copy()->addDays(6);
+        $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationId = ManagerStationContext::stationId();
 
-        $query = AgentGroupPlanning::query()
+        $query = AgentGroupPlanning::withoutGlobalScopes()
+            ->with([
+                'agent' => fn($q) => $q->withoutGlobalScopes()->with(['station' => fn($qq) => $qq->withoutGlobalScopes()]),
+                'horaire' => fn($q) => $q->withoutGlobalScopes(),
+                'station' => fn($q) => $q->withoutGlobalScopes()
+            ])
             ->whereBetween('date', [$startOfWeek->toDateString(), $endOfWeek->toDateString()])
-            ->when($request->station_id, fn($q) => $q->where('site_id', $request->station_id));
+            ->when($request->station_id, fn($q) => $q->where('site_id', (int) $request->station_id))
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
+            ->when($managerStationId !== null, function($q) use ($managerStationId) {
+                $q->where(function($qq) use ($managerStationId) {
+                    $qq->where('site_id', $managerStationId)
+                      ->orWhereHas('agent', fn($aaa) => $aaa->withoutGlobalScopes()->where('site_id', $managerStationId));
+                });
+            });
 
         if ($request->exists_only) {
             return response()->json(['status' => 'success', 'exists' => $query->exists()]);
         }
 
-        $plannings = $query->with(['agent.station', 'horaire', 'station'])->get();
+        $plannings = $query->get();
 
         $days = [];
         for ($i=0; $i<7; $i++) {
@@ -192,7 +220,7 @@ class PlanningController extends Controller
             $days[] = ['date' => $d->toDateString(), 'label' => ucfirst($d->locale('fr')->dayName)];
         }
 
-        $matrix = $plannings->groupBy(function($p) {
+        $matrix = $plannings->filter(fn($p) => $p->agent !== null)->groupBy(function($p) {
             return $p->agent_id . '_' . $p->site_id;
         })->map(function ($ps) use ($days) {
             $first = $ps->first();

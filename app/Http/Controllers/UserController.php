@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -123,9 +124,30 @@ class UserController extends Controller
     public function getAllRoles()
     {
         $roles = Role::with('permissions')->get();
+
+        // On récupère aussi les préfixes de matricules pour le formulaire utilisateur
+        $prefixes = Agent::withoutGlobalScopes()
+            ->whereNotNull('matricule')
+            ->get(['matricule'])
+            ->map(function ($a) {
+                $m = trim((string) $a->matricule);
+                if (str_contains($m, '-')) {
+                    return explode('-', $m)[0];
+                }
+                if (preg_match('/^[A-Za-z]+/', $m, $matches)) {
+                    return strtoupper($matches[0]);
+                }
+                return strtoupper(substr($m, 0, 2));
+            })
+            ->unique()
+            ->filter()
+            ->values()
+            ->all();
+
         return response()->json([
             'status' => 'success',
             'roles' => $roles,
+            'prefixes' => $prefixes,
         ]);
     }
 
@@ -156,6 +178,7 @@ class UserController extends Controller
                 'password' => $userId ? 'nullable|string|min:6' : 'required|string|min:6',
                 'role' => 'required|string|exists:roles,name',
                 'station_id' => 'nullable|integer|exists:sites,id',
+                'matricule_prefix' => 'nullable|string',
                 'user_id' => 'nullable|exists:users,id',
                 'permissions' => 'nullable|array',
             ]);
@@ -173,6 +196,7 @@ class UserController extends Controller
                     'name' => $data['name'],
                     'email' => $data['email'],
                     'station_id' => $managerStationId ?? ($data['station_id'] ?? null),
+                    'matricule_prefix' => $data['matricule_prefix'] ?? null,
                 ];
                 if (!empty($data['password'])) {
                     $updateData['password'] = Hash::make($data['password']);
@@ -184,6 +208,7 @@ class UserController extends Controller
                     'email' => $data['email'],
                     'role' => $data['role'],
                     'station_id' => $managerStationId ?? ($data['station_id'] ?? null),
+                    'matricule_prefix' => $data['matricule_prefix'] ?? null,
                     'password' => Hash::make($data['password']),
                 ]);
             }
@@ -209,6 +234,7 @@ class UserController extends Controller
             $user->syncRoles([$newRole]);
             $user->role = $newRole;
             $user->station_id = $managerStationId ?? ($data['station_id'] ?? null);
+            $user->matricule_prefix = $data['matricule_prefix'] ?? null;
             $user->save();
 
             if (array_key_exists('permissions', $data)) {
@@ -240,6 +266,45 @@ class UserController extends Controller
             return response()->json(['errors' => $e->validator->errors()->all()]);
         } catch (\Illuminate\Database\QueryException $e) {
             return response()->json(['errors' => $e->getMessage()]);
+        }
+    }
+
+    public function deleteUser(Request $request)
+    {
+        try {
+            $data = $request->validate([
+                'user_id' => 'required|integer|exists:users,id',
+            ]);
+
+            $user = User::findOrFail($data['user_id']);
+
+            // Vérifier si l'utilisateur est un admin
+            if ($user->hasRole('admin')) {
+                $adminCount = User::role('admin')->count();
+                if ($adminCount <= 1) {
+                    return response()->json([
+                        'status' => 'error',
+                        'errors' => ['Impossible de supprimer le dernier administrateur du système.'],
+                    ], 200);
+                }
+            }
+
+            // Empêcher de se supprimer soi-même (optionnel mais recommandé)
+            if ($user->id === auth()->id()) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ['Vous ne pouvez pas supprimer votre propre compte.'],
+                ], 200);
+            }
+
+            $user->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Utilisateur supprimé avec succès.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'error', 'errors' => [$e->getMessage()]], 200);
         }
     }
 

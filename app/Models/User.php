@@ -14,7 +14,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     protected $fillable = [
-        'name', 'email', 'password', 'role', 'station_id'
+        'name', 'email', 'password', 'role', 'station_id', 'matricule_prefix', 'last_seen_at'
     ];
 
     protected $hidden = [
@@ -25,6 +25,7 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'updated_at' => 'datetime:d M-Y H:i',
         'created_at' => 'datetime:d M-Y H:i',
+        'last_seen_at' => 'datetime',
     ];
 
     public function station(): BelongsTo

@@ -77,10 +77,13 @@
                                         <i class="ti ti-building me-1"></i> @{{ g.station_name }}
                                     </td>
                                 </tr>
-                                <tr v-for="r in g.rows" :key="'row-' + g.key + '-' + r.agent.id">
-                                    <td class="text-start">
+                                <tr v-for="r in g.rows" :key="'row-' + g.key + '-' + (r.agent ? r.agent.id : Math.random())">
+                                    <td class="text-start" v-if="r.agent">
                                         <strong>@{{ r.agent.fullname }}</strong><br>
                                         <small class="text-muted">@{{ r.agent.matricule }}</small>
+                                    </td>
+                                    <td class="text-start" v-else>
+                                        <span class="text-danger italic">Agent introuvable</span>
                                     </td>
                                     <td v-for="d in days" :key="d.date">
                                         <div v-if="r.days[d.date]">
@@ -93,7 +96,7 @@
                                     </td>
                                     @canany(['plannings.update', 'plannings.delete'])
                                     <td>
-                                        <div class="dropdown">
+                                        <div class="dropdown" v-if="r.agent">
                                             <button class="btn btn-soft-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
                                                 Actions
                                             </button>
@@ -207,8 +210,10 @@
                 const q = this.searchQuery.toLowerCase();
                 return this.stationGroups.map(g => {
                     const filteredRows = g.rows.filter(r =>
-                        r.agent.fullname.toLowerCase().includes(q) ||
-                        r.agent.matricule.toLowerCase().includes(q)
+                        r.agent && (
+                            r.agent.fullname.toLowerCase().includes(q) ||
+                            r.agent.matricule.toLowerCase().includes(q)
+                        )
                     );
                     return { ...g, rows: filteredRows };
                 }).filter(g => g.rows.length > 0);
@@ -290,7 +295,7 @@
             findExistingPlanning(aid, sid) {
                 const group = this.stationGroups.find(g => g.key == sid);
                 if (group) {
-                    const r = group.rows.find(row => row.agent.id == aid);
+                    const r = group.rows.find(row => row.agent && row.agent.id == aid);
                     if (r) return r.days;
                 }
                 return null;

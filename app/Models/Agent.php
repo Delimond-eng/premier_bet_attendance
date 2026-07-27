@@ -30,23 +30,30 @@ class Agent extends Model
         "site_id", // Toujours lié à la colonne site_id pour la compatibilité
         "groupe_id",
         "horaire_id",
-        "status"
+        "status",
+        "restrict_station"
     ];
 
     protected $casts = [
         'created_at' => 'datetime:d/m/Y H:i',
-        'updated_at' => 'datetime:d/m/Y H:i'
+        'updated_at' => 'datetime:d/m/Y H:i',
+        'restrict_station' => 'boolean'
     ];
 
     protected static function booted(): void
     {
-        static::addGlobalScope('manager_station', function (Builder $builder) {
+        static::addGlobalScope('manager_restriction', function (Builder $builder) {
+            // Restriction par station
             $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
-                return;
+            if ($stationId !== null) {
+                $builder->where($builder->qualifyColumn('site_id'), $stationId);
             }
 
-            $builder->where($builder->qualifyColumn('site_id'), $stationId);
+            // Restriction par sous-traitance (préfixe matricule)
+            $prefix = ManagerStationContext::matriculePrefix();
+            if ($prefix !== null) {
+                $builder->where($builder->qualifyColumn('matricule'), 'like', $prefix . '%');
+            }
         });
     }
 

@@ -8,6 +8,7 @@ use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\CongeType;
 use App\Services\AttendanceReportService;
+use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,6 @@ class HRController extends Controller
 
         return response()->json([
             'status' => 'success',
-            // Pour garder le flow existant côté Vue, on conserve la clé "conges"
             'conges' => $query->paginate($perPage),
         ]);
     }
@@ -78,8 +78,15 @@ class HRController extends Controller
 
     public function authorizationsIndex(Request $request): JsonResponse
     {
+        $userPrefix = ManagerStationContext::matriculePrefix();
+
         $query = AttendanceAuthorization::query()
             ->with(['agent.station'])
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
             ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id')))
             ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status')))
             ->when($request->query('type'), fn ($q) => $q->where('type', $request->query('type')))
@@ -162,8 +169,15 @@ class HRController extends Controller
 
     public function justificationsIndex(Request $request): JsonResponse
     {
+        $userPrefix = ManagerStationContext::matriculePrefix();
+
         $query = AttendanceJustification::query()
             ->with(['agent.station', 'presence.assignedStation'])
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
             ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id')))
             ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status')))
             ->when($request->query('kind'), fn ($q) => $q->where('kind', $request->query('kind')))
@@ -244,6 +258,8 @@ class HRController extends Controller
                 'group_id' => $groupId,
             ]);
 
+            if (empty($matrix['data'])) continue; // Ne pas inclure les stations vides pour ce préfixe
+
             $result[] = [
                 'station' => $station,
                 'data' => $matrix['data'],
@@ -265,9 +281,15 @@ class HRController extends Controller
     {
         $tz = 'Africa/Kinshasa';
         $today = Carbon::now($tz)->startOfDay();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $query = Conge::query()
             ->with(['agent.station', 'congeType'])
+            ->when($userPrefix !== null, function($q) use ($userPrefix) {
+                $q->whereHas('agent', function($qq) use ($userPrefix) {
+                    $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
+                });
+            })
             ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id')))
             ->when($request->query('conge_type_id'), fn ($q) => $q->where('conge_type_id', $request->query('conge_type_id')))
             ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status')))
@@ -369,6 +391,7 @@ class HRController extends Controller
      */
     public function referenceData(): JsonResponse
     {
+        // Agent::query() respectera automatiquement matricule_prefix via le Global Scope
         return response()->json([
             'status' => 'success',
             'agents' => Agent::query()->with('station')->orderBy('fullname')->get(),

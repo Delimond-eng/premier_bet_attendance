@@ -18,6 +18,7 @@
             <th style="width: 5%;">Près.</th>
             <th style="width: 5%;">Ret.</th>
             <th style="width: 5%;">Abs.</th>
+            <th style="width: 5%;">AN</th>
             <th style="width: 5%;">Congé</th>
             <th style="width: 7%;">Auto.</th>
             <th style="width: 7%;">Just. R.</th>
@@ -40,6 +41,7 @@
                 <td>{{ $r['present'] ?? 0 }}</td>
                 <td>{{ $r['retard'] ?? 0 }}</td>
                 <td>{{ $r['absent'] ?? 0 }}</td>
+                <td style="color: #991b1b;"><strong>{{ $r['an'] ?? 0 }}</strong></td>
                 <td>{{ $r['conge'] ?? 0 }}</td>
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>

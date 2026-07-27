@@ -12,17 +12,18 @@
     <table>
         <thead>
         <tr>
-            <th style="width: 20%;">Agent</th>
+            <th style="width: 18%;">Agent</th>
             <th style="width: 12%;">Station</th>
-            <th style="width: 7%;">Present</th>
-            <th style="width: 7%;">Retard</th>
-            <th style="width: 7%;">Absent</th>
-            <th style="width: 7%;">Conge</th>
-            <th style="width: 9%;">Autorisation</th>
-            <th style="width: 9%;">Justif retard</th>
-            <th style="width: 9%;">Justif absence</th>
-            <th style="width: 7%;">Heures Sup</th>
-            <th style="width: 6%;">Total</th>
+            <th style="width: 6%;">Près.</th>
+            <th style="width: 6%;">Ret.</th>
+            <th style="width: 6%;">Abs.</th>
+            <th style="width: 6%;">AN</th>
+            <th style="width: 7%;">Congé</th>
+            <th style="width: 8%;">Auto.</th>
+            <th style="width: 8%;">Just. R.</th>
+            <th style="width: 8%;">Just. A.</th>
+            <th style="width: 8%;">H. Sup</th>
+            <th style="width: 7%;">Total</th>
         </tr>
         </thead>
         <tbody>
@@ -37,6 +38,7 @@
                 <td>{{ $r['present'] ?? 0 }}</td>
                 <td>{{ $r['retard'] ?? 0 }}</td>
                 <td>{{ $r['absent'] ?? 0 }}</td>
+                <td style="color: #991b1b;"><strong>{{ $r['an'] ?? 0 }}</strong></td>
                 <td>{{ $r['conge'] ?? 0 }}</td>
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>

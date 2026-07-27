@@ -38,10 +38,10 @@
                     <div class="d-flex align-items-center gap-2 flex-wrap">
 
                         <!-- Month/Year Selects -->
-                        <select class="form-select" v-model.number="filters.month" style="width: 140px;" v-show="!useRange">
+                        <select class="form-select" v-model.number="filters.month" style="width: 140px;" v-show="!useRange" @change="load">
                             <option v-for="m in monthOptions" :key="m.value" :value="m.value">@{{ m.label }}</option>
                         </select>
-                        <select class="form-select" v-model.number="filters.year" style="width: 100px;" v-show="!useRange">
+                        <select class="form-select" v-model.number="filters.year" style="width: 100px;" v-show="!useRange" @change="load">
                             <option v-for="y in yearOptions" :key="y" :value="y">@{{ y }}</option>
                         </select>
 
@@ -61,10 +61,13 @@
                             <label class="form-check-label fs-12" for="useRange">Intervalle</label>
                         </div>
 
-                        <select v-if="show_matricule_filter" class="form-select" v-model="filters.matricule_prefix" style="width: 160px;">
+                        @if(Auth::user()->matricule_prefix === null)
+                        <select v-if="show_matricule_filter" class="form-select" v-model="filters.matricule_prefix" style="width: 160px;" @change="load">
                             <option value="">Sous-traitance</option>
                             <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
                         </select>
+                        @endif
+
                         <div style="width: 240px;">
                             <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                                 <option value="">Toutes les stations</option>
@@ -100,6 +103,7 @@
                             <th>Present</th>
                             <th>Retard</th>
                             <th>Absent</th>
+                            <th>AN</th>
                             <th>Conge</th>
                             <th>Autorisation</th>
                             <th>Justif retard</th>
@@ -127,6 +131,7 @@
                             <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>
                             <td>@{{ r.absent }}</td>
+                            <td><span class="text-danger fw-bold">@{{ r.an }}</span></td>
                             <td>@{{ r.conge }}</td>
                             <td>@{{ r.autorisation }}</td>
                             <td>@{{ r.retard_justifie }}</td>
@@ -144,6 +149,7 @@
                         <span class="badge text-bg-success">1 = Presence</span>
                         <span class="badge text-bg-info">1-R = Presence avec retard</span>
                         <span class="badge text-bg-danger">A = Absence</span>
+                        <span class="badge bg-danger-subtle text-danger border">AN = Entrée sans sortie</span>
                         <span class="badge text-bg-warning text-dark">A = Absence justifiee</span>
                         <span class="badge text-bg-secondary">OFF = Repos</span>
                         <span class="badge text-bg-primary">C = Conge</span>
@@ -160,6 +166,7 @@
                             <th>Total</th>
                             <th>Tot presences</th>
                             <th>Tot absences</th>
+                            <th>Tot AN</th>
                             <th>Tot retard</th>
                             <th>Retard Cumulé</th>
                             <th>Tot autorisation</th>
@@ -184,6 +191,7 @@
                             <td class="fw-semibold">@{{ r.total_count }}</td>
                             <td>@{{ r.total_presences }}</td>
                             <td>@{{ r.total_absences }}</td>
+                            <td class="text-danger fw-bold">@{{ r.total_an }}</td>
                             <td>@{{ r.total_retards }}</td>
                             <td><span class="badge bg-danger-subtle text-danger">@{{ r.late_display }}</span></td>
                             <td>@{{ r.total_autorisations }}</td>

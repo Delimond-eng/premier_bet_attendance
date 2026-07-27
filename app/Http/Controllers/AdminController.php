@@ -461,6 +461,19 @@ class AdminController extends Controller
         }
     }
 
+    public function toggleAgentRestriction(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'id' => 'required|integer|exists:agents,id',
+            'restrict_station' => 'required|boolean',
+        ]);
+
+        $agent = Agent::withoutGlobalScopes()->findOrFail($data['id']);
+        $agent->update(['restrict_station' => $data['restrict_station']]);
+
+        return response()->json(['status' => 'success', 'result' => $agent]);
+    }
+
     public function importAgentsExcel(Request $request): JsonResponse
     {
         try {

@@ -116,6 +116,7 @@
         .code-1   { background-color: #dcfce7; color: #166534; }
         .code-1-R { background-color: #e0f2fe; color: #075985; }
         .code-A   { background-color: #fee2e2; color: #991b1b; }
+        .code-AN  { background-color: #fee2e2; color: #991b1b; border: 1px solid #991b1b !important; }
         .code-OFF { background-color: #f1f5f9; color: #94a3b8; }
         .code-CONGE { background-color: #eff6ff; color: #1e40af; }
         .code-AS  { background-color: #faf5ff; color: #6b21a8; }
@@ -179,6 +180,7 @@
                     <th class="col-stat-summary" title="Total jours">TOT</th>
                     <th class="col-stat-summary" title="Présences">PRS</th>
                     <th class="col-stat-summary" title="Absences">ABS</th>
+                    <th class="col-stat-summary" title="Oubli de sortie">AN</th>
                     <th class="col-stat-summary" title="Retards (nombre)">RET</th>
                     <th class="col-stat-summary-large" title="Retard Cumulé">R.CUM</th>
                     <th class="col-stat-summary" title="Congés">CNG</th>
@@ -208,6 +210,7 @@
                         <td class="col-stat-summary">{{ $r['total_count'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #166534;">{{ $r['total_presences'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #991b1b;">{{ $r['total_absences'] ?? 0 }}</td>
+                        <td class="col-stat-summary" style="color: #991b1b;">{{ $r['total_an'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #075985;">{{ $r['total_retards'] ?? 0 }}</td>
                         <td class="col-stat-summary-large" style="color: #991b1b;">{{ $r['late_display'] ?? '0h' }}</td>
                         <td class="col-stat-summary">{{ $r['total_conges'] ?? 0 }}</td>
@@ -222,6 +225,7 @@
             <div class="legend-item"><span class="swatch code-1"></span> <strong>1</strong> : Présent</div>
             <div class="legend-item"><span class="swatch code-1-R"></span> <strong>1-R</strong> : Retard</div>
             <div class="legend-item"><span class="swatch code-A"></span> <strong>A</strong> : Absent / Justifié</div>
+            <div class="legend-item"><span class="swatch code-AN"></span> <strong>AN</strong> : Entrée sans sortie</div>
             <div class="legend-item"><span class="swatch code-OFF"></span> <strong>OFF</strong> : Repos</div>
             <div class="legend-item"><span class="swatch code-CONGE"></span> <strong>C</strong> : Congé</div>
             <div class="legend-item"><span class="swatch code-AS"></span> <strong>AS</strong> : Autorisation</div>

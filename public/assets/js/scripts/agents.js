@@ -424,6 +424,23 @@ new Vue({
             }
         },
 
+        async toggleRestriction(agent) {
+            const newValue = !agent.restrict_station;
+            try {
+                const { data } = await post("/agents/toggle-restriction", {
+                    id: agent.id,
+                    restrict_station: newValue
+                });
+                if (data?.status === "success") {
+                    agent.restrict_station = newValue;
+                } else {
+                    alert("Erreur lors de la mise à jour de la restriction.");
+                }
+            } catch (e) {
+                alert("Erreur lors de la mise à jour de la restriction.");
+            }
+        },
+
         prepareAuthorizeDelay(agent) {
             this.selectedAgent = agent;
             this.authorizeDelayForm = {

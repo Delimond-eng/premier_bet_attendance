@@ -113,6 +113,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/store', [AdminController::class, 'createAgent'])
             ->name('store')
             ->middleware('canany:agents.create,agents.update');
+        Route::post('/toggle-restriction', [AdminController::class, 'toggleAgentRestriction'])
+            ->name('toggle_restriction')
+            ->middleware('can:agents.update');
         Route::post('/import/excel', [AdminController::class, 'importAgentsExcel'])
             ->name('import.excel')
             ->middleware('can:agents.import');
@@ -434,6 +437,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
     Route::get('/users/all', [UserController::class, 'getAllUsers'])
         ->name('users.all')
         ->middleware('can:users.view');
+    Route::post('/user/delete', [UserController::class, 'deleteUser'])
+        ->name('user.delete')
+        ->middleware('can:users.delete');
     Route::post('/user/access', [UserController::class, 'attributeAccess'])
         ->name('user.access')
         ->middleware('can:users.update');

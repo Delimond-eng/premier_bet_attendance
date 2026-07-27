@@ -234,6 +234,18 @@
                                                 @can('agents.view')
                                                     <li><a class="dropdown-item" :href="'/agents/view/attendances?agent_id='+data.id"><i class="ti ti-eye me-2 text-primary"></i>Voir détails</a></li>
                                                 @endcan
+                                                @can('agents.update')
+                                                    <li>
+                                                        <div class="dropdown-item d-flex align-items-center justify-content-between">
+                                                            <div class="d-flex align-items-center">
+                                                                <i class="ti ti-map-pin-off me-2 text-secondary"></i> Station Fixe
+                                                            </div>
+                                                            <div class="form-check form-switch mb-0">
+                                                                <input class="form-check-input" type="checkbox" role="switch" :checked="data.restrict_station" @change="toggleRestriction(data)">
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                @endcan
                                                 @can('plannings.view')
                                                     <li><a class="dropdown-item" :href="'{{ route('rh.plannings.view') }}?agent_id='+data.id"><i class="ti ti-calendar-event me-2 text-info"></i>Gérer planning</a></li>
                                                 @endcan
