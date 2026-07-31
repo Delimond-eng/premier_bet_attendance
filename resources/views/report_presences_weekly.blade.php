@@ -53,6 +53,7 @@
                         <thead class="thead-light">
                         <tr>
                             <th>Agent</th>
+                            <th>Fonction</th>
                             <th>Station</th>
                             <th>Présent</th>
                             <th>Retard</th>
@@ -79,6 +80,7 @@
                                     </div>
                                 </div>
                             </td>
+                            <td>@{{ r.agent?.fonction ?? '-' }}</td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
                             <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>

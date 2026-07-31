@@ -99,6 +99,7 @@
                         <thead class="thead-light">
                         <tr>
                             <th>Agent</th>
+                            <th>Fonction</th>
                             <th>Station</th>
                             <th>Present</th>
                             <th>Retard</th>
@@ -127,6 +128,7 @@
                                     </div>
                                 </div>
                             </td>
+                            <td>@{{ r.agent?.fonction ?? '-' }}</td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
                             <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>
@@ -160,7 +162,7 @@
                         <thead class="thead-light">
                         <tr>
                             <th>Matricule</th>
-                            <th>Nom complet agent</th>
+                            <th>Nom complet agent & Fonction</th>
                             <th>Station</th>
                             <th v-for="d in dynamicDayKeys" :key="'head-' + d" class="text-center attendance-day-head">@{{ d }}</th>
                             <th>Total</th>
@@ -179,14 +181,28 @@
                         <tbody>
                         <tr v-for="r in detailedRows" :key="'d-' + r.agent_key">
                             <td>@{{ r.agent?.matricule ?? '' }}</td>
-                            <td>@{{ r.agent?.fullname ?? '-' }}</td>
+                            <td>
+                                <div>
+                                    <h6 class="mb-0">@{{ r.agent?.fullname ?? '-' }}</h6>
+                                    <small class="text-info">@{{ r.agent?.fonction ?? '' }}</small>
+                                </div>
+                            </td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
                             <td
                                 v-for="d in dynamicDayKeys"
                                 :key="'cell-' + r.agent_key + '-' + d"
                                 class="text-center attendance-day-cell"
                             >
-                                <span class="badge" :class="r.day_classes[d]">@{{ r.day_codes[d] }}</span>
+                                <span
+                                    class="badge attendance-day-badge"
+                                    :class="r.day_classes[d]"
+                                    :title="r.day_titles[d] || 'Statut'"
+                                    :data-bs-content="r.day_details[d] || 'Aucune information'"
+                                    data-bs-toggle="popover"
+                                    data-bs-trigger="hover focus"
+                                    data-bs-html="true"
+                                    data-bs-placement="top"
+                                >@{{ r.day_codes[d] }}</span>
                             </td>
                             <td class="fw-semibold">@{{ r.total_count }}</td>
                             <td>@{{ r.total_presences }}</td>
@@ -228,9 +244,63 @@
         .attendance-details-table th.attendance-day-head {
             font-size: 11px;
         }
+
+        .attendance-popover-header {
+            font-weight: 700;
+            font-size: 12px;
+            color: #0f172a;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .attendance-popover-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 11px;
+            color: #334155;
+            line-height: 1.5;
+            white-space: nowrap;
+        }
+
+        .attendance-popover-key {
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .attendance-popover-value {
+            text-align: right;
+            color: #0f172a;
+        }
     </style>
 @endpush
 
 @push("scripts")
-    <script type="module" src="{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}"></script>
+    <script type="module">
+        import "{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}";
+
+        document.addEventListener("DOMContentLoaded", function () {
+            if (window.bootstrap && typeof window.bootstrap.Popover === "function") {
+                const initPopover = () => {
+                    document.querySelectorAll('.attendance-day-badge[data-bs-toggle="popover"]').forEach((el) => {
+                        if (el._attendancePopover) {
+                            el._attendancePopover.dispose();
+                        }
+                        el._attendancePopover = new bootstrap.Popover(el, {
+                            html: true,
+                            trigger: 'hover focus',
+                            placement: 'top',
+                            sanitize: false,
+                            container: 'body',
+                        });
+                    });
+                };
+
+                const observer = new MutationObserver(() => initPopover());
+                observer.observe(document.body, { childList: true, subtree: true, attributes: false });
+                initPopover();
+            }
+        });
+    </script>
 @endpush

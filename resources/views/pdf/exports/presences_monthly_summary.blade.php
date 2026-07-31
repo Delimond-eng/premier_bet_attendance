@@ -14,6 +14,7 @@
         <thead>
         <tr>
             <th style="width: 15%;">Agent</th>
+            <th style="width: 12%;">Fonction</th>
             <th style="width: 10%;">Station</th>
             <th style="width: 5%;">Près.</th>
             <th style="width: 5%;">Ret.</th>
@@ -37,6 +38,7 @@
                     <div><strong>{{ $a['fullname'] ?? '-' }}</strong></div>
                     <div class="muted">{{ $a['matricule'] ?? '' }}</div>
                 </td>
+                <td>{{ $a['fonction'] ?? '-' }}</td>
                 <td style="font-size: 8px;">{{ $a['station_name'] ?? '-' }}</td>
                 <td>{{ $r['present'] ?? 0 }}</td>
                 <td>{{ $r['retard'] ?? 0 }}</td>

@@ -844,7 +844,7 @@ class PresenceController extends Controller
         $presences->each(function($p) {
             $this->attachPresenceDistanceMeta($p);
             $otMin = $this->attendanceService->calculateOvertime($p, $p->horaire);
-            $normMin = $this->attendanceService->calculateNormalHours($p, $otMin);
+            $normMin = $this->attendanceService->calculateNormalHours($p, $p->horaire, $otMin);
             $p->setAttribute('overtime_minutes', $otMin);
             $p->setAttribute('overtime_display', $this->attendanceService->formatOvertime($otMin));
             $p->setAttribute('normal_hours_display', $this->attendanceService->formatOvertime($normMin));
@@ -973,7 +973,7 @@ class PresenceController extends Controller
             $otMin = $service->calculateOvertime($p, $p->horaire);
             $p->setAttribute('overtime_display', $service->formatOvertime($otMin));
 
-            $normMin = $service->calculateNormalHours($p, $otMin);
+            $normMin = $service->calculateNormalHours($p, $p->horaire, $otMin);
             $p->setAttribute('normal_hours_display', $service->formatOvertime($normMin));
         });
 
@@ -1070,7 +1070,7 @@ class PresenceController extends Controller
             $otMin = $service->calculateOvertime($p, $p->horaire);
             $p->setAttribute('overtime_display', $service->formatOvertime($otMin));
 
-            $normMin = $service->calculateNormalHours($p, $otMin);
+            $normMin = $service->calculateNormalHours($p, $p->horaire, $otMin);
             $p->setAttribute('normal_hours_display', $service->formatOvertime($normMin));
 
             $p->date_reference_iso = $p->getRawOriginal('date_reference');
@@ -1439,6 +1439,7 @@ class PresenceController extends Controller
                             'id' => $a->id,
                             'fullname' => $a->fullname,
                             'matricule' => $a->matricule,
+                            'fonction' => $a->fonction,
                             'photo' => $a->photo,
                             'station_id' => $a->site_id,
                             'station_name' => $a->station?->name,
@@ -1521,6 +1522,7 @@ class PresenceController extends Controller
                             'id' => $a->id,
                             'fullname' => $a->fullname,
                             'matricule' => $a->matricule,
+                            'fonction' => $a->fonction,
                             'photo' => $a->photo,
                             'station_id' => $a->site_id,
                             'station_name' => $a->station?->name,

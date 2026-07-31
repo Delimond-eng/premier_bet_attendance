@@ -19,6 +19,7 @@
             <thead>
             <tr>
                 <th style="width: 14%;">Agent</th>
+                <th style="width: 10%;">Fonction</th>
                 <th style="width: 10%;">Check-in / Out</th>
                 <th style="width: 6%;">Entrée</th>
                 <th style="width: 6%;">Sortie</th>
@@ -37,6 +38,7 @@
                         <div class="text-bold">{{ $p->agent?->fullname ?? '-' }}</div>
                         <div class="text-muted">{{ $p->agent?->matricule ?? '' }}</div>
                     </td>
+                    <td>{{ $p->agent?->fonction ?? '-' }}</td>
                     <td class="text-muted" style="font-size: 8px;">
                         IN: {{ $p->stationCheckIn?->name ?? '-' }}<br>
                         OUT: {{ $p->stationCheckOut?->name ?? '-' }}

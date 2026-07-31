@@ -162,6 +162,7 @@
             <thead>
                 <tr>
                     <th class="col-agent-identity">Agent</th>
+                    <th class="col-stat-summary" title="Fonction">Fonction</th>
                     @foreach(($days ?? []) as $day)
                         @php
                             $isMulti = strpos($day, '/') !== false;
@@ -197,6 +198,7 @@
                                 {{ $r['agent']['matricule'] ?? 'N/A' }} — {{ $r['agent']['station_name'] ?? '-' }}
                             </span>
                         </td>
+                        <td class="col-stat-summary" style="background-color: #f8fafc; color: #0f172a;">{{ $r['agent']['fonction'] ?? '-' }}</td>
                         @foreach(($days ?? []) as $day)
                             @php
                                 $code = $r['days'][$day] ?? '--';

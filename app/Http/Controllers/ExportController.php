@@ -53,7 +53,7 @@ class ExportController extends Controller
 
         foreach ($rows as $row) {
             $ot = $service->calculateOvertime($row, $row->horaire);
-            $norm = $service->calculateNormalHours($row, $ot);
+            $norm = $service->calculateNormalHours($row, $row->horaire, $ot);
             $late = $service->calculateLateMinutes($row, $row->horaire);
             $row->setAttribute('overtime_minutes', $ot);
             $row->setAttribute('overtime_display', $service->formatOvertime($ot));
@@ -118,7 +118,7 @@ class ExportController extends Controller
         $table = [];
         foreach ($rows as $p) {
             $ot = $service->calculateOvertime($p, $p->horaire);
-            $norm = $service->calculateNormalHours($p, $ot);
+            $norm = $service->calculateNormalHours($p, $p->horaire, $ot);
             $late = $service->calculateLateMinutes($p, $p->horaire);
             $table[] = [
                 (string) ($p->agent?->matricule ?? ''),
@@ -503,7 +503,7 @@ class ExportController extends Controller
         $matrix = $service->buildWeeklyMatrix($baseDate, ['station_id' => $stationId]);
         $summarized = $this->summarizeMatrix($matrix['data'], $matrix['agents'], 'brut');
 
-        $headers = ['Matricule', 'Nom complet', 'Station'];
+        $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station'];
         foreach ($matrix['days'] as $day) {
             $headers[] = Carbon::parse($day)->format('D d/m');
         }
@@ -514,6 +514,7 @@ class ExportController extends Controller
             $row = [
                 (string) ($r['agent']['matricule'] ?? ''),
                 (string) ($r['agent']['fullname'] ?? ''),
+                (string) ($r['agent']['fonction'] ?? ''),
                 (string) ($r['agent']['station_name'] ?? ''),
             ];
             foreach ($matrix['days'] as $day) {
@@ -592,7 +593,7 @@ class ExportController extends Controller
         $days = $matrix['days'];
 
         if ($tab === 'details') {
-            $headers = ['Matricule', 'Nom complet', 'Station'];
+            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station'];
             foreach ($days as $d) {
                 $headers[] = $d;
             }
@@ -603,6 +604,7 @@ class ExportController extends Controller
                 $row = [
                     (string) ($r['agent']['matricule'] ?? ''),
                     (string) ($r['agent']['fullname'] ?? ''),
+                    (string) ($r['agent']['fonction'] ?? ''),
                     (string) ($r['agent']['station_name'] ?? ''),
                 ];
                 foreach ($days as $d) {
@@ -625,12 +627,13 @@ class ExportController extends Controller
             $sheetTitle = 'Détails Période';
             $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
-            $headers = ['Matricule', 'Nom complet', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
+            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
             $table = [];
             foreach ($summarized as $r) {
                 $table[] = [
                     (string) ($r['agent']['matricule'] ?? ''),
                     (string) ($r['agent']['fullname'] ?? ''),
+                    (string) ($r['agent']['fonction'] ?? ''),
                     (string) ($r['agent']['station_name'] ?? ''),
                     (int) $r['present'],
                     (int) $r['retard'],
@@ -706,7 +709,7 @@ class ExportController extends Controller
         $this->attachPresenceMotifs($rows, $date);
         foreach ($rows as $row) {
             $ot = $service->calculateOvertime($row, $row->horaire);
-            $norm = $service->calculateNormalHours($row, $ot);
+            $norm = $service->calculateNormalHours($row, $row->horaire, $ot);
             $late = $service->calculateLateMinutes($row, $row->horaire);
             $row->setAttribute('overtime_minutes', $ot);
             $row->setAttribute('overtime_display', $service->formatOvertime($ot));
@@ -758,6 +761,7 @@ class ExportController extends Controller
             'Station',
             'Matricule',
             'Nom complet',
+            'Fonction',
             'Affectation',
             'Check-in',
             'Check-out',
@@ -776,12 +780,13 @@ class ExportController extends Controller
         foreach ($rows as $p) {
             $st = $p->assignedStation ?: ($p->stationCheckIn ?: $p->stationCheckOut);
             $ot = $service->calculateOvertime($p, $p->horaire);
-            $norm = $service->calculateNormalHours($p, $ot);
+            $norm = $service->calculateNormalHours($p, $p->horaire, $ot);
             $late = $service->calculateLateMinutes($p, $p->horaire);
             $table[] = [
                 (string) ($st?->name ?? 'Sans station'),
                 (string) ($p->agent?->matricule ?? ''),
                 (string) ($p->agent?->fullname ?? ''),
+                (string) ($p->agent?->fonction ?? ''),
                 (string) ($p->assignedStation?->name ?? ''),
                 (string) ($p->stationCheckIn?->name ?? ''),
                 (string) ($p->stationCheckOut?->name ?? ''),
@@ -1223,6 +1228,7 @@ class ExportController extends Controller
                 'id' => $a->id,
                 'fullname' => $a->fullname,
                 'matricule' => $a->matricule,
+                'fonction' => $a->fonction ?? null,
                 'photo' => $a->photo,
                 'station_id' => $a->site_id,
                 'station_name' => $a->station?->name,
@@ -1518,7 +1524,7 @@ class ExportController extends Controller
             $table = [];
             foreach ($rows as $p) {
                 $ot = $service->calculateOvertime($p, $p->horaire);
-                $norm = $service->calculateNormalHours($p, $ot);
+                $norm = $service->calculateNormalHours($p, $p->horaire, $ot);
                 $late = $service->calculateLateMinutes($p, $p->horaire);
                 $table[] = [
                     (string) ($p->getRawOriginal('date_reference') ?? ''),

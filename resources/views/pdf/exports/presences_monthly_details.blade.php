@@ -31,6 +31,7 @@
         <tr>
             <th class="col-matricule">Matricule</th>
             <th class="col-agent">Nom complet agent</th>
+            <th class="col-station">Fonction</th>
             <th class="col-station">Station</th>
             @foreach(($days ?? []) as $day)
                 <th>{{ $day }}</th>
@@ -51,6 +52,7 @@
             <tr>
                 <td class="col-matricule">{{ $a['matricule'] ?? '' }}</td>
                 <td class="col-agent">{{ $a['fullname'] ?? '-' }}</td>
+                <td class="col-station">{{ $a['fonction'] ?? '-' }}</td>
                 <td class="col-station">{{ $a['station_name'] ?? '-' }}</td>
                 @foreach(($days ?? []) as $day)
                     @php

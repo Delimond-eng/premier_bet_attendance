@@ -166,6 +166,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Agent</th>
+                                <th>Fonction</th>
                                 <th>Affectation</th>
                                 <th>Check-in</th>
                                 <th>Check-out</th>
@@ -195,6 +196,7 @@
                                         </div>
                                     </div>
                                 </td>
+                                <td>@{{ row.agent?.fonction ?? '-' }}</td>
                                 <td>@{{ row.assigned_station?.name ?? '-' }}</td>
                                 <td>
                                     <div class="d-flex align-items-center">

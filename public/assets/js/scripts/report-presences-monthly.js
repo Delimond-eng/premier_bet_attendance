@@ -1,4 +1,4 @@
-import { get } from "../modules/http.js";
+import {get } from "../modules/http.js";
 import { initSelect2ForVue } from "../modules/select2.js";
 
 function destroyDatatable(tableEl) {
@@ -20,7 +20,9 @@ function initOrRefreshDatatable(tableEl, options = {}) {
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[0, "desc"]],
+        order: [
+            [0, "desc"]
+        ],
         info: true,
         scrollX: false,
         language: {
@@ -106,30 +108,84 @@ function mapDayStatus(status, dayData = {}) {
     }
 
     switch (status) {
-    case "present":
-        return { code: "1", cellClass: "badge-success", bucket: "presence" };
-    case "retard":
-    case "retard_justifie":
-        return { code: "1-R", cellClass: "bg-info text-white", bucket: "retard" };
-    case "absent":
-        return { code: "A", cellClass: "bg-danger text-white", bucket: "absence" };
-    case "absence_justifiee":
-        return { code: "A", cellClass: "bg-warning text-dark", bucket: "absence" };
-    case "off":
-        return { code: "OFF", cellClass: "bg-secondary text-white", bucket: "off" };
-    case "conge":
-        return { code: "CONGE", cellClass: "bg-primary text-white", bucket: "conge" };
-    case "autorisation":
-        return { code: "AS", cellClass: "bg-dark text-white", bucket: "autorisation" };
-    case "maladie":
-        return { code: "M", cellClass: "bg-warning text-dark", bucket: "autorisation" };
-    case "future":
-        return { code: "--", cellClass: "bg-light text-muted", bucket: null };
-    case "unplanned":
-        return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
-    default:
-        return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
+        case "present":
+            return { code: "1", cellClass: "badge-success", bucket: "presence" };
+        case "retard":
+        case "retard_justifie":
+            return { code: "1-R", cellClass: "bg-info text-white", bucket: "retard" };
+        case "absent":
+            return { code: "A", cellClass: "bg-danger text-white", bucket: "absence" };
+        case "absence_justifiee":
+            return { code: "A", cellClass: "bg-warning text-dark", bucket: "absence" };
+        case "off":
+            return { code: "OFF", cellClass: "bg-secondary text-white", bucket: "off" };
+        case "conge":
+            return { code: "CONGE", cellClass: "bg-primary text-white", bucket: "conge" };
+        case "autorisation":
+            return { code: "AS", cellClass: "bg-dark text-white", bucket: "autorisation" };
+        case "maladie":
+            return { code: "M", cellClass: "bg-warning text-dark", bucket: "autorisation" };
+        case "future":
+            return { code: "--", cellClass: "bg-light text-muted", bucket: null };
+        case "unplanned":
+            return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
+        default:
+            return { code: "AUT", cellClass: "bg-warning-subtle text-dark", bucket: "other" };
     }
+}
+
+function getStatusLabel(code, dayData = {}) {
+    switch (code) {
+        case "1":
+            return "Présence";
+        case "1-R":
+            return "Présence avec retard";
+        case "A":
+            return dayData.type === "Absence" || dayData.status === "absence_justifiee" ? "Absence justifiée" : "Absence";
+        case "AN":
+            return "Entrée sans sortie";
+        case "OFF":
+            return "Repos";
+        case "CONGE":
+            return "Congé";
+        case "AS":
+            return "Autorisation spéciale";
+        case "M":
+            return "Maladie";
+        case "--":
+            return "À venir";
+        case "AUT":
+            return "Autre";
+        default:
+            return "Statut";
+    }
+}
+
+function buildDayPopoverHtml(dayData = {}, code = "--") {
+    const label = getStatusLabel(code, dayData);
+    const lines = [];
+    lines.push(`<div class="attendance-popover-header">${label}</div>`);
+
+    const addLine = (title, value) => {
+        if (value === null || value === undefined || value === "" || value === "--" || value === "--:--") return;
+        lines.push(`<div class="attendance-popover-row"><span class="attendance-popover-key">${title}</span><span class="attendance-popover-value">${value}</span></div>`);
+    };
+
+    addLine("Type", dayData.type || null);
+    addLine("Entrée", dayData.arrivee || null);
+    addLine("Sortie", dayData.depart || null);
+    addLine("Horaire", dayData.horaire || null);
+    addLine("Début", dayData.date_debut || null);
+    addLine("Fin", dayData.date_fin || null);
+    addLine("Motif", dayData.motif || dayData.reason || null);
+    if ((dayData.late_minutes || 0) > 0) addLine("Retard", formatOvertime(dayData.late_minutes));
+    if ((dayData.overtime_minutes || 0) > 0) addLine("Heures supp.", formatOvertime(dayData.overtime_minutes));
+
+    if (!lines.length || lines.length === 1) {
+        lines.push(`<div class="attendance-popover-row"><span class="attendance-popover-key">Détail</span><span class="attendance-popover-value">Aucune information disponible</span></div>`);
+    }
+
+    return lines.join("");
 }
 
 function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
@@ -142,6 +198,8 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             agent: agentsByKey[agent] || { fullname: agent, matricule: "", photo: null },
             day_codes: {},
             day_classes: {},
+            day_details: {},
+            day_titles: {},
             total_count: 0,
             total_presences: 0,
             total_absences: 0,
@@ -162,6 +220,8 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
 
             row.day_codes[day] = mapped.code;
             row.day_classes[day] = mapped.cellClass;
+            row.day_titles[day] = getStatusLabel(mapped.code, dayData);
+            row.day_details[day] = buildDayPopoverHtml(dayData, mapped.code);
 
             if (dayData.overtime_minutes) {
                 row.total_overtime_minutes += dayData.overtime_minutes;
@@ -314,7 +374,9 @@ new Vue({
             if (this.activeTab === "details") {
                 destroyDatatable(this.$refs.tableRaw);
                 initOrRefreshDatatable(this.$refs.tableDetails, {
-                    order: [[1, "asc"]],
+                    order: [
+                        [1, "asc"]
+                    ],
                     scrollX: true,
                 });
                 return;
@@ -322,7 +384,9 @@ new Vue({
 
             destroyDatatable(this.$refs.tableDetails);
             initOrRefreshDatatable(this.$refs.tableRaw, {
-                order: [[0, "desc"]],
+                order: [
+                    [0, "desc"]
+                ],
             });
         },
 
@@ -353,7 +417,7 @@ new Vue({
                 const { data } = await get(`/reports/monthly?${params.toString()}`);
                 this.matrix = data?.data ?? {};
                 this.prefixes = data?.prefixes ?? [];
-                this.show_matricule_filter = !!data?.show_matricule_filter;
+                this.show_matricule_filter = !!data ? .show_matricule_filter;
                 this.dynamicDayKeys = data?.days ?? [];
 
                 const agentsByKey = data?.agents ?? {};
@@ -420,7 +484,7 @@ new Vue({
 
         exportExcelUrl() {
             const params = new URLSearchParams();
-             if (this.useRange && this.filters.from && this.filters.to) {
+            if (this.useRange && this.filters.from && this.filters.to) {
                 params.set("from", this.filters.from);
                 params.set("to", this.filters.to);
             } else {

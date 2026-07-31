@@ -68,7 +68,6 @@ class AttendanceReportService
             $cursor->addDay();
         }
 
-        // Utilisation de withoutGlobalScopes pour permettre de voir les agents planifiés venant d'ailleurs
         $agentsQuery = Agent::withoutGlobalScopes()
             ->with([
                 'station' => fn($q) => $q->withoutGlobalScopes(),
@@ -76,7 +75,6 @@ class AttendanceReportService
                 'horaire' => fn($q) => $q->withoutGlobalScopes()
             ])
             ->when($userPrefix !== null, function($q) use ($userPrefix) {
-                // FORCER le préfixe de l'utilisateur connecté même si scope désactivé
                 $q->where('matricule', 'like', $userPrefix . '%');
             })
             ->when(!empty($filters['station_id']), function ($q) use ($filters, $start, $end, $managerStationId) {
@@ -103,7 +101,6 @@ class AttendanceReportService
         $agents = $agentsQuery->get();
         $agentIds = $agents->pluck('id')->all();
 
-        // Chargement des données sans Global Scopes mais avec restriction manuelle si nécessaire
         $presences = PresenceAgents::withoutGlobalScopes()
             ->with(['horaire' => fn($q) => $q->withoutGlobalScopes()])
             ->whereIn('agent_id', $agentIds)
@@ -156,7 +153,7 @@ class AttendanceReportService
                         $status = ($p->retard === 'oui') ? 'retard' : 'present';
                         $depart = $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : ($hasExitAuth ? 'AUTH' : '--:--');
                         $overtime = $this->calculateOvertime($p, $p->horaire);
-                        $duration = $p->ended_at ? Carbon::parse($p->getRawOriginal('started_at') ?? $p->started_at)->diffInMinutes(Carbon::parse($p->getRawOriginal('ended_at') ?? $p->ended_at)) : 0;
+                        $duration = $this->calculateNormalHours($p, $p->horaire, $overtime);
                     }
 
                     $row[$dayLabel] = [
@@ -185,14 +182,50 @@ class AttendanceReportService
                         }
 
                         if ($hasConge) {
-                            $row[$dayLabel] = ['status' => 'conge', 'arrivee' => 'CONGE', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
+                            $congeInfo = null;
+                            if (isset($conges[$agent->id])) {
+                                foreach ($conges[$agent->id] as $c) {
+                                    if ($cursor->betweenIncluded(Carbon::parse($c->date_debut)->startOfDay(), Carbon::parse($c->date_fin)->endOfDay())) {
+                                        $congeInfo = $c;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            $row[$dayLabel] = [
+                                'status' => 'conge',
+                                'arrivee' => 'CONGE',
+                                'depart' => '',
+                                'horaire' => '--',
+                                'overtime_minutes' => 0,
+                                'late_minutes' => 0,
+                                'duration_minutes' => 0,
+                                'type' => $congeInfo?->type ?? 'Congé',
+                                'motif' => $congeInfo?->motif ?? 'Congé',
+                                'date_debut' => $congeInfo?->date_debut ? Carbon::parse($congeInfo->date_debut)->toDateString() : $isoDate,
+                                'date_fin' => $congeInfo?->date_fin ? Carbon::parse($congeInfo->date_fin)->toDateString() : $isoDate,
+                            ];
                         } elseif ($auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first()) {
                             $status = (strtolower($auth->type) === 'maladie') ? 'maladie' : 'autorisation';
-                            $row[$dayLabel] = ['status' => $status, 'arrivee' => strtoupper($auth->type), 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = [
+                                'status' => $status,
+                                'arrivee' => strtoupper($auth->type),
+                                'depart' => '',
+                                'horaire' => '--',
+                                'overtime_minutes' => 0,
+                                'late_minutes' => 0,
+                                'duration_minutes' => 0,
+                                'type' => strtoupper((string) ($auth->type ?? 'Autorisation')),
+                                'motif' => $auth->reason ?? 'Autorisation',
+                                'date_debut' => $auth->date_reference ? Carbon::parse($auth->date_reference)->toDateString() : $isoDate,
+                                'date_fin' => $auth->date_reference ? Carbon::parse($auth->date_reference)->toDateString() : $isoDate,
+                                'started_at' => $auth->started_at,
+                                'ended_at' => $auth->ended_at,
+                            ];
                         } elseif ($plan && $plan->is_rest_day) {
-                            $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0, 'type' => 'Repos', 'motif' => 'Repos'];
                         } else {
-                            $row[$dayLabel] = ['status' => 'absent', 'arrivee' => 'ABS', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
+                            $row[$dayLabel] = ['status' => 'absent', 'arrivee' => 'ABS', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0, 'type' => 'Absence', 'motif' => 'Absence non justifiée'];
                         }
                     }
                 }
@@ -204,6 +237,10 @@ class AttendanceReportService
         return ['data' => $matrix, 'days' => $days, 'agents' => $agents];
     }
 
+    /**
+     * Calcule les heures supplémentaires.
+     * Le comptage commence 1 heure APRES la fin prévue de l'horaire.
+     */
     public function calculateOvertime(PresenceAgents $presence, ?PresenceHoraire $horaire): int
     {
         if (!$presence->ended_at || !$horaire) return 0;
@@ -215,10 +252,18 @@ class AttendanceReportService
         $refDate = Carbon::parse($presence->getRawOriginal('date_reference') ?? $presence->date_reference);
         $schedStart = $refDate->copy()->setTimeFromTimeString($scheduledStartStr);
         $schedEnd = $refDate->copy()->setTimeFromTimeString($scheduledEndStr);
+
         if ($schedEnd->lt($schedStart)) $schedEnd->addDay();
 
-        $triggerThreshold = $schedEnd->copy()->addHour();
-        return $actualEnd->gt($triggerThreshold) ? (int) $schedEnd->diffInMinutes($actualEnd) : 0;
+        // Le comptage commence 1h après la fin prévue
+        $overtimeStartPoint = $schedEnd->copy()->addHour();
+
+        if ($actualEnd->lte($overtimeStartPoint)) return 0;
+
+        $overtimeMinutes = (int) $overtimeStartPoint->diffInMinutes($actualEnd);
+
+        // CAP de sécurité : pas plus de 12 heures supp par jour
+        return min($overtimeMinutes, 720);
     }
 
     public function calculateLateMinutes(PresenceAgents $presence, ?PresenceHoraire $horaire): int
@@ -243,11 +288,37 @@ class AttendanceReportService
         return $mins === 0 ? "{$hours}h" : "{$hours}h {$mins}m";
     }
 
-    public function calculateNormalHours(PresenceAgents $presence, int $overtimeMinutes): int
+    /**
+     * Calcule les heures normales travaillées, strictement limitées à la plage horaire prévue.
+     */
+    public function calculateNormalHours(PresenceAgents $presence, ?PresenceHoraire $horaire, int $overtimeMinutes = 0): int
     {
         if (!$presence->started_at || !$presence->ended_at) return 0;
-        $start = Carbon::parse($presence->getRawOriginal('started_at') ?? $presence->started_at);
-        $end = Carbon::parse($presence->getRawOriginal('ended_at') ?? $presence->ended_at);
-        return max(0, $start->diffInMinutes($end) - $overtimeMinutes);
+
+        $actualStart = Carbon::parse($presence->getRawOriginal('started_at') ?? $presence->started_at);
+        $actualEnd = Carbon::parse($presence->getRawOriginal('ended_at') ?? $presence->ended_at);
+
+        if (!$horaire) {
+            return (int) max(0, $actualStart->diffInMinutes($actualEnd) - $overtimeMinutes);
+        }
+
+        $scheduledStartStr = (string)($horaire->getRawOriginal('started_at') ?? $horaire->started_at);
+        $scheduledEndStr = (string)($horaire->getRawOriginal('ended_at') ?? $horaire->ended_at);
+
+        if (!$scheduledStartStr || !$scheduledEndStr) {
+            return (int) max(0, $actualStart->diffInMinutes($actualEnd) - $overtimeMinutes);
+        }
+
+        $refDate = Carbon::parse($presence->getRawOriginal('date_reference') ?? $presence->date_reference);
+        $schedStart = $refDate->copy()->setTimeFromTimeString($scheduledStartStr);
+        $schedEnd = $refDate->copy()->setTimeFromTimeString($scheduledEndStr);
+        if ($schedEnd->lt($schedStart)) $schedEnd->addDay();
+
+        $effectiveStart = $actualStart->gt($schedStart) ? $actualStart : $schedStart;
+        $effectiveEnd = $actualEnd->lt($schedEnd) ? $actualEnd : $schedEnd;
+
+        if ($effectiveStart->gt($effectiveEnd)) return 0;
+
+        return (int) max(0, $effectiveStart->diffInMinutes($effectiveEnd, false));
     }
 }
