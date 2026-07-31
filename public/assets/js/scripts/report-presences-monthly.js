@@ -141,7 +141,7 @@ function getStatusLabel(code, dayData = {}) {
         case "1-R":
             return "Présence avec retard";
         case "A":
-            return dayData.type === "Absence" || dayData.status === "absence_justifiee" ? "Absence justifiée" : "Absence";
+            return "Absence";
         case "AN":
             return "Entrée sans sortie";
         case "OFF":
@@ -177,7 +177,14 @@ function buildDayPopoverHtml(dayData = {}, code = "--") {
     addLine("Horaire", dayData.horaire || null);
     addLine("Début", dayData.date_debut || null);
     addLine("Fin", dayData.date_fin || null);
-    addLine("Motif", dayData.motif || dayData.reason || null);
+
+    // Gestion du motif d'absence
+    let motif = dayData.motif || dayData.reason;
+    if (!motif && code === "A") {
+        motif = "Absence non justifiée";
+    }
+    addLine("Motif", motif || null);
+
     if ((dayData.late_minutes || 0) > 0) addLine("Retard", formatOvertime(dayData.late_minutes));
     if ((dayData.overtime_minutes || 0) > 0) addLine("Heures supp.", formatOvertime(dayData.overtime_minutes));
 
@@ -417,7 +424,7 @@ new Vue({
                 const { data } = await get(`/reports/monthly?${params.toString()}`);
                 this.matrix = data?.data ?? {};
                 this.prefixes = data?.prefixes ?? [];
-                this.show_matricule_filter = !!data ? .show_matricule_filter;
+                this.show_matricule_filter = !!data?.show_matricule_filter;
                 this.dynamicDayKeys = data?.days ?? [];
 
                 const agentsByKey = data?.agents ?? {};

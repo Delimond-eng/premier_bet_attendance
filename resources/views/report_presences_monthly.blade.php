@@ -202,6 +202,7 @@
                                     data-bs-trigger="hover focus"
                                     data-bs-html="true"
                                     data-bs-placement="top"
+                                    tabindex="0"
                                 >@{{ r.day_codes[d] }}</span>
                             </td>
                             <td class="fw-semibold">@{{ r.total_count }}</td>
@@ -228,21 +229,31 @@
     <style>
         .attendance-details-table th.attendance-day-head,
         .attendance-details-table td.attendance-day-cell {
-            min-width: 22px;
-            width: 22px;
-            max-width: 22px;
-            padding: .1rem .08rem;
+            min-width: 26px;
+            width: 26px;
+            max-width: 26px;
+            padding: 0 !important;
             text-align: center;
             line-height: 1.1;
+            height: 34px;
         }
 
-        .attendance-details-table td.attendance-day-cell {
-            font-weight: 600;
+        .attendance-day-badge {
+            cursor: pointer !important;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
             font-size: 10px;
+            font-weight: 700;
+            border-radius: 0 !important;
+            margin: 0 !important;
         }
 
         .attendance-details-table th.attendance-day-head {
             font-size: 11px;
+            padding: .2rem .1rem !important;
         }
 
         .attendance-popover-header {
@@ -282,12 +293,11 @@
 
         document.addEventListener("DOMContentLoaded", function () {
             if (window.bootstrap && typeof window.bootstrap.Popover === "function") {
-                const initPopover = () => {
-                    document.querySelectorAll('.attendance-day-badge[data-bs-toggle="popover"]').forEach((el) => {
-                        if (el._attendancePopover) {
-                            el._attendancePopover.dispose();
-                        }
-                        el._attendancePopover = new bootstrap.Popover(el, {
+                const initPopovers = () => {
+                    const elements = document.querySelectorAll('.attendance-day-badge[data-bs-toggle="popover"]:not(.popover-initialized)');
+                    elements.forEach((el) => {
+                        el.classList.add('popover-initialized');
+                        new bootstrap.Popover(el, {
                             html: true,
                             trigger: 'hover focus',
                             placement: 'top',
@@ -297,9 +307,19 @@
                     });
                 };
 
-                const observer = new MutationObserver(() => initPopover());
-                observer.observe(document.body, { childList: true, subtree: true, attributes: false });
-                initPopover();
+                const observer = new MutationObserver((mutations) => {
+                    initPopovers();
+                });
+
+                const appEl = document.getElementById('App');
+                if (appEl) {
+                    observer.observe(appEl, { childList: true, subtree: true });
+                }
+
+                initPopovers();
+                $(document).on('draw.dt', function () {
+                    initPopovers();
+                });
             }
         });
     </script>
