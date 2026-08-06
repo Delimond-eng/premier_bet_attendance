@@ -185,7 +185,7 @@
                             <th>FONCTION</th>
                             <th>STATION AFFECTE</th>
                             <th>Date création</th>
-                            <th>Statut</th>
+                            <th>Statut présence</th>
                             <th class="text-end">ACTIONS</th>
                         </tr>
                         </thead>
@@ -218,11 +218,23 @@
                                     </td>
                                     <td>@{{ data.created_at }}</td>
                                     <td>
-                                        <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs" v-if="data.status === 'actif'">
-                                            <i class="ti ti-point-filled me-1"></i>Actif
+                                        <span class="badge badge-soft-success d-inline-flex align-items-center badge-xs" v-if="data.presence_status === 'present'">
+                                            <i class="ti ti-point-filled me-1"></i>Présent
                                         </span>
-                                        <span class="badge badge-soft-danger d-inline-flex align-items-center badge-xs" v-else>
-                                            <i class="ti ti-point-filled me-1"></i>Inactif
+                                        <span class="badge badge-soft-warning d-inline-flex align-items-center badge-xs" v-else-if="data.presence_status === 'retard'">
+                                            <i class="ti ti-point-filled me-1"></i>Retard
+                                        </span>
+                                        <span class="badge badge-soft-danger d-inline-flex align-items-center badge-xs" v-else-if="data.presence_status === 'absent'">
+                                            <i class="ti ti-point-filled me-1"></i>Absent
+                                        </span>
+                                        <span class="badge badge-soft-secondary d-inline-flex align-items-center badge-xs" v-else-if="data.presence_status === 'off'">
+                                            <i class="ti ti-point-filled me-1"></i>Off
+                                        </span>
+                                        <span class="badge badge-soft-info d-inline-flex align-items-center badge-xs" v-else-if="data.presence_status === 'conge'">
+                                            <i class="ti ti-point-filled me-1"></i>Congé
+                                        </span>
+                                        <span class="badge badge-soft-dark d-inline-flex align-items-center badge-xs" v-else>
+                                            <i class="ti ti-point-filled me-1"></i>@{{ data.presence_status || 'Inconnu' }}
                                         </span>
                                     </td>
                                     <td class="text-end">
@@ -471,7 +483,7 @@
                                             <option value="retard">Retard</option>
                                             <option value="absence">Absence</option>
                                             <option value="depart">Départ (Sortie)</option>
-                                            <option value="maladie">Maladie</option>
+                                            <option value="double shift">Double Shift</option>
                                             <option value="autre">Autre...</option>
                                         </select>
                                     </div>

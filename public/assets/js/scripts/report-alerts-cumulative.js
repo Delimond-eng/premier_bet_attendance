@@ -66,7 +66,8 @@ new Vue({
 
             const params = new URLSearchParams(this.filters);
             try {
-                const { data } = await get(`/reports/alerts/data?${params.toString()}`);
+                // Correction du chemin pour correspondre à la route définie dans web.php
+                const { data } = await get(`/reports/alerts/cumulative/data?${params.toString()}`);
 
                 // Mettre à jour les labels de plage
                 if (data.from) this.range.from = moment(data.from).format("DD/MM/YYYY");
@@ -91,11 +92,11 @@ new Vue({
     computed: {
         exportPdfUrl() {
             const params = new URLSearchParams(this.filters);
-            return `/reports/alerts/export/pdf?${params.toString()}`;
+            return `/reports/alerts/cumulative/export/pdf?${params.toString()}`;
         },
         exportExcelUrl() {
             const params = new URLSearchParams(this.filters);
-            return `/reports/alerts/export/excel?${params.toString()}`;
+            return `/reports/alerts/cumulative/export/excel?${params.toString()}`;
         }
     }
 });

@@ -115,6 +115,7 @@ class AttendanceReportService
             ->groupBy(fn($p) => $p->agent_id . '|' . Carbon::parse($p->date)->toDateString());
 
         $conges = Conge::withoutGlobalScopes()
+            ->with(['congeType' => fn($q) => $q->withoutGlobalScopes()])
             ->whereIn('agent_id', $agentIds)
             ->where('status', 'approved')
             ->whereDate('date_fin', '>=', $start->toDateString())
@@ -129,6 +130,17 @@ class AttendanceReportService
             ->get()
             ->groupBy(fn($a) => $a->agent_id . '|' . Carbon::parse($a->date_reference)->toDateString());
 
+        // Helper pour les codes courts de congé/absence
+        $getShortCode = function(?string $label) {
+            if (!$label) return null;
+            $label = strtolower($label);
+            if (str_contains($label, 'maladie')) return 'M';
+            if (str_contains($label, 'circonstance')) return 'CC';
+            if (str_contains($label, 'annuel')) return 'CA';
+            if (str_contains($label, 'maternité') || str_contains($label, 'maternite')) return 'CM';
+            return null;
+        };
+
         $matrix = [];
         foreach ($agents as $agent) {
             $row = [];
@@ -137,34 +149,60 @@ class AttendanceReportService
                 $isoDate = $cursor->toDateString();
                 $dayLabel = $cursor->format($dayKeyFormat);
 
-                $p = optional($presences->get($agent->id . '|' . $isoDate))->first();
+                $dayPresences = $presences->get($agent->id . '|' . $isoDate, collect())->sortBy(fn ($item) => $item->started_at ? Carbon::parse($item->started_at)->format('H:i:s') : '23:59:59');
+                $p = $dayPresences->first();
 
                 if ($p && $p->started_at) {
-                    $auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first();
-                    $hasExitAuth = $auth && in_array(strtolower($auth->type), ['depart', 'sortie']);
-                    $isMissingExit = empty($p->ended_at) && $cursor->lt($today);
+                    $presenceCount = $dayPresences->count();
+                    $isDoubleShift = $presenceCount > 1;
 
-                    if ($isMissingExit && !$hasExitAuth) {
-                        $status = 'absent';
-                        $depart = 'AN';
-                        $overtime = 0;
-                        $duration = 0;
+                    if ($isDoubleShift) {
+                        $firstPresence = $dayPresences->first();
+                        $lateFirstCheckIn = strtolower((string) ($firstPresence->retard ?? 'non')) === 'oui';
+                        $totalOvertime = $dayPresences->sum(fn ($presence) => $this->calculateOvertime($presence, $presence->horaire));
+                        $totalDuration = $dayPresences->sum(fn ($presence) => $this->calculateNormalHours($presence, $presence->horaire, $this->calculateOvertime($presence, $presence->horaire)));
+                        $lateMinutes = $lateFirstCheckIn ? $this->calculateLateMinutes($firstPresence, $firstPresence->horaire) : 0;
+                        $lastPresence = $dayPresences->last();
+
+                        $row[$dayLabel] = [
+                            'status' => 'double_shift',
+                            'arrivee' => $lateFirstCheckIn ? '2 C-1' : '2',
+                            'depart' => $lastPresence && $lastPresence->ended_at ? Carbon::parse($lastPresence->ended_at)->format('H:i') : '--:--',
+                            'horaire' => $firstPresence->horaire?->libelle ?? '--',
+                            'overtime_minutes' => $totalOvertime,
+                            'late_minutes' => $lateMinutes,
+                            'duration_minutes' => $totalDuration,
+                            'presence_count' => $presenceCount,
+                            'late_first_checkin' => $lateFirstCheckIn,
+                            'type' => 'Double Shift',
+                        ];
                     } else {
-                        $status = ($p->retard === 'oui') ? 'retard' : 'present';
-                        $depart = $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : ($hasExitAuth ? 'AUTH' : '--:--');
-                        $overtime = $this->calculateOvertime($p, $p->horaire);
-                        $duration = $this->calculateNormalHours($p, $p->horaire, $overtime);
-                    }
+                        $auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first();
+                        $hasExitAuth = $auth && in_array(strtolower($auth->type), ['depart', 'sortie']);
+                        $isMissingExit = empty($p->ended_at) && $cursor->lt($today);
 
-                    $row[$dayLabel] = [
-                        'status' => $status,
-                        'arrivee' => Carbon::parse($p->started_at)->format('H:i'),
-                        'depart' => $depart,
-                        'horaire' => $p->horaire?->libelle ?? '--',
-                        'overtime_minutes' => $overtime,
-                        'late_minutes' => $this->calculateLateMinutes($p, $p->horaire),
-                        'duration_minutes' => $duration
-                    ];
+                        if ($isMissingExit && !$hasExitAuth) {
+                            $status = 'absent';
+                            $depart = 'AN';
+                            $overtime = 0;
+                            $duration = 0;
+                        } else {
+                            $status = ($p->retard === 'oui') ? 'retard' : 'present';
+                            $depart = $p->ended_at ? Carbon::parse($p->ended_at)->format('H:i') : ($hasExitAuth ? 'AUTH' : '--:--');
+                            $overtime = $this->calculateOvertime($p, $p->horaire);
+                            $duration = $this->calculateNormalHours($p, $p->horaire, $overtime);
+                        }
+
+                        $row[$dayLabel] = [
+                            'status' => $status,
+                            'arrivee' => Carbon::parse($p->started_at)->format('H:i'),
+                            'depart' => $depart,
+                            'horaire' => $p->horaire?->libelle ?? '--',
+                            'overtime_minutes' => $overtime,
+                            'late_minutes' => $this->calculateLateMinutes($p, $p->horaire),
+                            'duration_minutes' => $duration
+                        ];
+                    }
                 } else {
                     if ($isElectrocool && $cursor->isSunday()) {
                         $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'REPOS', 'depart' => '', 'horaire' => 'REPOS', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
@@ -192,30 +230,36 @@ class AttendanceReportService
                                 }
                             }
 
+                            $typeLabel = $congeInfo->congeType?->libelle ?? $congeInfo->type ?? 'Congé';
+                            $shortCode = $getShortCode($typeLabel) ?? 'C';
+
                             $row[$dayLabel] = [
                                 'status' => 'conge',
-                                'arrivee' => 'CONGE',
+                                'arrivee' => $shortCode,
                                 'depart' => '',
                                 'horaire' => '--',
                                 'overtime_minutes' => 0,
                                 'late_minutes' => 0,
                                 'duration_minutes' => 0,
-                                'type' => $congeInfo?->type ?? 'Congé',
+                                'type' => $typeLabel,
                                 'motif' => $congeInfo?->motif ?? 'Congé',
                                 'date_debut' => $congeInfo?->date_debut ? Carbon::parse($congeInfo->date_debut)->toDateString() : $isoDate,
                                 'date_fin' => $congeInfo?->date_fin ? Carbon::parse($congeInfo->date_fin)->toDateString() : $isoDate,
                             ];
                         } elseif ($auth = optional($authorizations->get($agent->id . '|' . $isoDate))->first()) {
-                            $status = (strtolower($auth->type) === 'maladie') ? 'maladie' : 'autorisation';
+                            $authType = (string)$auth->type;
+                            $shortCode = $getShortCode($authType) ?? strtoupper(substr($authType, 0, 1));
+                            $status = (strtolower($authType) === 'maladie') ? 'maladie' : 'autorisation';
+
                             $row[$dayLabel] = [
                                 'status' => $status,
-                                'arrivee' => strtoupper($auth->type),
+                                'arrivee' => $shortCode,
                                 'depart' => '',
                                 'horaire' => '--',
                                 'overtime_minutes' => 0,
                                 'late_minutes' => 0,
                                 'duration_minutes' => 0,
-                                'type' => strtoupper((string) ($auth->type ?? 'Autorisation')),
+                                'type' => strtoupper($authType),
                                 'motif' => $auth->reason ?? 'Autorisation',
                                 'date_debut' => $auth->date_reference ? Carbon::parse($auth->date_reference)->toDateString() : $isoDate,
                                 'date_fin' => $auth->date_reference ? Carbon::parse($auth->date_reference)->toDateString() : $isoDate,

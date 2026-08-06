@@ -219,13 +219,26 @@ class PresenceController extends Controller
 
     private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now, ?string $photoDebut = null, ?string $coordonnees = null): JsonResponse
     {
-        $existing = PresenceAgents::query()
+        $dayPresences = PresenceAgents::query()
             ->where('agent_id', $agent->id)
             ->whereDate('date_reference', $dateReference->toDateString())
-            ->first();
+            ->orderBy('started_at')
+            ->get();
 
-        if ($existing && $existing->started_at) {
+        $hasAnyCheckIn = $dayPresences->contains(fn ($presence) => !empty($presence->started_at));
+        $hasCompletedShift = $dayPresences->contains(fn ($presence) => !empty($presence->started_at) && !empty($presence->ended_at));
+        $hasApprovedDoubleShift = AttendanceAuthorization::where('agent_id', $agent->id)
+            ->whereDate('date_reference', $dateReference->toDateString())
+            ->where('status', 'approved')
+            ->whereRaw('LOWER(type) = ?', ['double shift'])
+            ->exists();
+
+        if ($hasAnyCheckIn && !$hasApprovedDoubleShift) {
             return response()->json(['status' => 'error', 'errors' => ['Pointage d’entrée déjà effectué for cette période.']], 200);
+        }
+
+        if ($hasAnyCheckIn && $hasApprovedDoubleShift && !$hasCompletedShift) {
+            return response()->json(['status' => 'error', 'errors' => ['Un double shift n’est autorisé qu’après un pointage de sortie complet pour la même date.']], 200);
         }
 
         $retard = 'non';

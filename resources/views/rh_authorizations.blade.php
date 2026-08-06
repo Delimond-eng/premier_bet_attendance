@@ -25,9 +25,36 @@
         </div>
 
         <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <h5>Liste des autorisations</h5>
-                <span class="text-muted" v-if="isLoading">Chargement...</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div style="width: 220px;">
+                        <select class="form-select select2-station" ref="stationSelect" v-model="station_id">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="site in sites" :key="site.id" :value="String(site.id)">@{{ site.name }}</option>
+                        </select>
+                    </div>
+                    <div style="width: 180px;">
+                        <select class="form-select" v-model="type_filter" @change="onFiltersChange">
+                            <option value="">Tous les types</option>
+                            <option value="retard">Retard</option>
+                            <option value="absence">Absence</option>
+                            <option value="depart">Départ (Sortie)</option>
+                            <option value="double shift">Double Shift</option>
+                            <option value="maladie">Maladie</option>
+                            <option value="autre">Autre...</option>
+                        </select>
+                    </div>
+                    <div style="width: 150px;">
+                        <input type="date" class="form-control" v-model="from_date" @change="onFiltersChange">
+                    </div>
+                    <div style="width: 150px;">
+                        <input type="date" class="form-control" v-model="to_date" @change="onFiltersChange">
+                    </div>
+                    <button class="btn btn-white border" @click="load" :disabled="isLoading">
+                        @{{ isLoading ? 'Chargement...' : 'Filtrer' }}
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -114,7 +141,7 @@
                                             <option value="retard">Retard</option>
                                             <option value="absence">Absence</option>
                                             <option value="depart">Départ (Sortie)</option>
-                                            <option value="maladie">Maladie</option>
+                                            <option value="double shift">Double Shift</option>
                                             <option value="autre">Autre...</option>
                                         </select>
                                     </div>
@@ -164,5 +191,8 @@
 @endsection
 
 @push("scripts")
+    <script>
+        window.__SITES__ = @json($sites);
+    </script>
     <script type="module" src="{{ asset("assets/js/scripts/rh-authorizations.js") }}"></script>
 @endpush

@@ -21,7 +21,12 @@
             <th style="width: 5%;">Abs.</th>
             <th style="width: 5%;">AN</th>
             <th style="width: 5%;">Congé</th>
-            <th style="width: 7%;">Auto.</th>
+            <th style="width: 5%;">T.AS</th>
+            <th style="width: 4%;">T.CM</th>
+            <th style="width: 4%;">T.M</th>
+            <th style="width: 4%;">T.CC</th>
+            <th style="width: 4%;">T.CA</th>
+            <th style="width: 6%;">T.C Autres</th>
             <th style="width: 7%;">Just. R.</th>
             <th style="width: 7%;">Just. A.</th>
             <th style="width: 8%;">Ret. Cumul.</th>
@@ -46,6 +51,11 @@
                 <td style="color: #991b1b;"><strong>{{ $r['an'] ?? 0 }}</strong></td>
                 <td>{{ $r['conge'] ?? 0 }}</td>
                 <td>{{ $r['autorisation'] ?? 0 }}</td>
+                <td>{{ $r['total_cm'] ?? 0 }}</td>
+                <td>{{ $r['total_m'] ?? 0 }}</td>
+                <td>{{ $r['total_cc'] ?? 0 }}</td>
+                <td>{{ $r['total_ca'] ?? 0 }}</td>
+                <td>{{ $r['total_other_leave_types'] ?? 0 }}</td>
                 <td>{{ $r['retard_justifie'] ?? 0 }}</td>
                 <td>{{ $r['absence_justifiee'] ?? 0 }}</td>
                 <td class="text-center" style="color: #991b1b;"><strong>{{ $r['late_display'] ?? '0h' }}</strong></td>

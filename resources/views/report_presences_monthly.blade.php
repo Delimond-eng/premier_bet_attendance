@@ -107,6 +107,11 @@
                             <th>AN</th>
                             <th>Conge</th>
                             <th>Autorisation</th>
+                            <th>TOT CM</th>
+                            <th>TOT M</th>
+                            <th>TOT CC</th>
+                            <th>TOT CA</th>
+                            <th>TOT Autres</th>
                             <th>Justif retard</th>
                             <th>Justif absence</th>
                             <th>Retard Cumulé</th>
@@ -136,11 +141,37 @@
                             <td><span class="text-danger fw-bold">@{{ r.an }}</span></td>
                             <td>@{{ r.conge }}</td>
                             <td>@{{ r.autorisation }}</td>
+                            <td>@{{ r.total_cm }}</td>
+                            <td>@{{ r.total_m }}</td>
+                            <td>@{{ r.total_cc }}</td>
+                            <td>@{{ r.total_ca }}</td>
+                            <td>@{{ r.total_other_leave_types }}</td>
                             <td>@{{ r.retard_justifie }}</td>
                             <td>@{{ r.absence_justifiee }}</td>
                             <td><span class="badge bg-danger-subtle text-danger">@{{ r.late_display }}</span></td>
                             <td><span class="badge bg-warning text-dark">@{{ r.overtime_display }}</span></td>
                             <td><span class="badge badge-info ms-2">Total preste : @{{ r.total_preste }}</span></td>
+                        </tr>
+                        <tr class="table-active fw-bold" v-if="rows.length">
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td>@{{ summaryTotals.present }}</td>
+                            <td>@{{ summaryTotals.retard }}</td>
+                            <td>@{{ summaryTotals.absent }}</td>
+                            <td>@{{ summaryTotals.an }}</td>
+                            <td>@{{ summaryTotals.conge }}</td>
+                            <td>@{{ summaryTotals.autorisation }}</td>
+                            <td>@{{ summaryTotals.total_cm }}</td>
+                            <td>@{{ summaryTotals.total_m }}</td>
+                            <td>@{{ summaryTotals.total_cc }}</td>
+                            <td>@{{ summaryTotals.total_ca }}</td>
+                            <td>@{{ summaryTotals.total_other_leave_types }}</td>
+                            <td>@{{ summaryTotals.retard_justifie }}</td>
+                            <td>@{{ summaryTotals.absence_justifiee }}</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>@{{ summaryTotals.total_preste }}</td>
                         </tr>
                         </tbody>
                     </table>
@@ -149,14 +180,17 @@
                 <div class="table-responsive" v-show="activeTab === 'details'">
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <span class="badge text-bg-success">1 = Presence</span>
-                        <span class="badge text-bg-info">1-R = Presence avec retard</span>
+                        <span class="badge text-bg-success">2 = Double shift</span>
+                        <span class="badge text-bg-success">2 C-1 = Double shift avec retard</span>
+                        <span class="badge text-bg-info">1-R = Retard</span>
                         <span class="badge text-bg-danger">A = Absence</span>
-                        <span class="badge bg-danger-subtle text-danger border">AN = Entrée sans sortie</span>
-                        <span class="badge text-bg-warning text-dark">A = Absence justifiee</span>
+                        <span class="badge bg-danger-subtle text-danger border">AN = Oubli sortie</span>
                         <span class="badge text-bg-secondary">OFF = Repos</span>
-                        <span class="badge text-bg-primary">C = Conge</span>
-                        <span class="badge text-bg-dark">AS = Autorisation speciale</span>
-                        <span class="badge bg-warning-subtle text-dark border">AUT = Autres</span>
+                        <span class="badge text-bg-success">CA = Congé Annuel</span>
+                        <span class="badge text-bg-info">CC = Congé Circonstance</span>
+                        <span class="badge text-white" style="background-color: #6f42c1;">CM = Congé Maternité</span>
+                        <span class="badge text-bg-warning text-dark">M = Maladie</span>
+                        <span class="badge text-bg-dark">AS = Autorisation spéciale</span>
                     </div>
                     <table class="table table-bordered table-sm align-middle attendance-details-table" ref="tableDetails">
                         <thead class="thead-light">

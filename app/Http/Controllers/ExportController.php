@@ -627,7 +627,7 @@ class ExportController extends Controller
             $sheetTitle = 'Détails Période';
             $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
-            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
+            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
             $table = [];
             foreach ($summarized as $r) {
                 $table[] = [
@@ -641,6 +641,11 @@ class ExportController extends Controller
                     (int) $r['an'],
                     (int) $r['conge'],
                     (int) $r['autorisation'],
+                    (int) ($r['total_cm'] ?? 0),
+                    (int) ($r['total_m'] ?? 0),
+                    (int) ($r['total_cc'] ?? 0),
+                    (int) ($r['total_ca'] ?? 0),
+                    (int) ($r['total_other_leave_types'] ?? 0),
                     (int) $r['retard_justifie'],
                     (int) $r['absence_justifiee'],
                     (string) $r['late_display'],
@@ -1250,6 +1255,11 @@ class ExportController extends Controller
                 'retard_justifie' => 0,
                 'absence_justifiee' => 0,
                 'total_preste' => 0,
+                'total_cm' => 0,
+                'total_m' => 0,
+                'total_cc' => 0,
+                'total_ca' => 0,
+                'total_other_leave_types' => 0,
                 'total_overtime_minutes' => 0,
                 'total_late_minutes' => 0,
                 'total_normal_minutes' => 0,
@@ -1286,8 +1296,24 @@ class ExportController extends Controller
                     $acc['retard_justifie'] += 1;
                 }
                 else if ($s === 'absent') $acc['absent'] += 1;
-                else if ($s === 'conge') $acc['conge'] += 1;
-                else if ($s === 'autorisation' || $s === 'maladie') $acc['autorisation'] += 1;
+                else if ($s === 'conge') {
+                    $acc['conge'] += 1;
+                    $code = strtoupper((string)($cell['arrivee'] ?? ''));
+                    if ($code === 'CM') $acc['total_cm'] += 1;
+                    elseif ($code === 'M') $acc['total_m'] += 1;
+                    elseif ($code === 'CC') $acc['total_cc'] += 1;
+                    elseif ($code === 'CA') $acc['total_ca'] += 1;
+                    elseif ($code) $acc['total_other_leave_types'] += 1;
+                }
+                else if ($s === 'autorisation' || $s === 'maladie') {
+                    $acc['autorisation'] += 1;
+                    $code = strtoupper((string)($cell['arrivee'] ?? ''));
+                    if ($code === 'CM') $acc['total_cm'] += 1;
+                    elseif ($code === 'M') $acc['total_m'] += 1;
+                    elseif ($code === 'CC') $acc['total_cc'] += 1;
+                    elseif ($code === 'CA') $acc['total_ca'] += 1;
+                    elseif ($code) $acc['total_other_leave_types'] += 1;
+                }
                 else if ($s === 'absence_justifiee') $acc['absence_justifiee'] += 1;
 
                 if (isset($cell['overtime_minutes'])) {

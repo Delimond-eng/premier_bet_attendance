@@ -62,6 +62,11 @@ function computeSummary(matrix, agentsByKey = {}) {
             autorisation: 0,
             retard_justifie: 0,
             absence_justifiee: 0,
+            total_cm: 0,
+            total_m: 0,
+            total_cc: 0,
+            total_ca: 0,
+            total_other_leave_types: 0,
             total_preste: 0,
             total_overtime_minutes: 0,
             total_late_minutes: 0,
@@ -69,6 +74,7 @@ function computeSummary(matrix, agentsByKey = {}) {
         Object.keys(days).forEach((d) => {
             const day = days[d] || {};
             const s = day.status;
+            const presenceCount = Number(day.presence_count || (s === 'double_shift' ? 2 : 1));
 
             if (day.depart === "AN") {
                 acc.an += 1;
@@ -81,10 +87,27 @@ function computeSummary(matrix, agentsByKey = {}) {
                 acc.present += 1;
                 acc.retard += 1;
                 acc.retard_justifie += 1;
+            } else if (s === "double_shift") {
+                acc.present += presenceCount;
+                if (day.late_first_checkin) acc.retard += 1;
             } else if (s === "absent") acc.absent += 1;
-            else if (s === "conge") acc.conge += 1;
-            else if (s === "autorisation" || s === "maladie") acc.autorisation += 1;
-            else if (s === "absence_justifiee") acc.absence_justifiee += 1;
+            else if (s === "conge") {
+                acc.conge += 1;
+                const leaveCode = String(day.arrivee || "").toUpperCase();
+                if (leaveCode === "CM") acc.total_cm += 1;
+                else if (leaveCode === "M") acc.total_m += 1;
+                else if (leaveCode === "CC") acc.total_cc += 1;
+                else if (leaveCode === "CA") acc.total_ca += 1;
+                else if (leaveCode) acc.total_other_leave_types += 1;
+            } else if (s === "autorisation" || s === "maladie") {
+                acc.autorisation += 1;
+                const leaveCode = String(day.arrivee || "").toUpperCase();
+                if (leaveCode === "CM") acc.total_cm += 1;
+                else if (leaveCode === "M") acc.total_m += 1;
+                else if (leaveCode === "CC") acc.total_cc += 1;
+                else if (leaveCode === "CA") acc.total_ca += 1;
+                else if (leaveCode) acc.total_other_leave_types += 1;
+            } else if (s === "absence_justifiee") acc.absence_justifiee += 1;
 
             if (day.overtime_minutes) {
                 acc.total_overtime_minutes += day.overtime_minutes;
@@ -110,6 +133,8 @@ function mapDayStatus(status, dayData = {}) {
     switch (status) {
         case "present":
             return { code: "1", cellClass: "badge-success", bucket: "presence" };
+        case "double_shift":
+            return { code: dayData.arrivee || "2", cellClass: "badge-success", bucket: "presence" };
         case "retard":
         case "retard_justifie":
             return { code: "1-R", cellClass: "bg-info text-white", bucket: "retard" };
@@ -120,9 +145,21 @@ function mapDayStatus(status, dayData = {}) {
         case "off":
             return { code: "OFF", cellClass: "bg-secondary text-white", bucket: "off" };
         case "conge":
-            return { code: "CONGE", cellClass: "bg-primary text-white", bucket: "conge" };
+            const cCode = dayData.arrivee || "C";
+            let cClass = "bg-primary text-white";
+            if (cCode === 'M') cClass = "bg-warning text-dark";
+            else if (cCode === 'CC') cClass = "bg-info text-white";
+            else if (cCode === 'CA') cClass = "bg-success text-white";
+            else if (cCode === 'CM') cClass = "bg-purple text-white";
+            return { code: cCode, cellClass: cClass, bucket: "conge" };
         case "autorisation":
-            return { code: "AS", cellClass: "bg-dark text-white", bucket: "autorisation" };
+            const aCode = dayData.arrivee || "AS";
+            let aClass = "bg-dark text-white";
+            if (aCode === 'M') aClass = "bg-warning text-dark";
+            else if (aCode === 'CC') aClass = "bg-info text-white";
+            else if (aCode === 'CA') aClass = "bg-success text-white";
+            else if (aCode === 'CM') aClass = "bg-purple text-white";
+            return { code: aCode, cellClass: aClass, bucket: "autorisation" };
         case "maladie":
             return { code: "M", cellClass: "bg-warning text-dark", bucket: "autorisation" };
         case "future":
@@ -138,6 +175,10 @@ function getStatusLabel(code, dayData = {}) {
     switch (code) {
         case "1":
             return "Présence";
+        case "2":
+            return "Double shift";
+        case "2 C-1":
+            return "Double shift avec retard";
         case "1-R":
             return "Présence avec retard";
         case "A":
@@ -146,17 +187,25 @@ function getStatusLabel(code, dayData = {}) {
             return "Entrée sans sortie";
         case "OFF":
             return "Repos";
+        case "C":
         case "CONGE":
             return "Congé";
+        case "CA":
+            return "Congé Annuel";
+        case "M":
+            return "Congé Maladie / Absence Maladie";
+        case "CC":
+            return "Congé de Circonstance";
+        case "CM":
+            return "Congé de Maternité";
         case "AS":
             return "Autorisation spéciale";
-        case "M":
-            return "Maladie";
         case "--":
             return "À venir";
         case "AUT":
             return "Autre";
         default:
+            if (dayData.type) return dayData.type;
             return "Statut";
     }
 }
@@ -243,7 +292,7 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             row.total_count += 1;
 
             if (mapped.bucket === "presence") {
-                row.total_presences += 1;
+                row.total_presences += (dayData.status === "double_shift") ? (Number(dayData.presence_count || 2)) : 1;
             } else if (mapped.bucket === "retard") {
                 row.total_presences += 1;
                 row.total_retards += 1;
@@ -311,6 +360,22 @@ new Vue({
             rows: [],
             detailedRows: [],
             dynamicDayKeys: [],
+            summaryTotals: {
+                present: 0,
+                retard: 0,
+                absent: 0,
+                an: 0,
+                conge: 0,
+                autorisation: 0,
+                retard_justifie: 0,
+                absence_justifiee: 0,
+                total_cm: 0,
+                total_m: 0,
+                total_cc: 0,
+                total_ca: 0,
+                total_other_leave_types: 0,
+                total_preste: 0,
+            },
         };
     },
 
@@ -433,6 +498,37 @@ new Vue({
                 // Filtrer localement par site_id masquerait les agents planifiés mais rattachés à une autre station.
                 this.rows = computeSummary(this.matrix, agentsByKey);
                 this.detailedRows = computeDetailedRows(this.matrix, agentsByKey, this.dynamicDayKeys);
+                this.summaryTotals = this.rows.reduce((totals, row) => ({
+                    present: totals.present + (row.present || 0),
+                    retard: totals.retard + (row.retard || 0),
+                    absent: totals.absent + (row.absent || 0),
+                    an: totals.an + (row.an || 0),
+                    conge: totals.conge + (row.conge || 0),
+                    autorisation: totals.autorisation + (row.autorisation || 0),
+                    retard_justifie: totals.retard_justifie + (row.retard_justifie || 0),
+                    absence_justifiee: totals.absence_justifiee + (row.absence_justifiee || 0),
+                    total_cm: totals.total_cm + (row.total_cm || 0),
+                    total_m: totals.total_m + (row.total_m || 0),
+                    total_cc: totals.total_cc + (row.total_cc || 0),
+                    total_ca: totals.total_ca + (row.total_ca || 0),
+                    total_other_leave_types: totals.total_other_leave_types + (row.total_other_leave_types || 0),
+                    total_preste: totals.total_preste + (row.total_preste || 0),
+                }), {
+                    present: 0,
+                    retard: 0,
+                    absent: 0,
+                    an: 0,
+                    conge: 0,
+                    autorisation: 0,
+                    retard_justifie: 0,
+                    absence_justifiee: 0,
+                    total_cm: 0,
+                    total_m: 0,
+                    total_cc: 0,
+                    total_ca: 0,
+                    total_other_leave_types: 0,
+                    total_preste: 0,
+                });
 
                 this.$nextTick(() => setTimeout(() => this.refreshActiveTable(), 0));
             } catch (e) {

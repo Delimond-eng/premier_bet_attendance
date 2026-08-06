@@ -1470,9 +1470,52 @@ class AdminController extends Controller
             ->orderByDesc('id')
             ->paginate($perPage);
 
-        $today = Carbon::today()->toDateString();
+        $today = Carbon::today('Africa/Kinshasa')->toDateString();
         $agentsBase = Agent::query()->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId));
-        $agentIds = $stationId !== null ? $agentsBase->pluck('id')->all() : null;
+        $agentIds = $stationId !== null ? $agentsBase->pluck('id')->all() : $agents->getCollection()->pluck('id')->all();
+
+        $presenceByAgent = PresenceAgents::query()
+            ->whereIn('agent_id', $agentIds)
+            ->whereDate('date_reference', $today)
+            ->whereNotNull('started_at')
+            ->get()
+            ->groupBy('agent_id');
+
+        $congesByAgent = Conge::query()
+            ->where('status', 'approved')
+            ->whereDate('date_debut', '<=', $today)
+            ->whereDate('date_fin', '>=', $today)
+            ->when($agentIds !== null, fn ($q) => $q->whereIn('agent_id', $agentIds))
+            ->get()
+            ->groupBy('agent_id');
+
+        $offDayAgentIds = AgentGroupPlanning::withoutGlobalScopes()
+            ->whereIn('agent_id', $agentIds)
+            ->whereDate('date', $today)
+            ->where('is_rest_day', true)
+            ->pluck('agent_id')
+            ->flip()
+            ->all();
+
+        $presenceStatuses = [];
+        foreach ($agentIds as $agentId) {
+            $presenceRows = $presenceByAgent->get($agentId, collect());
+            if ($presenceRows->isNotEmpty()) {
+                $latestPresence = $presenceRows->sortByDesc('started_at')->first();
+                $presenceStatuses[$agentId] = strtolower((string) ($latestPresence->retard ?? 'non')) === 'oui' ? 'retard' : 'present';
+            } elseif (isset($congesByAgent[$agentId])) {
+                $presenceStatuses[$agentId] = 'conge';
+            } elseif (isset($offDayAgentIds[$agentId])) {
+                $presenceStatuses[$agentId] = 'off';
+            } else {
+                $presenceStatuses[$agentId] = 'absent';
+            }
+        }
+
+        $agents->getCollection()->transform(function ($agent) use ($presenceStatuses) {
+            $agent->setAttribute('presence_status', $presenceStatuses[$agent->id] ?? 'absent');
+            return $agent;
+        });
 
         return response()->json([
             'status' => 'success',

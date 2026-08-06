@@ -207,7 +207,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/attributions.view', fn () => view('rh_attributions'))
             ->name('attributions.view')
             ->middleware('can:attributions.view');
-        Route::get('/authorizations.view', fn () => view('rh_authorizations'))
+        Route::get('/authorizations.view', function () {
+                $sites = \App\Models\Station::query()->orderBy('name')->get();
+
+                return view('rh_authorizations', compact('sites'));
+            })
             ->name('authorizations.view')
             ->middleware('can:authorizations.view');
         Route::get('/justifications.retard.view', fn () => view('rh_justifications_retard'))

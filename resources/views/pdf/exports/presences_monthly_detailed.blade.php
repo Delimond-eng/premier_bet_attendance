@@ -119,8 +119,11 @@
         .code-AN  { background-color: #fee2e2; color: #991b1b; border: 1px solid #991b1b !important; }
         .code-OFF { background-color: #f1f5f9; color: #94a3b8; }
         .code-CONGE { background-color: #eff6ff; color: #1e40af; }
+        .code-CA    { background-color: #dcfce7; color: #166534; }
+        .code-CC    { background-color: #e0f2fe; color: #075985; }
+        .code-CM    { background-color: #f3e8ff; color: #6b21a8; }
+        .code-M     { background-color: #fff9c4; color: #856404; }
         .code-AS  { background-color: #faf5ff; color: #6b21a8; }
-        .code-M   { background-color: #fff9c4; color: #856404; }
         .code-fut { color: #cbd5e1; background-color: #ffffff; }
 
         tbody tr:nth-child(even) { background-color: #ffffff; }
@@ -229,9 +232,11 @@
             <div class="legend-item"><span class="swatch code-A"></span> <strong>A</strong> : Absent / Justifié</div>
             <div class="legend-item"><span class="swatch code-AN"></span> <strong>AN</strong> : Entrée sans sortie</div>
             <div class="legend-item"><span class="swatch code-OFF"></span> <strong>OFF</strong> : Repos</div>
-            <div class="legend-item"><span class="swatch code-CONGE"></span> <strong>C</strong> : Congé</div>
-            <div class="legend-item"><span class="swatch code-AS"></span> <strong>AS</strong> : Autorisation</div>
+            <div class="legend-item"><span class="swatch code-CA"></span> <strong>CA</strong> : Congé Annuel</div>
+            <div class="legend-item"><span class="swatch code-CC"></span> <strong>CC</strong> : Congé Circonstance</div>
+            <div class="legend-item"><span class="swatch code-CM"></span> <strong>CM</strong> : Congé Maternité</div>
             <div class="legend-item"><span class="swatch code-M"></span> <strong>M</strong> : Maladie</div>
+            <div class="legend-item"><span class="swatch code-AS"></span> <strong>AS</strong> : Autorisation</div>
             <div class="legend-item"><strong>R.CUM</strong> : Retard Cumulé | <strong>H.SUP</strong> : Heures Supplémentaires</div>
         </div>
     </div>

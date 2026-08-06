@@ -1,4 +1,4 @@
-import { get, postJson } from "../modules/http.js";
+import {get, postJson } from "../modules/http.js";
 
 function destroyDatatable(tableEl) {
     const $ = window.$;
@@ -19,7 +19,9 @@ function initOrRefreshDatatable(tableEl) {
     $(tableEl).DataTable({
         bFilter: true,
         ordering: true,
-        order: [[2, "desc"]], // Sort by date
+        order: [
+            [2, "desc"]
+        ],
         info: true,
         language: {
             search: " ",
@@ -48,6 +50,11 @@ new Vue({
         return {
             isLoading: false,
             agents: [],
+            sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
+            station_id: "",
+            type_filter: "",
+            from_date: "",
+            to_date: "",
             authorizations: [],
             form: {
                 id: "",
@@ -64,14 +71,14 @@ new Vue({
     },
 
     watch: {
-        'form.type_select'(val) {
+        'form.type_select' (val) {
             if (val !== 'autre') {
                 this.form.type = val;
             } else {
                 this.form.type = this.form.type_autre;
             }
         },
-        'form.type_autre'(val) {
+        'form.type_autre' (val) {
             if (this.form.type_select === 'autre') {
                 this.form.type = val;
             }
@@ -86,14 +93,33 @@ new Vue({
     },
 
     methods: {
+        initStationSelect2() {
+            const $ = window.$;
+            const self = this;
+            const el = $(".select2-station");
+            if (!el.length || !$.fn.select2) return;
+
+            if (el.hasClass("select2-hidden-accessible")) {
+                el.select2('destroy');
+            }
+
+            el.select2({
+                width: '100%',
+                placeholder: 'Toutes les stations',
+                allowClear: true,
+            }).on("change", function() {
+                self.station_id = $(this).val() || "";
+            });
+        },
+
         async init() {
             try {
-                // Utilisation de reference pour avoir TOUS les agents sans pagination
                 const { data } = await get("/rh/conges/reference");
                 this.agents = data?.agents ?? [];
 
                 this.$nextTick(() => {
                     this.initSelect2();
+                    this.initStationSelect2();
                 });
             } catch (e) {
                 console.error("Erreur chargement agents", e);
@@ -124,7 +150,12 @@ new Vue({
             this.isLoading = true;
             try {
                 destroyDatatable(this.$refs.table);
-                const { data } = await get("/rh/authorizations?per_page=500");
+                const params = new URLSearchParams({ per_page: "500" });
+                if (this.station_id) params.set("station_id", this.station_id);
+                if (this.type_filter) params.set("type", this.type_filter);
+                if (this.from_date) params.set("from", this.from_date);
+                if (this.to_date) params.set("to", this.to_date);
+                const { data } = await get(`/rh/authorizations?${params.toString()}`);
                 this.authorizations = data?.authorizations?.data ?? [];
                 this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
             } catch (e) {
@@ -132,6 +163,10 @@ new Vue({
             } finally {
                 this.isLoading = false;
             }
+        },
+
+        onFiltersChange() {
+            this.load();
         },
 
         edit(a) {
@@ -195,7 +230,7 @@ new Vue({
                 window.$("#auth_modal").modal("hide");
                 this.reset();
                 await this.load();
-            } catch(e) {
+            } catch (e) {
                 console.error(e);
             } finally {
                 this.isLoading = false;
@@ -207,7 +242,7 @@ new Vue({
             if (!ok) return;
             this.isLoading = true;
             try {
-                const { data } = await postJson("/rh/authorizations/delete", { id: a.id });
+                await postJson("/rh/authorizations/delete", { id: a.id });
                 await this.load();
             } finally {
                 this.isLoading = false;

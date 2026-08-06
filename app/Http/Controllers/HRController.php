@@ -7,6 +7,7 @@ use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\CongeType;
+use App\Models\PresenceAgents;
 use App\Services\AttendanceReportService;
 use App\Support\ManagerStationContext;
 use Carbon\Carbon;
@@ -90,8 +91,14 @@ class HRController extends Controller
             ->when($request->query('agent_id'), fn ($q) => $q->where('agent_id', $request->query('agent_id')))
             ->when($request->query('status'), fn ($q) => $q->where('status', $request->query('status')))
             ->when($request->query('type'), fn ($q) => $q->where('type', $request->query('type')))
+            ->when($request->query('station_id'), function ($q) use ($request) {
+                $q->whereHas('agent', function ($qq) use ($request) {
+                    $qq->withoutGlobalScopes()->where('site_id', (int) $request->query('station_id'));
+                });
+            })
             ->when($request->query('from'), fn ($q) => $q->whereDate('date_reference', '>=', $request->query('from')))
             ->when($request->query('to'), fn ($q) => $q->whereDate('date_reference', '<=', $request->query('to')))
+            ->orderByDesc('date_reference')
             ->orderByDesc('id');
 
         $perPage = (int) ($request->query('per_page', 15));
@@ -116,6 +123,20 @@ class HRController extends Controller
             'status' => 'nullable|string|in:pending,approved,rejected',
         ]);
 
+        if (strtolower($data['type']) === 'double shift') {
+            $hasPresenceForDate = PresenceAgents::where('agent_id', $data['agent_id'])
+                ->whereDate('date_reference', $data['date_reference'])
+                ->whereNotNull('started_at')
+                ->exists();
+
+            if (!$hasPresenceForDate) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ["L'autorisation 'Double Shift' ne peut être créée sans présence existante pour cette date."]
+                ], 200);
+            }
+        }
+
         $data['approved_by'] = ($data['status'] ?? null) === 'approved' ? auth()->id() : null;
 
         $auth = AttendanceAuthorization::updateOrCreate(['id' => $data['id'] ?? null], $data);
@@ -137,6 +158,20 @@ class HRController extends Controller
             'comment' => 'nullable|string',
             'type' => 'required|string', // ex: 'retard'
         ]);
+
+        if (strtolower($data['type']) === 'double shift') {
+            $hasPresenceForDate = PresenceAgents::where('agent_id', $data['agent_id'])
+                ->whereDate('date_reference', $data['date'])
+                ->whereNotNull('started_at')
+                ->exists();
+
+            if (!$hasPresenceForDate) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ["L'autorisation 'Double Shift' ne peut être créée sans présence existante pour cette date."]
+                ], 200);
+            }
+        }
 
         $auth = AttendanceAuthorization::create([
             'agent_id' => $data['agent_id'],
