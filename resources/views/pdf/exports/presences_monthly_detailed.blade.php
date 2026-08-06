@@ -188,6 +188,11 @@
                     <th class="col-stat-summary" title="Retards (nombre)">RET</th>
                     <th class="col-stat-summary-large" title="Retard Cumulé">R.CUM</th>
                     <th class="col-stat-summary" title="Congés">CNG</th>
+                    <th class="col-stat-summary" title="T.CM">T.CM</th>
+                    <th class="col-stat-summary" title="T.M">T.M</th>
+                    <th class="col-stat-summary" title="T.CC">T.CC</th>
+                    <th class="col-stat-summary" title="T.CA">T.CA</th>
+                    <th class="col-stat-summary" title="T.C Autres">T.C Autres</th>
                     <th class="col-stat-summary-large" title="Heures Supplémentaires">H.SUP</th>
                     <th class="col-stat-summary" title="Repos">OFF</th>
                 </tr>
@@ -219,6 +224,11 @@
                         <td class="col-stat-summary" style="color: #075985;">{{ $r['total_retards'] ?? 0 }}</td>
                         <td class="col-stat-summary-large" style="color: #991b1b;">{{ $r['late_display'] ?? '0h' }}</td>
                         <td class="col-stat-summary">{{ $r['total_conges'] ?? 0 }}</td>
+                        <td class="col-stat-summary">{{ $r['total_cm'] ?? 0 }}</td>
+                        <td class="col-stat-summary">{{ $r['total_m'] ?? 0 }}</td>
+                        <td class="col-stat-summary">{{ $r['total_cc'] ?? 0 }}</td>
+                        <td class="col-stat-summary">{{ $r['total_ca'] ?? 0 }}</td>
+                        <td class="col-stat-summary">{{ $r['total_other_leave_types'] ?? 0 }}</td>
                         <td class="col-stat-summary-large" style="background-color: #fffbeb;">{{ $r['overtime_display'] ?? '0h' }}</td>
                         <td class="col-stat-summary">{{ $r['total_off'] ?? 0 }}</td>
                     </tr>

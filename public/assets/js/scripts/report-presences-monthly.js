@@ -221,11 +221,33 @@ function buildDayPopoverHtml(dayData = {}, code = "--") {
     };
 
     addLine("Type", dayData.type || null);
-    addLine("Entrée", dayData.arrivee || null);
-    addLine("Sortie", dayData.depart || null);
+
+    const formatDateTime = (v) => {
+        if (!v) return null;
+        try {
+            if (window.moment) {
+                const m = moment(v);
+                if (m.isValid()) return m.format('DD/MM/YYYY HH:mm');
+            }
+        } catch (e) {
+            // ignore
+        }
+        return v;
+    };
+
+    // Entrée: show time and date if available
+    const entreeTime = dayData.arrivee || null;
+    const entreeDate = dayData.date_debut ? formatDateTime(dayData.date_debut) : null;
+    const entreeDisplay = entreeTime && entreeDate ? `${entreeTime} — ${entreeDate}` : (entreeTime || entreeDate);
+    addLine("Entrée", entreeDisplay);
+
+    // Sortie: show time and date if available
+    const sortieTime = dayData.depart || null;
+    const sortieDate = dayData.date_fin ? formatDateTime(dayData.date_fin) : null;
+    const sortieDisplay = sortieTime && sortieDate ? `${sortieTime} — ${sortieDate}` : (sortieTime || sortieDate);
+    addLine("Sortie", sortieDisplay);
+
     addLine("Horaire", dayData.horaire || null);
-    addLine("Début", dayData.date_debut || null);
-    addLine("Fin", dayData.date_fin || null);
 
     // Gestion du motif d'absence
     let motif = dayData.motif || dayData.reason;
@@ -263,6 +285,11 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             total_retards: 0,
             total_autorisations: 0,
             total_conges: 0,
+            total_cm: 0,
+            total_m: 0,
+            total_cc: 0,
+            total_ca: 0,
+            total_other_leave_types: 0,
             total_off: 0,
             total_others: 0,
             total_overtime_minutes: 0,
@@ -303,8 +330,20 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
                 row.total_an += 1;
             } else if (mapped.bucket === "autorisation") {
                 row.total_autorisations += 1;
+                const aCode = String(dayData.arrivee || "").toUpperCase();
+                if (aCode === 'CM') row.total_cm += 1;
+                else if (aCode === 'M') row.total_m += 1;
+                else if (aCode === 'CC') row.total_cc += 1;
+                else if (aCode === 'CA') row.total_ca += 1;
+                else if (aCode) row.total_other_leave_types += 1;
             } else if (mapped.bucket === "conge") {
                 row.total_conges += 1;
+                const cCode = String(dayData.arrivee || "").toUpperCase();
+                if (cCode === 'CM') row.total_cm += 1;
+                else if (cCode === 'M') row.total_m += 1;
+                else if (cCode === 'CC') row.total_cc += 1;
+                else if (cCode === 'CA') row.total_ca += 1;
+                else if (cCode) row.total_other_leave_types += 1;
             } else if (mapped.bucket === "off") {
                 row.total_off += 1;
             } else {
@@ -436,6 +475,25 @@ new Vue({
             }
         },
 
+        formatDayHeader(d) {
+            try {
+                if (window.moment) {
+                    const m = moment(d);
+                    if (m.isValid()) {
+                        // weekday short (Mon -> Lun), and day number
+                        const weekday = m.format('ddd');
+                        const daynum = m.format('D');
+                        return `<div class="dp-day"><div class="dp-weekday">${weekday}</div><div class="dp-daynum">${daynum}</div></div>`;
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+            // fallback: truncate if too long
+            if (typeof d === 'string' && d.length > 6) return d.slice(0, 6);
+            return d;
+        },
+
         switchTab(tab) {
             if (this.activeTab === tab) return;
             this.activeTab = tab;
@@ -445,11 +503,24 @@ new Vue({
         refreshActiveTable() {
             if (this.activeTab === "details") {
                 destroyDatatable(this.$refs.tableRaw);
+                // Disable ordering/search on day columns (dynamic) to remove sort arrows
+                const dayCount = Array.isArray(this.dynamicDayKeys) ? this.dynamicDayKeys.length : 0;
+                const dayIndices = [];
+                for (let i = 0; i < dayCount; i += 1) {
+                    // columns: 0=Matricule,1=Nom,2=Station, then days start at index 3
+                    dayIndices.push(3 + i);
+                }
+                const columnDefs = [];
+                if (dayIndices.length) {
+                    columnDefs.push({ targets: dayIndices, orderable: false, searchable: false });
+                }
+
                 initOrRefreshDatatable(this.$refs.tableDetails, {
                     order: [
                         [1, "asc"]
                     ],
                     scrollX: true,
+                    columnDefs,
                 });
                 return;
             }

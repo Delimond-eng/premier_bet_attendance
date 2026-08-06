@@ -597,7 +597,7 @@ class ExportController extends Controller
             foreach ($days as $d) {
                 $headers[] = $d;
             }
-            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'H.Sup', 'OFF']);
+            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'H.Sup', 'OFF']);
 
             $table = [];
             foreach ($summarized as $r) {
@@ -618,6 +618,11 @@ class ExportController extends Controller
                 $row[] = (string) $r['late_display'];
                 $row[] = (int) $r['total_autorisations'];
                 $row[] = (int) $r['total_conges'];
+                $row[] = (int) ($r['total_cm'] ?? 0);
+                $row[] = (int) ($r['total_m'] ?? 0);
+                $row[] = (int) ($r['total_cc'] ?? 0);
+                $row[] = (int) ($r['total_ca'] ?? 0);
+                $row[] = (int) ($r['total_other_leave_types'] ?? 0);
                 $row[] = (string) $r['overtime_display'];
                 $row[] = (int) $r['total_off'];
                 $table[] = $row;

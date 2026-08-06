@@ -198,7 +198,7 @@
                             <th>Matricule</th>
                             <th>Nom complet agent & Fonction</th>
                             <th>Station</th>
-                            <th v-for="d in dynamicDayKeys" :key="'head-' + d" class="text-center attendance-day-head">@{{ d }}</th>
+                            <th v-for="d in dynamicDayKeys" :key="'head-' + d" class="text-center attendance-day-head" v-html="formatDayHeader(d)"></th>
                             <th>Total</th>
                             <th>Tot presences</th>
                             <th>Tot absences</th>
@@ -207,6 +207,11 @@
                             <th>Retard Cumulé</th>
                             <th>Tot autorisation</th>
                             <th>Tot congé</th>
+                            <th>TOT CM</th>
+                            <th>TOT M</th>
+                            <th>TOT CC</th>
+                            <th>TOT CA</th>
+                            <th>TOT Autres</th>
                             <th>Heures Sup</th>
                             <th>Tot OFF</th>
                             <th>Tot autres</th>
@@ -247,6 +252,11 @@
                             <td><span class="badge bg-danger-subtle text-danger">@{{ r.late_display }}</span></td>
                             <td>@{{ r.total_autorisations }}</td>
                             <td>@{{ r.total_conges }}</td>
+                            <td>@{{ r.total_cm }}</td>
+                            <td>@{{ r.total_m }}</td>
+                            <td>@{{ r.total_cc }}</td>
+                            <td>@{{ r.total_ca }}</td>
+                            <td>@{{ r.total_other_leave_types }}</td>
                             <td><span class="badge bg-warning text-dark">@{{ r.overtime_display }}</span></td>
                             <td>@{{ r.total_off }}</td>
                             <td>@{{ r.total_others }}</td>
@@ -263,13 +273,13 @@
     <style>
         .attendance-details-table th.attendance-day-head,
         .attendance-details-table td.attendance-day-cell {
-            min-width: 26px;
-            width: 26px;
-            max-width: 26px;
+            min-width: 22px;
+            width: 22px;
+            max-width: 22px;
             padding: 0 !important;
             text-align: center;
-            line-height: 1.1;
-            height: 34px;
+            line-height: 1.0;
+            height: 30px;
         }
 
         .attendance-day-badge {
@@ -279,7 +289,7 @@
             justify-content: center;
             width: 100%;
             height: 100%;
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
             border-radius: 0 !important;
             margin: 0 !important;
@@ -317,6 +327,27 @@
         .attendance-popover-value {
             text-align: right;
             color: #0f172a;
+        }
+
+        .dp-day {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            line-height: 1;
+        }
+
+        .dp-weekday {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: capitalize;
+        }
+
+        .dp-daynum {
+            font-size: 11px;
+            font-weight: 800;
+            margin-top: 0px;
         }
     </style>
 @endpush
