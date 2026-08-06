@@ -349,6 +349,25 @@
             font-weight: 800;
             margin-top: 0px;
         }
+
+        /* Dark popover theme for attendance details */
+        .popover.popover-dark {
+            --bs-popover-bg: #111827;
+            --bs-popover-border-color: #374151;
+            --bs-popover-color: #f8fafc;
+            box-shadow: 0 4px 12px rgba(2,6,23,0.6);
+        }
+
+        .popover.popover-dark .popover-header {
+            background: #0b1220;
+            color: #f8fafc;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .popover.popover-dark .popover-body {
+            background: transparent;
+            color: #f8fafc;
+        }
     </style>
 @endpush
 
@@ -368,6 +387,7 @@
                             placement: 'top',
                             sanitize: false,
                             container: 'body',
+                            template: '<div class="popover popover-dark" role="tooltip"><div class="popover-arrow"></div><h3 class="popover-header"></h3><div class="popover-body"></div></div>'
                         });
                     });
                 };
