@@ -52,7 +52,12 @@
                                 <a href="javascript:void(0);" class="me-2 text-info" @click="edit(t)"><i class="ti ti-edit"></i></a>
                                 @endcan
                                 @can('conges.delete')
-                                <a href="javascript:void(0);" class="text-danger" @click="remove(t)"><i class="ti ti-trash"></i></a>
+                                <template v-if="!t.is_protected">
+                                    <a href="javascript:void(0);" class="text-danger" @click="remove(t)"><i class="ti ti-trash"></i></a>
+                                </template>
+                                <template v-else>
+                                    <span class="text-muted" title="Type système non supprimable"><i class="ti ti-lock"></i></span>
+                                </template>
                                 @endcan
                             </td>
                         </tr>

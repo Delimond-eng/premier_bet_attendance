@@ -211,7 +211,7 @@
                             <th>TOT M</th>
                             <th>TOT CC</th>
                             <th>TOT CA</th>
-                            <th>TOT Autres</th>
+                            <th>TOT C.Autres</th>
                             <th>Heures Sup</th>
                             <th>Tot OFF</th>
                             <th>Tot autres</th>
@@ -275,11 +275,15 @@
         .attendance-details-table td.attendance-day-cell {
             min-width: 22px;
             width: 22px;
-            max-width: 22px;
+            max-width: 42px;
             padding: 0 !important;
             text-align: center;
             line-height: 1.0;
             height: 30px;
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
         }
 
         .attendance-day-badge {
@@ -297,7 +301,17 @@
 
         .attendance-details-table th.attendance-day-head {
             font-size: 11px;
-            padding: .2rem .1rem !important;
+            padding: .15rem .08rem !important;
+            max-width: 42px;
+            color: #000 !important;
+            text-shadow: none !important;
+        }
+
+        .attendance-details-table th.attendance-day-head .dp-day,
+        .attendance-details-table th.attendance-day-head .dp-daynum,
+        .attendance-details-table th.attendance-day-head .dp-month {
+            color: #000 !important;
+            text-shadow: none !important;
         }
 
         .attendance-popover-header {
@@ -329,6 +343,35 @@
             color: #0f172a;
         }
 
+                .attendance-popover-header {
+                    font-weight: 700;
+                    font-size: 12px;
+                    color: #0f172a;
+                    margin-bottom: 6px;
+                    padding-bottom: 4px;
+                    border-bottom: 1px solid rgba(148,163,184,0.25);
+                }
+
+                .attendance-popover-row {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 12px;
+                    font-size: 11px;
+                    color: #0f172a;
+                    line-height: 1.4;
+                    white-space: normal;
+                }
+
+                .attendance-popover-key {
+                    font-weight: 600;
+                    color: #334155;
+                }
+
+                .attendance-popover-value {
+                    text-align: right;
+                    color: #0f172a;
+                }
+
         .dp-day {
             display: flex;
             flex-direction: column;
@@ -336,37 +379,21 @@
             justify-content: center;
             gap: 0;
             line-height: 1;
-        }
-
-        .dp-weekday {
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: capitalize;
+            min-width: 30px;
         }
 
         .dp-daynum {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
             margin-top: 0px;
+            color: #0f172a;
         }
 
-        /* Dark popover theme for attendance details */
-        .popover.popover-dark {
-            --bs-popover-bg: #111827;
-            --bs-popover-border-color: #374151;
-            --bs-popover-color: #f8fafc;
-            box-shadow: 0 4px 12px rgba(2,6,23,0.6);
-        }
-
-        .popover.popover-dark .popover-header {
-            background: #0b1220;
-            color: #f8fafc;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .popover.popover-dark .popover-body {
-            background: transparent;
-            color: #f8fafc;
+        .dp-month {
+            font-size: 8px;
+            font-weight: 600;
+            margin-top: 0px;
+            color: rgba(15,23,42,0.8);
         }
     </style>
 @endpush
@@ -386,8 +413,7 @@
                             trigger: 'hover focus',
                             placement: 'top',
                             sanitize: false,
-                            container: 'body',
-                            template: '<div class="popover popover-dark" role="tooltip"><div class="popover-arrow"></div><h3 class="popover-header"></h3><div class="popover-body"></div></div>'
+                            container: 'body'
                         });
                     });
                 };

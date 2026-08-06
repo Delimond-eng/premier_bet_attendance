@@ -42,6 +42,11 @@
             <th>Tot retard</th>
             <th>Tot autorisation</th>
             <th>Tot conge</th>
+            <th>Tot CM</th>
+            <th>Tot M</th>
+            <th>Tot CC</th>
+            <th>Tot CA</th>
+            <th>Tot C.Autres</th>
             <th>Tot OFF</th>
             <th>Tot autres</th>
         </tr>
@@ -77,6 +82,11 @@
                 <td>{{ $r['total_retards'] ?? 0 }}</td>
                 <td>{{ $r['total_autorisations'] ?? 0 }}</td>
                 <td>{{ $r['total_conges'] ?? 0 }}</td>
+                <td>{{ $r['total_cm'] ?? 0 }}</td>
+                <td>{{ $r['total_m'] ?? 0 }}</td>
+                <td>{{ $r['total_cc'] ?? 0 }}</td>
+                <td>{{ $r['total_ca'] ?? 0 }}</td>
+                <td>{{ $r['total_other_leave_types'] ?? 0 }}</td>
                 <td>{{ $r['total_off'] ?? 0 }}</td>
                 <td>{{ $r['total_others'] ?? 0 }}</td>
             </tr>

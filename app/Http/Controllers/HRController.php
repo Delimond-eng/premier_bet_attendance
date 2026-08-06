@@ -69,7 +69,15 @@ class HRController extends Controller
             'id' => 'required|integer|exists:conge_types,id',
         ]);
 
-        CongeType::whereKey($data['id'])->delete();
+        $type = CongeType::findOrFail($data['id']);
+        if ($type->isProtectedType()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ce type de congé ne peut pas être supprimé.',
+            ], 403);
+        }
+
+        $type->delete();
 
         return response()->json([
             'status' => 'success',

@@ -478,20 +478,23 @@ new Vue({
         formatDayHeader(d) {
             try {
                 if (window.moment) {
-                    const m = moment(d);
+                    const m = moment(d, ['D/M', 'DD/MM', 'D/MM', 'DD/M'], true);
                     if (m.isValid()) {
-                        // weekday short (Mon -> Lun), and day number
-                        const weekday = m.format('ddd');
-                        const daynum = m.format('D');
-                        return `<div class="dp-day"><div class="dp-weekday">${weekday}</div><div class="dp-daynum">${daynum}</div></div>`;
+                        if (!(this && this.useRange)) {
+                            return String(d);
+                        }
+
+                        // For range: show month (top) and day (bottom) like PDF, using numeric month/day
+                        const month = m.format('MM');
+                        const daynum = m.format('DD');
+                        return `<div class="dp-day"><div class="dp-month">${month}</div><div class="dp-daynum">${daynum}</div></div>`;
                     }
                 }
             } catch (e) {
                 // ignore
             }
-            // fallback: truncate if too long
-            if (typeof d === 'string' && d.length > 6) return d.slice(0, 6);
-            return d;
+            // fallback: keep original label if parse fails
+            return String(d);
         },
 
         switchTab(tab) {
