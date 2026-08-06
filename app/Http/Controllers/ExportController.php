@@ -456,6 +456,7 @@ class ExportController extends Controller
             metaLines: $payload['meta'],
             headers: $payload['headers'],
             rows: $payload['table'],
+            legendLines: $payload['legend'] ?? [],
         );
     }
 
@@ -671,6 +672,13 @@ class ExportController extends Controller
             'Agents: ' . count($table),
         ];
 
+        $legend = [
+            'Légende des codes :',
+            '1 = Présent, 1-R = Retard, A = Absent, AN = Entrée sans sortie',
+            'OFF = Repos, AUT = Autre',
+            'CA = Congé Annuel, CC = Congé Circonstance, CM = Congé Maternité, M = Maladie, AS = Autorisation',
+        ];
+
         return [
             'title' => $title,
             'sheet_title' => $sheetTitle,
@@ -684,7 +692,8 @@ class ExportController extends Controller
             'from' => $start->toDateString(),
             'to' => $end->toDateString(),
             'station' => $station,
-            'days' => $days
+            'days' => $days,
+            'legend' => $legend,
         ];
     }
 
@@ -1705,10 +1714,15 @@ class ExportController extends Controller
         return $res;
     }
 
-    private function downloadXlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows): StreamedResponse
+    private function downloadXlsx(string $filename, string $sheetTitle, array $metaLines, array $headers, array $rows, array $legendLines = []): StreamedResponse
     {
-        return new StreamedResponse(function () use ($sheetTitle, $metaLines, $headers, $rows) {
+        return new StreamedResponse(function () use ($sheetTitle, $metaLines, $headers, $rows, $legendLines) {
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $spreadsheet->getDefaultStyle()
+                ->getFont()
+                ->setName('Arial')
+                ->setSize(10);
+
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle(substr($sheetTitle, 0, 31));
 
@@ -1724,6 +1738,10 @@ class ExportController extends Controller
             foreach ($metaLines as $line) {
                 $sheet->setCellValue("A{$r}", (string) $line);
                 $sheet->mergeCells("A{$r}:{$lastCol}{$r}");
+                $sheet->getStyle("A{$r}:{$lastCol}{$r}")
+                    ->getFont()
+                    ->setItalic(true)
+                    ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_DARKGREEN));
                 $r += 1;
             }
 
@@ -1738,7 +1756,13 @@ class ExportController extends Controller
                 ->getFont()->setBold(true);
             $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")
                 ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-                ->getStartColor()->setARGB('FFEFEFEF');
+                ->getStartColor()->setARGB('FF3C8DBC');
+            $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")
+                ->getFont()
+                ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE));
+            $sheet->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")
+                ->getAlignment()
+                ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
             $r += 1;
             foreach ($rows as $row) {
@@ -1746,7 +1770,29 @@ class ExportController extends Controller
                     $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
                     $sheet->setCellValue("{$col}{$r}", $val);
                 }
+                if ($r % 2 === 0) {
+                    $sheet->getStyle("A{$r}:{$lastCol}{$r}")
+                        ->getFill()
+                        ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                        ->getStartColor()
+                        ->setARGB('FFF7FBFE');
+                }
                 $r += 1;
+            }
+
+            if (!empty($legendLines)) {
+                $r += 1;
+                foreach ($legendLines as $line) {
+                    $sheet->setCellValue("A{$r}", $line);
+                    $sheet->mergeCells("A{$r}:{$lastCol}{$r}");
+                    $sheet->getStyle("A{$r}:{$lastCol}{$r}")
+                        ->getFont()
+                        ->setItalic(true);
+                    $sheet->getStyle("A{$r}:{$lastCol}{$r}")
+                        ->getAlignment()
+                        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+                    $r += 1;
+                }
             }
 
             $sheet->freezePane('A' . ($headerRow + 1));
@@ -1764,16 +1810,12 @@ class ExportController extends Controller
                 ->getAllBorders()
                 ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
                 ->getColor()
-                ->setARGB('FFE5E7EB');
+                ->setARGB('FFB8C7D2');
 
             $sheet->getStyle($dataRange)
                 ->getAlignment()
                 ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
                 ->setWrapText(true);
-
-            $sheet->getStyle("A{$headerRow}:{$lastColumn}{$headerRow}")
-                ->getAlignment()
-                ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save('php://output');
