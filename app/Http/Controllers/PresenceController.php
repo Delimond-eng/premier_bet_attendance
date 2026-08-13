@@ -94,6 +94,32 @@ class PresenceController extends Controller
                     ], 200);
                 }
             }
+
+            // ELECTROCOOL: Exiger les coordonnées et bloquer les pointages trop éloignés (> 2km)
+            try {
+                $host = $request->getHost();
+                if (is_string($host) && str_contains($host, 'electrocool')) {
+                    // Exiger la triangulation
+                    if (empty($data['coordonnees'])) {
+                        return response()->json([
+                            'status' => 'error',
+                            'errors' => ['Coordonnées GPS requises pour le pointage via electrocool.'],
+                        ], 200);
+                    }
+
+                    // Calculer la distance et refuser si > 2000 m
+                    $geo = $this->buildGenericGeoContext($stationId, $data['coordonnees'] ?? null);
+                    if (!empty($geo['distance_meters']) && $geo['distance_meters'] > 2000) {
+                        return response()->json([
+                            'status' => 'error',
+                            'errors' => ["Pointage refusé: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."],
+                        ], 200);
+                    }
+                }
+            } catch (\Throwable $_) {
+                // En cas d'erreur de calcul, logguer sans bloquer (fail-safe)
+                Log::warning('Distance check failed for electrocool host', ['err' => $_->getMessage()]);
+            }
         }
 
         $horaire = null;
