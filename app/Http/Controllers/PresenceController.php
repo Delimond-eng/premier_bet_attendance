@@ -108,8 +108,8 @@ class PresenceController extends Controller
                     }
 
                     // Calculer la distance et refuser si > 2000 m
-                    $geo = $this->buildGenericGeoContext($stationId, $data['coordonnees'] ?? null);
-                    if (!empty($geo['distance_meters']) && $geo['distance_meters'] > 2000) {
+                            $geo = $this->buildGenericGeoContext($stationId, $data['coordonnees'] ?? null);
+                            if (!empty($geo['distance_meters']) && $geo['distance_meters'] > 1000) {
                         return response()->json([
                             'status' => 'error',
                             'errors' => ["Pointage refusé: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."],
@@ -214,6 +214,41 @@ class PresenceController extends Controller
         }
         $coordonnees = $data['coordonnees'] ?? null;
 
+        // Central GPS blocking check for check-in, check-out and confirmation
+        if (!empty($coordonnees) && in_array($data['key'], ['check-in', 'check-out', 'confirmation'], true)) {
+            try {
+                $geoStationId = null;
+                if ($data['key'] === 'confirmation') {
+                    $openPresence = PresenceAgents::withoutGlobalScopes()
+                        ->where('agent_id', $agent->id)
+                        ->whereDate('date_reference', $dateReference->toDateString())
+                        ->whereNotNull('started_at')
+                        ->whereNull('ended_at')
+                        ->orderByDesc('started_at')
+                        ->first();
+
+                    $geoStationId = $openPresence ? ($openPresence->station_check_in_id ?: $openPresence->gps_site_id ?: $openPresence->site_id) : null;
+                } else {
+                    $geoStationId = $stationId;
+                }
+
+                if ($geoStationId) {
+                    $geo = $this->buildGenericGeoContext((int) $geoStationId, $coordonnees);
+                    if (!empty($geo['station_blockedgps']) && !empty($geo['distance_meters']) && $geo['distance_meters'] > ($geo['station_gps_meter'] ?? 1000)) {
+                        $msg = $data['key'] === 'check-out'
+                            ? "Sortie refusée: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."
+                            : ($data['key'] === 'confirmation'
+                                ? "Confirmation refusee: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."
+                                : "Pointage refusé: vous êtes trop éloigné de la station ({$geo['distance_meters']} m).");
+
+                        return response()->json(['status' => 'error', 'errors' => [$msg]], 200);
+                    }
+                }
+            } catch (\Throwable $_) {
+                Log::warning('Central GPS distance check failed', ['err' => $_->getMessage()]);
+            }
+        }
+
         try {
             return DB::transaction(function () use ($data, $agent, $assignedStationId, $stationId, $horaire, $dateReference, $now, $photoDebut, $photoFin, $coordonnees) {
                 if ($data['key'] === 'check-in') {
@@ -232,7 +267,7 @@ class PresenceController extends Controller
                     return $this->handleMaintenanceOut($agent, $stationId, $now, $photoFin, $coordonnees);
                 }
 
-                return $this->handleMidCheckConfirmation($agent, $dateReference, $now);
+                return $this->handleMidCheckConfirmation($agent, $dateReference, $now, $coordonnees);
             });
         } catch (\Throwable $e) {
             Log::error('createPresenceAgent failed', [
@@ -423,7 +458,7 @@ class PresenceController extends Controller
     {
         $station = Station::query()
             ->withoutGlobalScopes()
-            ->find($stationId, ['id', 'name', 'latlng']);
+            ->find($stationId, ['id', 'name', 'latlng', 'gps_meter', 'blockedgps']);
 
         $stationLatLng = $station?->latlng ? trim((string) $station->latlng) : null;
         $agentLatLng = $coordonnees ? trim((string) $coordonnees) : null;
@@ -433,7 +468,6 @@ class PresenceController extends Controller
 
         $distanceMeters = null;
         $isOnStation = null;
-
         if ($stationPoint && $agentPoint) {
             $distanceMeters = $this->calculateDistanceMeters(
                 $agentPoint['lat'],
@@ -441,7 +475,9 @@ class PresenceController extends Controller
                 $stationPoint['lat'],
                 $stationPoint['lng']
             );
-            $isOnStation = $distanceMeters <= 500;
+
+            $gpsMeter = $station?->gps_meter ?? 1000;
+            $isOnStation = $distanceMeters <= $gpsMeter;
         }
 
         return [
@@ -449,6 +485,8 @@ class PresenceController extends Controller
             'agent_latlng' => $agentLatLng,
             'distance_meters' => $distanceMeters,
             'is_on_station' => $isOnStation,
+            'station_gps_meter' => $station?->gps_meter ?? 1000,
+            'station_blockedgps' => $station?->blockedgps ?? false,
         ];
     }
 
@@ -465,7 +503,7 @@ class PresenceController extends Controller
         return $line;
     }
 
-    private function handleMidCheckConfirmation(Agent $agent, Carbon $dateReference, Carbon $now): JsonResponse
+    private function handleMidCheckConfirmation(Agent $agent, Carbon $dateReference, Carbon $now, ?string $coordonnees = null): JsonResponse
     {
         $presence = PresenceAgents::query()
             ->where('agent_id', $agent->id)
@@ -481,6 +519,14 @@ class PresenceController extends Controller
 
         if (!empty($presence->mid_check)) {
             return response()->json(['status' => 'error', 'errors' => ['Confirmation deja effectuee.']], 200);
+        }
+
+        // Vérification GPS pour confirmation (si coordonnées fournies) — commentaire maintenu
+        if ($coordonnees) {
+            $stationId = $presence->station_check_in_id ?: $presence->gps_site_id ?: $presence->site_id;
+            if ($stationId) {
+                $geo = $this->buildGenericGeoContext($stationId, $coordonnees);
+            }
         }
 
         $presence->update([

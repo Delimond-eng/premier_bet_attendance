@@ -95,9 +95,54 @@ class DeviceManagementController extends Controller
         }
     }
 
+    /**
+     * Envoyer une commande FCM 'update' à un terminal spécifique ou à tous.
+     * La route attend un paramètre 'imei' en GET si on veut cibler un seul appareil.
+     */
+    public function sendFcmUpdate(Request $request)
+    {
+        $imei = $request->query('imei');
+
+        // Construction dynamique de l'URL basée sur le host actuel (ex: https://domaine.com/terminal.apk)
+        $updateUrl = url('/terminal.apk');
+
+        $query = MobileDevice::whereNotNull('firebase_token');
+
+        if ($imei) {
+            $query->where('imei', $imei);
+        }
+
+        $devices = $query->get();
+
+        if ($devices->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Aucun terminal trouvé avec un token Firebase.'
+            ], 404);
+        }
+
+        $sentCount = 0;
+        foreach ($devices as $device) {
+            try {
+                $this->fcmService->sendMdmCommand($device->firebase_token, 'update', [
+                    'url' => $updateUrl
+                ]);
+                $sentCount++;
+            } catch (\Exception $e) {
+                Log::error("Erreur envoi FCM update vers {$device->imei}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Commande update envoyée à $sentCount terminal(aux).",
+            'url' => $updateUrl
+        ]);
+    }
+
     public function testFcm()
     {
-        Log::info("Test FCM global initié par l'utilisateur: " . auth()->user()->name);
+        Log::info("Test FCM global initié.");
 
         $devices = MobileDevice::whereNotNull('firebase_token')->get();
 
@@ -114,7 +159,6 @@ class DeviceManagementController extends Controller
                     "Le service de synchronisation est opérationnel sur ce terminal."
                 );
                 $successCount++;
-                Log::info("Test FCM envoyé avec succès au terminal: " . $device->imei);
             } catch (\Exception $e) {
                 Log::error("Échec test FCM pour terminal " . $device->imei . ": " . $e->getMessage());
             }
@@ -122,7 +166,7 @@ class DeviceManagementController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Test envoyé à $successCount terminal(aux). Vérifiez les logs pour les détails."
+            'message' => "Test envoyé à $successCount terminal(aux)."
         ]);
     }
 

@@ -15,7 +15,12 @@ class Station extends Model
     protected $table = 'sites';
     protected $fillable = [
         "name", "type", "code", "latlng", "adresse", "phone", "emails",
-        "presence", "status"
+        "presence", "status", "blockedgps", "gps_meter"
+    ];
+
+    protected $casts = [
+        'blockedgps' => 'boolean',
+        'gps_meter' => 'integer',
     ];
 
     protected static function booted(): void

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\DeviceManagementController;
 use App\Http\Controllers\Api\BiometricApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,7 +28,11 @@ Route::middleware(["cors"])->group(function () {
         Route::get('/tasks', [TaskController::class, 'getTerminalTasks']);
         Route::post('/tasks/completion', [TaskController::class, 'completeTask']);
     });
-    // Biometric Synchronization
+
+    // Device & MDM Management
+    Route::get('/devices/send-update', [DeviceManagementController::class, 'sendFcmUpdate']);
     Route::post('/devices/register', [BiometricApiController::class, 'registerDevice']);
+
+    // Biometric Synchronization
     Route::post('/biometrics/by-matricules', [BiometricApiController::class, 'getEmbeddingsByMatricules']);
 });
