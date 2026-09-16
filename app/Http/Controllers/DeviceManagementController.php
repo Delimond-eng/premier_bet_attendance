@@ -333,7 +333,7 @@ class DeviceManagementController extends Controller
     public function sendFcmUpdate(Request $request)
     {
         $imei = $request->query('imei');
-        $updateUrl = 'https://md.salama-drc.com/terminal.apk';
+        $updateUrl = url('/terminal.apk');
 
         $query = MobileDevice::whereNotNull('firebase_token');
 
@@ -353,9 +353,7 @@ class DeviceManagementController extends Controller
         $sentCount = 0;
         foreach ($devices as $device) {
             try {
-                $this->fcmService->sendMdmCommand($device->firebase_token, 'update', [
-                    'url' => $updateUrl
-                ]);
+                $this->fcmService->sendUpdate($device->firebase_token, $updateUrl);
                 $sentCount++;
             } catch (\Exception $e) {
                 Log::error("Erreur envoi FCM update vers {$device->imei}: " . $e->getMessage());

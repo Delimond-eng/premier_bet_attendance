@@ -89,6 +89,23 @@ class FcmService
         ]);
     }
 
+    public function sendUpdate(string $token, string $url)
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'data' => [
+                    'type' => 'update',
+                    'url' => $url,
+                    'sent_at' => now()->toIso8601String(),
+                ],
+                'android' => [
+                    'priority' => 'high',
+                ],
+            ]
+        ]);
+    }
+
     public function sendFaceListRequest(string $token, string $requestId)
     {
         return $this->send([

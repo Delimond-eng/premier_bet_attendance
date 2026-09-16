@@ -422,11 +422,11 @@ $(document).ready(function() {
                 data: { _token: '{{ csrf_token() }}' },
                 success: function(response) {
                     if (response.success) {
-                        Swal.fire('Commande envoyée', response.message, 'success');
+                        Swal.fire('Requête envoyée', '', 'success');
                     }
                 },
                 error: function(xhr) {
-                    let msg = 'Erreur lors de l\'envoi de la commande FACE_LIST.';
+                    let msg = 'Erreur lors de l\'envoi de la requête.';
                     if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
                     Swal.fire('Erreur', msg, 'error');
                 },
