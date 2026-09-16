@@ -51,7 +51,10 @@ new Vue({
             isLoading: false,
             agents: [],
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
+            regions: Array.isArray(window.__REGIONS__) ? window.__REGIONS__ : [],
             station_id: "",
+            region_id: "",
+            city_id: "",
             type_filter: "",
             from_date: "",
             to_date: "",
@@ -66,6 +69,14 @@ new Vue({
                 minutes: "",
                 reason: "",
                 status: "pending",
+            },
+            globalForm: {
+                region_id: "",
+                city_id: "",
+                date_reference: new Date().toISOString().slice(0, 10),
+                type: "retard",
+                minutes: "",
+                reason: "",
             },
         };
     },
@@ -89,10 +100,61 @@ new Vue({
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
         }
+        this.$nextTick(() => {
+            this.initRegionFilterSelect2();
+            this.initCityFilterSelect2();
+            this.initGlobalRegionSelect2();
+            this.initGlobalCitySelect2();
+        });
         this.init();
     },
 
     methods: {
+        citiesForRegion(regionId) {
+            const region = this.regions.find((item) => String(item.id) === String(regionId));
+            return region && Array.isArray(region.city_records) ? region.city_records : [];
+        },
+
+        initRegionFilterSelect2() {
+            this.bindSelect2(this.$refs.regionFilterSelect, "Toutes les régions", (value) => {
+                this.region_id = value;
+                this.city_id = "";
+                this.$nextTick(() => this.initCityFilterSelect2());
+                this.load();
+            });
+        },
+
+        initCityFilterSelect2() {
+            this.bindSelect2(this.$refs.cityFilterSelect, "Toutes les cités", (value) => {
+                this.city_id = value;
+                this.load();
+            });
+        },
+
+        initGlobalRegionSelect2() {
+            this.bindSelect2(this.$refs.globalRegionSelect, "Sélectionner une région", (value) => {
+                this.globalForm.region_id = value;
+                this.globalForm.city_id = "";
+                this.$nextTick(() => this.initGlobalCitySelect2());
+            }, "#global_auth_modal");
+        },
+
+        initGlobalCitySelect2() {
+            this.bindSelect2(this.$refs.globalCitySelect, "Toutes les cités", (value) => {
+                this.globalForm.city_id = value;
+            }, "#global_auth_modal");
+        },
+
+        bindSelect2(element, placeholder, onChange, dropdownParent = null) {
+            const $ = window.$;
+            if (!element || !$ || !$.fn.select2) return;
+            const el = $(element);
+            if (el.hasClass("select2-hidden-accessible")) el.select2("destroy");
+            el.select2({ width: "100%", placeholder, allowClear: true, ...(dropdownParent ? { dropdownParent: $(dropdownParent) } : {}) });
+            el.off("change.rhAuth").on("change.rhAuth", () => onChange(el.val() || ""));
+            el.val(element.value || "").trigger("change.select2");
+        },
+
         initStationSelect2() {
             const $ = window.$;
             const self = this;
@@ -152,6 +214,8 @@ new Vue({
                 destroyDatatable(this.$refs.table);
                 const params = new URLSearchParams({ per_page: "500" });
                 if (this.station_id) params.set("station_id", this.station_id);
+                if (this.region_id) params.set("region_id", this.region_id);
+                if (this.city_id) params.set("city_id", this.city_id);
                 if (this.type_filter) params.set("type", this.type_filter);
                 if (this.from_date) params.set("from", this.from_date);
                 if (this.to_date) params.set("to", this.to_date);
@@ -167,6 +231,41 @@ new Vue({
 
         onFiltersChange() {
             this.load();
+        },
+
+        resetGlobalForm() {
+            this.globalForm = {
+                region_id: "",
+                city_id: "",
+                date_reference: new Date().toISOString().slice(0, 10),
+                type: "retard",
+                minutes: "",
+                reason: "",
+            };
+            this.$nextTick(() => {
+                this.initGlobalRegionSelect2();
+                this.initGlobalCitySelect2();
+            });
+        },
+
+        async saveGlobal() {
+            if (!this.globalForm.region_id || !this.globalForm.date_reference) {
+                alert("Veuillez sélectionner une région et une date.");
+                return;
+            }
+            this.isLoading = true;
+            try {
+                const { data } = await postJson("/rh/authorizations/global", this.globalForm);
+                if (data?.errors) {
+                    alert(data.errors.join("\n"));
+                    return;
+                }
+                window.$("#global_auth_modal").modal("hide");
+                alert(data?.message || "Autorisation globale accordée.");
+                await this.load();
+            } finally {
+                this.isLoading = false;
+            }
         },
 
         edit(a) {

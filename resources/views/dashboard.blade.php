@@ -53,31 +53,31 @@
                             <div class="col-6 col-md">
                                 <div class="text-center">
                                     <h3 class="main-title mb-1">@{{ counts.presences }}</h3>
-                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-primary me-1"></span>Présents</p>
+                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line me-1" style="background-color: #03C95A;"></span>Présents</p>
                                 </div>
                             </div>
                             <div class="col-6 col-md">
                                 <div class="text-center">
                                     <h3 class="main-title mb-1">@{{ counts.retards }}</h3>
-                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-secondary me-1"></span>Retards</p>
+                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line me-1" style="background-color: #FFC107;"></span>Retards</p>
                                 </div>
                             </div>
                             <div class="col-6 col-md">
                                 <div class="text-center">
                                     <h3 class="main-title mb-1">@{{ counts.absents }}</h3>
-                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-light me-1"></span>Absents</p>
+                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line me-1" style="background-color: #E70D0D;"></span>Absents</p>
                                 </div>
                             </div>
                             <div class="col-6 col-md">
                                 <div class="text-center">
                                     <h3 class="main-title mb-1">@{{ counts.repos }}</h3>
-                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-secondary me-1"></span>Repos</p>
+                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line me-1" style="background-color: #6C757D;"></span>Repos</p>
                                 </div>
                             </div>
                             <div class="col-6 col-md">
                                 <div class="text-center">
                                     <h3 class="main-title mb-1">@{{ counts.conges }}</h3>
-                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line bg-purple me-1"></span>Congés</p>
+                                    <p class="d-inline-flex align-items-center mb-0"><span class="chart-line me-1" style="background-color: #6F42C1;"></span>Congés</p>
                                 </div>
                             </div>
                         </div>

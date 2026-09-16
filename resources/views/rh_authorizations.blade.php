@@ -16,9 +16,26 @@
                 </nav>
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
+                <div style="width: 190px;" class="mb-2">
+                    <select class="form-select select2-region-filter" ref="regionFilterSelect" v-model="region_id">
+                        <option value="">Toutes les régions</option>
+                        @foreach($regions ?? [] as $region)
+                            <option value="{{ $region->id }}">{{ $region->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="width: 190px;" class="mb-2">
+                    <select class="form-select select2-city-filter" ref="cityFilterSelect" v-model="city_id" :disabled="!region_id">
+                        <option value="">Toutes les cités</option>
+                        <option v-for="city in citiesForRegion(region_id)" :key="city.id" :value="String(city.id)">@{{ city.name }}</option>
+                    </select>
+                </div>
                 @can('authorizations.create')
                 <button class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#auth_modal" @click="reset">
                     <i class="ti ti-circle-plus me-2"></i>Ajouter
+                </button>
+                <button class="btn btn-info mb-2" data-bs-toggle="modal" data-bs-target="#global_auth_modal" @click="resetGlobalForm">
+                    <i class="ti ti-users-plus me-2"></i>Autorisation globale
                 </button>
                 @endcan
             </div>
@@ -187,12 +204,73 @@
             </div>
         </div>
         @endcanany
+
+        @can('authorizations.create')
+        <div class="modal fade" id="global_auth_modal" aria-modal="true" role="dialog">
+            <div class="modal-dialog modal-dialog-centered modal-md">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4 class="modal-title">Autorisation globale</h4>
+                        <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close"><i class="ti ti-x"></i></button>
+                    </div>
+                    <form @submit.prevent="saveGlobal">
+                        <div class="modal-body">
+                            <div class="alert alert-soft-info">L'autorisation sera créée pour tous les agents de la région et de la cité sélectionnées.</div>
+                            <div class="mb-3">
+                                <label class="form-label">Région <span class="text-danger">*</span></label>
+                                <select class="form-select select2-global-region" ref="globalRegionSelect" v-model="globalForm.region_id">
+                                    <option value="">Sélectionner une région</option>
+                                    @foreach($regions ?? [] as $region)
+                                        <option value="{{ $region->id }}">{{ $region->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Cité</label>
+                                <select class="form-select select2-global-city" ref="globalCitySelect" v-model="globalForm.city_id" :disabled="!globalForm.region_id">
+                                    <option value="">Toutes les cités de la région</option>
+                                    <option v-for="city in citiesForRegion(globalForm.region_id)" :key="city.id" :value="String(city.id)">@{{ city.name }}</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" v-model="globalForm.date_reference">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Type <span class="text-danger">*</span></label>
+                                <select class="form-select" v-model="globalForm.type">
+                                    <option value="retard">Retard</option>
+                                    <option value="absence">Absence</option>
+                                    <option value="depart">Départ (Sortie)</option>
+                                    <option value="double shift">Double Shift</option>
+                                    <option value="autre">Autre...</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Minutes</label>
+                                <input type="number" min="0" class="form-control" v-model="globalForm.minutes">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Motif</label>
+                                <textarea class="form-control" v-model="globalForm.reason"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+                            <button type="submit" class="btn btn-info" :disabled="isLoading">Accorder l'autorisation</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        @endcan
     </div>
 @endsection
 
 @push("scripts")
     <script>
         window.__SITES__ = @json($sites);
+        window.__REGIONS__ = @json($regions ?? []);
     </script>
     <script type="module" src="{{ asset("assets/js/scripts/rh-authorizations.js") }}"></script>
 @endpush

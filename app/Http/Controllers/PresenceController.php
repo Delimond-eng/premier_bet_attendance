@@ -45,7 +45,7 @@ class PresenceController extends Controller
         try {
             $data = $request->validate([
                 'matricule' => 'required|string|exists:agents,matricule',
-                'key' => 'required|string|in:check-in,check-out,confirmation,maintenance-in,maintenance-out',
+                'key' => 'required|string|in:check-in,check-out,confirmation,Confirmation,maintenance-in,maintenance-out',
                 'station_id' => 'nullable|integer',
                 'coordonnees' => 'nullable|string', // "lat,lng" (mobile)
                 'photo' => 'nullable',
@@ -66,7 +66,7 @@ class PresenceController extends Controller
         $assignedStationId = $agent->site_id;
 
         $stationId = null;
-        if ($data['key'] !== 'confirmation') {
+        if ($data['key'] !== 'confirmation' || $data['key'] === 'Confirmation') {
             $stationId = $this->resolveStationId(
                 stationId: $data['station_id'] ?? null,
                 coordonnees: $data['coordonnees'] ?? null,
@@ -124,13 +124,13 @@ class PresenceController extends Controller
             }
         }
 
-        if ($data['key'] === 'confirmation') {
+        if ($data['key'] === 'confirmation' || $data['key'] === 'Confirmation') {
             $now = $this->nowForStation($assignedStationId);
         }
 
         $horaire = null;
         $dateReference = $now->copy()->startOfDay();
-        if (in_array($data['key'], ['check-in', 'confirmation'], true)) {
+        if (in_array($data['key'], ['check-in', 'confirmation', 'Confirmation'], true)) {
             $horaire = $this->getHoraireForAgent($agent, $now, $stationId);
             if ($data['key'] === 'check-in' && !$horaire) {
                 return response()->json([
@@ -164,7 +164,7 @@ class PresenceController extends Controller
         }
 
         // VÉRIFICATION POUR CONFIRMATION (MID-CHECK)
-        if ($data['key'] === 'confirmation') {
+        if ($data['key'] === 'confirmation' || $data['key'] === 'Confirmation') {
             $openPresence = PresenceAgents::withoutGlobalScopes()
                 ->where('agent_id', $agent->id)
                 ->whereDate('date_reference', $dateReference->toDateString())
@@ -243,8 +243,8 @@ class PresenceController extends Controller
                     if (!empty($geo['station_blockedgps']) && !empty($geo['distance_meters']) && $geo['distance_meters'] > ($geo['station_gps_meter'] ?? 1000)) {
                         $msg = $data['key'] === 'check-out'
                             ? "Sortie refusée: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."
-                            : ($data['key'] === 'confirmation'
-                                ? "Confirmation refusee: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."
+                            : ($data['key'] === 'confirmation' || $data['key'] === 'Confirmation' ?
+                                 "Confirmation refusee: vous êtes trop éloigné de la station ({$geo['distance_meters']} m)."
                                 : "Pointage refusé: vous êtes trop éloigné de la station ({$geo['distance_meters']} m).");
 
                         return response()->json(['status' => 'error', 'errors' => [$msg]], 200);

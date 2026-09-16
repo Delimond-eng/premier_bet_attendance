@@ -13,6 +13,8 @@ use App\Support\ManagerStationContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class HRController extends Controller
 {
@@ -104,6 +106,15 @@ class HRController extends Controller
                     $qq->withoutGlobalScopes()->where('site_id', (int) $request->query('station_id'));
                 });
             })
+            ->when($request->query('region_id') || $request->query('city_id'), function ($q) use ($request) {
+                $q->whereHas('agent', function ($agentQuery) use ($request) {
+                    $agentQuery->withoutGlobalScopes()->whereHas('station', function ($stationQuery) use ($request) {
+                        $stationQuery->withoutGlobalScopes()
+                            ->when($request->query('region_id'), fn ($query) => $query->where('region_id', (int) $request->query('region_id')))
+                            ->when($request->query('city_id'), fn ($query) => $query->where('city_id', (int) $request->query('city_id')));
+                    });
+                });
+            })
             ->when($request->query('from'), fn ($q) => $q->whereDate('date_reference', '>=', $request->query('from')))
             ->when($request->query('to'), fn ($q) => $q->whereDate('date_reference', '<=', $request->query('to')))
             ->orderByDesc('date_reference')
@@ -193,6 +204,62 @@ class HRController extends Controller
         return response()->json([
             'status' => 'success',
             'result' => $auth->load(['agent.station']),
+        ]);
+    }
+
+    public function globalAuthorizationStore(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'region_id' => 'required|integer|exists:regions,id',
+            'city_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('cities', 'id')->where(fn ($query) => $query->where('region_id', $request->input('region_id'))),
+            ],
+            'date_reference' => 'required|date',
+            'type' => 'required|string|max:255',
+            'minutes' => 'nullable|integer|min:0',
+            'reason' => 'nullable|string',
+            'status' => 'nullable|string|in:pending,approved,rejected',
+        ]);
+
+        $agents = Agent::withoutGlobalScopes()
+            ->whereHas('station', function ($query) use ($data) {
+                $query->withoutGlobalScopes()
+                    ->where('region_id', (int) $data['region_id'])
+                    ->when(!empty($data['city_id']), fn ($q) => $q->where('city_id', (int) $data['city_id']));
+            })
+            ->get(['id']);
+
+        if ($agents->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'errors' => ['Aucun agent trouvé pour la région et la cité sélectionnées.'],
+            ], 422);
+        }
+
+        $status = $data['status'] ?? 'approved';
+        $now = now();
+        $rows = $agents->map(fn ($agent) => [
+            'agent_id' => $agent->id,
+            'date_reference' => $data['date_reference'],
+            'type' => $data['type'],
+            'minutes' => $data['minutes'] ?? null,
+            'reason' => $data['reason'] ?? null,
+            'status' => $status,
+            'approved_by' => $status === 'approved' ? auth()->id() : null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+
+        DB::transaction(function () use ($rows) {
+            AttendanceAuthorization::insert($rows);
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Autorisation accordée à {$agents->count()} agent(s).",
+            'count' => $agents->count(),
         ]);
     }
 

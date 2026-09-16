@@ -218,8 +218,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:attributions.view');
         Route::get('/authorizations.view', function () {
                 $sites = \App\Models\Station::query()->orderBy('name')->get();
+                $regions = \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'timezone']);
 
-                return view('rh_authorizations', compact('sites'));
+                return view('rh_authorizations', compact('sites', 'regions'));
             })
             ->name('authorizations.view')
             ->middleware('can:authorizations.view');
@@ -252,6 +255,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('canany:authorizations.create,authorizations.update');
         Route::post('/authorizations/special', [HRController::class, 'specialAuthorizationStore'])
             ->name('authorizations.special')
+            ->middleware('can:authorizations.create');
+        Route::post('/authorizations/global', [HRController::class, 'globalAuthorizationStore'])
+            ->name('authorizations.global')
             ->middleware('can:authorizations.create');
         Route::post('/authorizations/delete', [HRController::class, 'authorizationsDelete'])
             ->name('authorizations.delete');
