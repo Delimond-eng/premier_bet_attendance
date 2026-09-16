@@ -1,4 +1,4 @@
-import { get } from "../modules/http.js";
+import {get } from "../modules/http.js";
 
 new Vue({
     el: "#App",
@@ -13,6 +13,8 @@ new Vue({
                 presences: 0,
                 retards: 0,
                 absents: 0,
+                repos: 0,
+                conges: 0,
             },
             authorizations: {
                 conges: 0,
@@ -25,6 +27,8 @@ new Vue({
                     present: [],
                     late: [],
                     absent: [],
+                    off: [],
+                    leave: [],
                 },
             },
             weeklyKpis: {
@@ -118,8 +122,7 @@ new Vue({
             this.range.from = start.format("YYYY-MM-DD");
             this.range.to = end.format("YYYY-MM-DD");
 
-            input.daterangepicker(
-                {
+            input.daterangepicker({
                     startDate: start,
                     endDate: end,
                     locale: {
@@ -154,14 +157,14 @@ new Vue({
                     return;
                 }
 
-                this.counts = { ...this.counts, ...(data?.count ?? {}) };
-                this.charts = { ...this.charts, ...(data?.charts ?? {}) };
-                this.authorizations = { ...this.authorizations, ...(data?.authorizations ?? {}) };
-                this.weeklyKpis = { ...this.weeklyKpis, ...(data?.weekly_kpis ?? {}) };
-                this.latestCheckins = data?.latest_checkins ?? [];
+                this.counts = {...this.counts, ...(data?.count ??  {}) };
+                this.charts = {...this.charts, ...(data?.charts ??  {}) };
+                this.authorizations = {...this.authorizations, ...(data?.authorizations ??  {}) };
+                this.weeklyKpis = {...this.weeklyKpis, ...(data?.weekly_kpis ??  {}) };
+                this.latestCheckins = data?.latest_checkins ??  [];
                 this.maintenances = {
                     ...this.maintenances,
-                    ...(data?.maintenances ?? {}),
+                    ...(data?.maintenances ??  {}),
                 };
 
                 this.renderStatusApex();
@@ -194,6 +197,8 @@ new Vue({
                     { name: "Présents", data: [this.counts.presences || 0] },
                     { name: "Retards", data: [this.counts.retards || 0] },
                     { name: "Absents", data: [this.counts.absents || 0] },
+                    { name: "Repos", data: [this.counts.repos || 0] },
+                    { name: "Congés", data: [this.counts.conges || 0] },
                 ],
                 chart: {
                     type: "bar",
@@ -209,7 +214,7 @@ new Vue({
                         barHeight: "100%",
                     },
                 },
-                colors: ["#03C95A", "#FFC107", "#E70D0D"],
+                colors: ["#03C95A", "#FFC107", "#E70D0D", "#6C757D", "#6F42C1"],
                 dataLabels: { enabled: false },
                 xaxis: { categories: ["Total"] },
                 tooltip: { enabled: true },
@@ -276,8 +281,8 @@ new Vue({
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
 
-            const rawLabels = this.charts?.labels ?? [];
-            const dates = this.charts?.dates ?? [];
+            const rawLabels = this.charts?.labels ??  [];
+            const dates = this.charts?.dates ??  [];
             let labels = rawLabels;
 
             if (this.range.mode === "week" && dates.length > 0 && dates.length <= 7 && window.moment) {
@@ -288,16 +293,15 @@ new Vue({
                 });
             }
 
-            const series = this.charts?.series ?? {};
+            const series = this.charts?.series ??  {};
 
             this._chartJsTrend = new Chart(ctx, {
                 type: "line",
                 data: {
                     labels,
-                    datasets: [
-                        {
+                    datasets: [{
                             label: "Présents",
-                            data: series.present ?? [],
+                            data: series.present ??  [],
                             borderColor: "#03C95A",
                             backgroundColor: "rgba(3, 201, 90, 0.15)",
                             tension: 0.35,
@@ -305,7 +309,7 @@ new Vue({
                         },
                         {
                             label: "Retards",
-                            data: series.late ?? [],
+                            data: series.late ??  [],
                             borderColor: "#FFC107",
                             backgroundColor: "rgba(255, 193, 7, 0.12)",
                             tension: 0.35,
@@ -313,7 +317,7 @@ new Vue({
                         },
                         {
                             label: "Absents",
-                            data: series.absent ?? [],
+                            data: series.absent ??  [],
                             borderColor: "#E70D0D",
                             backgroundColor: "rgba(231, 13, 13, 0.08)",
                             tension: 0.35,

@@ -835,10 +835,14 @@ class AdminController extends Controller
         $seriesPresent = [];
         $seriesLate = [];
         $seriesAbsent = [];
+        $seriesOff = [];
+        $seriesLeave = [];
 
         $presentAgents = 0;
         $lateAgents = 0;
         $absentAgents = 0;
+        $offAgents = 0;
+        $leaveAgents = 0;
         $expectedAgentDays = 0; // total "agent-jours" attendus (hors OFF)
 
         $cursor = $from->copy()->startOfDay();
@@ -858,6 +862,7 @@ class AdminController extends Controller
             $lateLookup = array_fill_keys($lateIds, true);
 
             $justifiedLookup = [];
+            $leaveLookup = [];
 
             foreach (($authByDay[$d] ?? collect()) as $a) {
                 $justifiedLookup[(int) $a->agent_id] = true;
@@ -873,6 +878,7 @@ class AdminController extends Controller
                     $toC = Carbon::parse($c->date_fin)->endOfDay();
                     if ($cursor->betweenIncluded($fromC, $toC)) {
                         $justifiedLookup[(int) $c->agent_id] = true;
+                        $leaveLookup[(int) $c->agent_id] = true;
                     }
                 } catch (\Throwable $_) {
                 }
@@ -889,6 +895,7 @@ class AdminController extends Controller
             $expectedForDay = max($totalAgents - count($offLookup), 0);
             $presentForDay = count($presentLookup);
             $lateForDay = count($lateLookup);
+            $leaveForDay = count(array_diff_key($leaveLookup, $presentLookup, $offLookup));
             $justifiedForDay = count($justifiedLookup);
             $absentForDay = max($expectedForDay - $presentForDay - $justifiedForDay, 0);
 
@@ -896,12 +903,16 @@ class AdminController extends Controller
             $presentAgents += $presentForDay;
             $lateAgents += $lateForDay;
             $absentAgents += $absentForDay;
+            $offAgents += count($offLookup);
+            $leaveAgents += $leaveForDay;
 
             $dates[] = $d;
             $labels[] = $cursor->format('d/m');
             $seriesPresent[] = $presentForDay;
             $seriesLate[] = $lateForDay;
             $seriesAbsent[] = $absentForDay;
+            $seriesOff[] = count($offLookup);
+            $seriesLeave[] = $leaveForDay;
 
             $cursor->addDay();
         }
@@ -1025,6 +1036,8 @@ class AdminController extends Controller
                 'presences' => $presentAgents,
                 'retards' => $lateAgents,
                 'absents' => $absentAgents,
+                'repos' => $offAgents,
+                'conges' => $leaveAgents,
             ],
             'authorizations' => [
                 'conges' => $authConges,
@@ -1041,6 +1054,8 @@ class AdminController extends Controller
                     'present' => $seriesPresent,
                     'late' => $seriesLate,
                     'absent' => $seriesAbsent,
+                    'off' => $seriesOff,
+                    'leave' => $seriesLeave,
                 ],
             ],
             'weekly_kpis' => [

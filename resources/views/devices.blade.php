@@ -108,9 +108,6 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-3 devices-pagination">
-                        {{ $devices->appends(request()->query())->links() }}
-                    </div>
                 </div>
             </div>
         </div>
