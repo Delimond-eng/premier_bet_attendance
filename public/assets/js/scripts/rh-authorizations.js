@@ -96,6 +96,16 @@ new Vue({
         }
     },
 
+    computed: {
+        filteredSites() {
+            return this.sites.filter((site) => {
+                if (this.region_id && String(site.region_id) !== String(this.region_id)) return false;
+                if (this.city_id && String(site.city_id) !== String(this.city_id)) return false;
+                return true;
+            });
+        },
+    },
+
     mounted() {
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
@@ -119,7 +129,11 @@ new Vue({
             this.bindSelect2(this.$refs.regionFilterSelect, "Toutes les régions", (value) => {
                 this.region_id = value;
                 this.city_id = "";
-                this.$nextTick(() => this.initCityFilterSelect2());
+                this.station_id = "";
+                this.$nextTick(() => {
+                    this.initCityFilterSelect2();
+                    this.initStationSelect2();
+                });
                 this.load();
             });
         },
@@ -127,6 +141,8 @@ new Vue({
         initCityFilterSelect2() {
             this.bindSelect2(this.$refs.cityFilterSelect, "Toutes les cités", (value) => {
                 this.city_id = value;
+                this.station_id = "";
+                this.$nextTick(() => this.initStationSelect2());
                 this.load();
             });
         },
@@ -261,7 +277,14 @@ new Vue({
                     return;
                 }
                 window.$("#global_auth_modal").modal("hide");
-                alert(data?.message || "Autorisation globale accordée.");
+                Swal.fire({
+                    title: "Autorisation globale accordée.",
+                    text: data?.message,
+                    showConfirmButton: !1,
+                    showCloseButton: !0,
+                    icon: "success",
+                    timer: 3000,
+                });
                 await this.load();
             } finally {
                 this.isLoading = false;

@@ -48,7 +48,7 @@
                     <div style="width: 220px;">
                         <select class="form-select select2-station" ref="stationSelect" v-model="station_id">
                             <option value="">Toutes les stations</option>
-                            <option v-for="site in sites" :key="site.id" :value="String(site.id)">@{{ site.name }}</option>
+                            <option v-for="site in filteredSites" :key="site.id" :value="String(site.id)">@{{ site.name }}</option>
                         </select>
                     </div>
                     <div style="width: 180px;">
@@ -58,7 +58,6 @@
                             <option value="absence">Absence</option>
                             <option value="depart">Départ (Sortie)</option>
                             <option value="double shift">Double Shift</option>
-                            <option value="maladie">Maladie</option>
                             <option value="autre">Autre...</option>
                         </select>
                     </div>
@@ -232,23 +231,27 @@
                                     <option v-for="city in citiesForRegion(globalForm.region_id)" :key="city.id" :value="String(city.id)">@{{ city.name }}</option>
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Date <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" v-model="globalForm.date_reference">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Type <span class="text-danger">*</span></label>
-                                <select class="form-select" v-model="globalForm.type">
-                                    <option value="retard">Retard</option>
-                                    <option value="absence">Absence</option>
-                                    <option value="depart">Départ (Sortie)</option>
-                                    <option value="double shift">Double Shift</option>
-                                    <option value="autre">Autre...</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Minutes</label>
-                                <input type="number" min="0" class="form-control" v-model="globalForm.minutes">
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Date <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" v-model="globalForm.date_reference">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Type <span class="text-danger">*</span></label>
+                                        <select class="form-select" v-model="globalForm.type">
+                                            <option value="retard">Retard</option>
+                                            <option value="absence">Absence</option>
+                                            <option value="depart">Départ (Sortie)</option>
+                                            <option value="double shift">Double Shift</option>
+                                            <option value="autre">Autre...</option>
+                                        </select>
+                                    </div>
+                                </div>
+
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Motif</label>
@@ -256,8 +259,8 @@
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
-                            <button type="submit" class="btn btn-info" :disabled="isLoading">Accorder l'autorisation</button>
+                            <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Annuler</button>
+                            <button type="submit" class="btn btn-info" :disabled="isLoading">Accorder l'autorisation <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" v-if="isLoading"></span></button>
                         </div>
                     </form>
                 </div>
