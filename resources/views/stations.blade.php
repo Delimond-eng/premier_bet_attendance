@@ -44,6 +44,20 @@
                     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                         <h5 class="mb-0">Liste des stations</h5>
                         <div class="d-flex align-items-center gap-2">
+                            <div style="width: 210px;">
+                                <select class="form-select" v-model="filters.region_id" ref="filterRegionSelect" style="max-width: 210px;">
+                                    <option value="">Toutes les régions</option>
+                                    @foreach($regions ?? [] as $region)
+                                        <option value="{{ $region->id }}">{{ $region->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div style="width: 210px;">
+                                <select class="form-select" v-model="filters.city_id" ref="filterCitySelect" style="max-width: 210px;" :disabled="!filters.region_id">
+                                    <option value="">Toutes les cités</option>
+                                    <option v-for="city in citiesForRegion(filters.region_id)" :key="city.id" :value="city.id">@{{ city.name }}</option>
+                                </select>
+                            </div>
                             <input type="date" class="form-control" v-model="filters.date" style="max-width: 180px;">
                             <button class="btn btn-white border" @click="load">Actualiser</button>
 
@@ -115,6 +129,7 @@
                                             <div>
                                                 <h6 class="fw-normal mb-1 fs-14"><a href="javascript:void(0);">@{{ s.name }}</a></h6>
                                                 <span class="fs-13 d-inline-flex align-items-center">@{{ s.adresse ?? '' }}</span>
+                                                <small class="d-block text-muted">@{{ s.region?.name ?? 'Région par défaut' }} · @{{ s.city?.name ?? 'Cité non définie' }}</small>
                                             </div>
                                         </div>
                                     </td>
@@ -178,6 +193,31 @@
                                     <div class="mb-3">
                                         <label class="form-label">Type</label>
                                         <input type="text" class="form-control" v-model="form.type" placeholder="ex: Bureau / Depot / Site client">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label class="form-label">Région / Province</label>
+                                        <select class="form-select select2-region" ref="regionSelect" v-model="form.region_id">
+                                            <option value="">Africa/Kinshasa (par défaut)</option>
+                                            @foreach($regions ?? [] as $region)
+                                                <option value="{{ $region->id }}">{{ $region->name }} - {{ $region->capital }} ({{ $region->timezone }})</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">La cité détermine le fuseau du pointage, avec repli sur la région puis Africa/Kinshasa.</small>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label class="form-label">Cité / Ville</label>
+                                        <select class="form-select select2-city" ref="citySelect" v-model="form.city_id" :disabled="!form.region_id">
+                                            <option value="">Sélectionner une cité</option>
+                                            <option v-for="city in citiesForRegion(form.region_id)" :key="city.id" :value="city.id">
+                                                @{{ city.name }} (@{{ city.timezone }})
+                                            </option>
+                                        </select>
                                     </div>
                                 </div>
 
@@ -292,5 +332,8 @@
 @endsection
 
 @push("scripts")
+    <script>
+        window.stationRegions = @json($regions ?? []);
+    </script>
     <script type="module" src="{{ asset("assets/js/scripts/stations.js") }}"></script>
 @endpush

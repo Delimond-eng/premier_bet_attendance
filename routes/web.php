@@ -77,7 +77,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Stations
     Route::prefix('stations')->name('stations.')->group(function () {
-        Route::get('/view', fn () => view('stations'))
+        Route::get('/view', fn () => view('stations', [
+            'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                ->orderBy('name')
+                ->get(['id', 'name', 'capital', 'timezone']),
+        ]))
             ->name('view')
             ->middleware('can:stations.view');
         Route::get('/list', [AdminController::class, 'viewAllSites'])
@@ -96,7 +100,12 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Agents
     Route::prefix('agents')->name('agents.')->group(function () {
-        Route::get('/view', fn () => view('agents', ['sites' => \App\Models\Station::all()]))
+        Route::get('/view', fn () => view('agents', [
+            'sites' => \App\Models\Station::all(),
+            'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                ->orderBy('name')
+                ->get(['id', 'name', 'timezone']),
+        ]))
             ->name('view')
             ->middleware('can:agents.view');
 
@@ -278,7 +287,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Presences (web journal)
     Route::prefix('presences')->group(function () {
-        Route::get('/live', fn () => view('attendances'))
+        Route::get('/live', fn () => view('attendances', [
+            'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                ->orderBy('name')
+                ->get(['id', 'name', 'timezone']),
+        ]))
             ->name('presences.live')
             ->middleware('can:presences.view');
         Route::get('/data', [PresenceController::class, 'getPresencesBySiteAndDate'])
@@ -316,7 +329,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/weekly', fn () => view('report_presences_weekly'))
             ->name('reports.weekly.view')
             ->middleware('can:rapport_presences.view');
-        Route::get('/monthly/view', fn () => view('report_presences_monthly'))
+        Route::get('/monthly/view', fn () => view('report_presences_monthly', [
+            'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                ->orderBy('name')
+                ->get(['id', 'name', 'timezone']),
+        ]))
             ->name('reports.monthly.view')
             ->middleware('can:rapport_presences.view');
         Route::get('/maintenance/view', fn () => view('report_maintenances'))

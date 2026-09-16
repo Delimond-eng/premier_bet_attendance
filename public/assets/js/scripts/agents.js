@@ -1,4 +1,4 @@
-import { get, post } from "../modules/http.js";
+import {get, post } from "../modules/http.js";
 import { initSelect2ForVue } from "../modules/select2.js";
 
 function destroyDatatable(tableEl) {
@@ -44,6 +44,7 @@ new Vue({
             isImporting: false,
             isAuthorizing: false,
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
+            regions: Array.isArray(window.agentRegions) ? window.agentRegions : [],
             groups: [],
             agents: [],
             selectedAgent: null,
@@ -55,6 +56,8 @@ new Vue({
             },
             filters: {
                 station_id: "",
+                region_id: "",
+                city_id: "",
             },
             createForm: {
                 id: "",
@@ -89,6 +92,8 @@ new Vue({
         }
 
         this.$nextTick(() => {
+            this.initRegionSelect2();
+            this.initCitySelect2();
             initSelect2ForVue(this.$refs.stationSelect, {
                 placeholder: "Toutes les stations",
                 getValue: () => this.filters.station_id,
@@ -114,6 +119,39 @@ new Vue({
     },
 
     methods: {
+        citiesForRegion(regionId) {
+            const region = this.regions.find((item) => String(item.id) === String(regionId));
+            return region && Array.isArray(region.city_records) ? region.city_records : [];
+        },
+
+        initRegionSelect2() {
+            initSelect2ForVue(this.$refs.regionSelect, {
+                placeholder: "Toutes les régions",
+                getValue: () => this.filters.region_id,
+                setValue: (value) => {
+                    if (String(this.filters.region_id || "") === String(value || "")) return;
+                    this.filters.region_id = value;
+                    this.filters.city_id = "";
+                    this.filters.station_id = "";
+                    this.$nextTick(() => this.initCitySelect2());
+                    this.load(true);
+                },
+            });
+        },
+
+        initCitySelect2() {
+            initSelect2ForVue(this.$refs.citySelect, {
+                placeholder: "Toutes les cités",
+                getValue: () => this.filters.city_id,
+                setValue: (value) => {
+                    if (String(this.filters.city_id || "") === String(value || "")) return;
+                    this.filters.city_id = value;
+                    this.filters.station_id = "";
+                    this.load(true);
+                },
+            });
+        },
+
         getEmployeeModal() {
             const el = document.getElementById("add_employee");
             if (!el) return null;
@@ -217,10 +255,12 @@ new Vue({
                 const params = new URLSearchParams();
                 params.set("per_page", "200");
                 if (stationId) params.set("station_id", stationId);
+                if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+                if (this.filters.city_id) params.set("city_id", this.filters.city_id);
 
                 const { data } = await get(`/agents/data?${params.toString()}`);
                 this.agents = data?.agents?.data ?? [];
-                this.stats = { ...this.stats, ...(data?.stats ?? {}) };
+                this.stats = {...this.stats, ...(data?.stats ?? {}) };
                 this.$nextTick(() => {
                     setTimeout(() => initOrRefreshDatatable(this.$refs.table), 0);
                 });
@@ -460,9 +500,9 @@ new Vue({
 
             this.isAuthorizing = true;
             try {
-                const type = this.authorizeDelayForm.type_select === 'autre'
-                    ? this.authorizeDelayForm.type_autre
-                    : this.authorizeDelayForm.type_select;
+                const type = this.authorizeDelayForm.type_select === 'autre' ?
+                    this.authorizeDelayForm.type_autre :
+                    this.authorizeDelayForm.type_select;
 
                 const payload = {
                     agent_id: this.selectedAgent.id,
@@ -491,6 +531,14 @@ new Vue({
     },
 
     computed: {
+        filteredSites() {
+            return this.sites.filter((site) => {
+                if (this.filters.region_id && String(site.region_id) !== String(this.filters.region_id)) return false;
+                if (this.filters.city_id && String(site.city_id) !== String(this.filters.city_id)) return false;
+                return true;
+            });
+        },
+
         filteredGroups() {
             if (!this.createForm.site_id) {
                 return this.groups;
@@ -518,18 +566,22 @@ new Vue({
         exportPdfUrl() {
             const params = new URLSearchParams();
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             return `/agents/export/pdf?${params.toString()}`;
         },
 
         exportExcelUrl() {
             const params = new URLSearchParams();
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             return `/agents/export/excel?${params.toString()}`;
         },
     },
 
     watch: {
-        "importForm.station_id"() {
+        "importForm.station_id" () {
             if (!this.importForm.groupe_id) return;
             const keep = this.filteredImportGroups.some(
                 (g) => String(g.id) === String(this.importForm.groupe_id)
@@ -538,12 +590,12 @@ new Vue({
                 this.importForm.groupe_id = "";
             }
         },
-        "createForm.site_id"(value) {
+        "createForm.site_id" (value) {
             if (!value || !this.createForm.groupe_id) return;
             const keep = this.groups.some(
                 (g) =>
-                    String(g.id) === String(this.createForm.groupe_id) &&
-                    String(g?.horaire?.site_id ?? "") === String(value)
+                String(g.id) === String(this.createForm.groupe_id) &&
+                String(g?.horaire?.site_id ?? "") === String(value)
             );
             if (!keep) {
                 this.createForm.groupe_id = "";

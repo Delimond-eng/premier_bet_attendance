@@ -85,6 +85,8 @@ class PresenceController extends Controller
                 return response()->json(['status' => 'error', 'errors' => ['Station introuvable for ce pointage.']], 200);
             }
 
+            $now = $this->nowForStation($stationId);
+
             // Restriction station fixe
             if ($agent->restrict_station && in_array($data['key'], ['check-in', 'check-out'])) {
                 if ((int)$stationId !== (int)$agent->site_id) {
@@ -120,6 +122,10 @@ class PresenceController extends Controller
                 // En cas d'erreur de calcul, logguer sans bloquer (fail-safe)
                 Log::warning('Distance check failed for electrocool host', ['err' => $_->getMessage()]);
             }
+        }
+
+        if ($data['key'] === 'confirmation') {
+            $now = $this->nowForStation($assignedStationId);
         }
 
         $horaire = null;
@@ -739,6 +745,25 @@ class PresenceController extends Controller
         return $fallbackAssignedStationId;
     }
 
+    private function nowForStation(?int $stationId): Carbon
+    {
+        $timezone = 'Africa/Kinshasa';
+
+        if ($stationId) {
+            $station = Station::withoutGlobalScopes()
+                ->with(['city', 'region'])
+                ->find($stationId);
+            $stationTimezone = $station?->city?->timezone
+                ?: $station?->region?->timezone;
+
+            if (is_string($stationTimezone) && in_array($stationTimezone, timezone_identifiers_list(), true)) {
+                $timezone = $stationTimezone;
+            }
+        }
+
+        return Carbon::now($timezone);
+    }
+
     private function findNearestStation(string $coords): ?Station
     {
         $parts = array_map('trim', explode(',', $coords));
@@ -888,10 +913,14 @@ class PresenceController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $date = $data['date'] ?? Carbon::today()->toDateString();
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $userPrefix = ManagerStationContext::matriculePrefix();
         $managerStationId = ManagerStationContext::stationId();
 
@@ -921,6 +950,19 @@ class PresenceController extends Controller
                 $q->where('site_id', (int) $stationId)
                     ->orWhere('station_check_in_id', (int) $stationId)
                     ->orWhere('station_check_out_id', (int) $stationId);
+            });
+        }
+
+        if ($regionId !== null || $cityId !== null) {
+            $stationIds = Station::withoutGlobalScopes()
+                ->when($regionId !== null, fn ($q) => $q->where('region_id', $regionId))
+                ->when($cityId !== null, fn ($q) => $q->where('city_id', $cityId))
+                ->pluck('id');
+
+            $query->where(function ($q) use ($stationIds) {
+                $q->whereIn('site_id', $stationIds)
+                    ->orWhereIn('station_check_in_id', $stationIds)
+                    ->orWhereIn('station_check_out_id', $stationIds);
             });
         }
 
@@ -1542,6 +1584,8 @@ class PresenceController extends Controller
             'from' => 'nullable|date',
             'to' => 'nullable|date',
             'station_id' => 'nullable|integer',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
             'agent_id' => 'nullable|integer',
             'group_id' => 'nullable|integer',
             'matricule_prefix' => 'nullable|string',
@@ -1549,6 +1593,8 @@ class PresenceController extends Controller
 
         $filters = [
             'station_id' => $data['station_id'] ?? null,
+            'region_id' => $data['region_id'] ?? null,
+            'city_id' => $data['city_id'] ?? null,
             'agent_id' => $data['agent_id'] ?? null,
             'group_id' => $data['group_id'] ?? null,
             'matricule_prefix' => $data['matricule_prefix'] ?? null,

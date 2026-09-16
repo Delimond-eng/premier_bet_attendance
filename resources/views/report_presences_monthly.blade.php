@@ -16,18 +16,34 @@
                 </nav>
             </div>
 
-            <div class="dropdown">
-                <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="ti ti-file-export me-1"></i>Exporter
-                </a>
-                <ul class="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                        <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
-                    </li>
-                </ul>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div style="width: 210px;">
+                    <select class="form-select" v-model="filters.region_id" ref="regionSelect" style="width: 210px;">
+                        <option value="">Toutes les régions</option>
+                        @foreach($regions ?? [] as $region)
+                            <option value="{{ $region->id }}">{{ $region->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="width: 210px;">
+                    <select class="form-select" v-model="filters.city_id" ref="citySelect" :disabled="!filters.region_id" style="width: 210px;">
+                        <option value="">Toutes les cités</option>
+                        <option v-for="city in citiesForRegion(filters.region_id)" :key="city.id" :value="city.id">@{{ city.name }}</option>
+                    </select>
+                </div>
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="ti ti-file-export me-1"></i>Exporter
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end p-3">
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
 
@@ -399,6 +415,7 @@
 @endpush
 
 @push("scripts")
+    <script>window.monthlyReportRegions = @json($regions ?? []);</script>
     <script type="module">
         import "{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}";
 

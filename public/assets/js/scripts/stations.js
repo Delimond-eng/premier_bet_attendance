@@ -1,4 +1,5 @@
-import { get, post, postJson } from "../modules/http.js";
+import {get, post, postJson } from "../modules/http.js";
+import { initSelect2ForVue } from "../modules/select2.js";
 
 function destroyDatatable(tableEl) {
     const $ = window.$;
@@ -48,7 +49,10 @@ new Vue({
             sites: [],
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
+                region_id: "",
+                city_id: "",
             },
+            regions: Array.isArray(window.stationRegions) ? window.stationRegions : [],
             codeManuallyEdited: false,
             form: {
                 id: "",
@@ -56,6 +60,8 @@ new Vue({
                 type: "",
                 code: "",
                 adresse: "",
+                region_id: "",
+                city_id: "",
             },
             importForm: {
                 file: null,
@@ -82,10 +88,16 @@ new Vue({
     },
 
     watch: {
-        "form.name": function () {
+        "form.name": function() {
             this.ensureAutoCode();
         },
-        "qrExport.format": function (newFormat) {
+        "form.region_id": function() {
+            if (this.form.city_id && !this.citiesForRegion(this.form.region_id).some(c => String(c.id) === String(this.form.city_id))) {
+                this.form.city_id = "";
+            }
+            this.$nextTick(() => this.initCitySelect2());
+        },
+        "qrExport.format": function(newFormat) {
             if (newFormat === 'a4') {
                 this.qrExport.cols = 3;
             } else if (newFormat === 'a3') {
@@ -105,6 +117,12 @@ new Vue({
             this.$refs.table.addEventListener("click", this.onTableClick, true);
         }
         this.resetImportForm();
+        this.$nextTick(() => {
+            this.initRegionSelect2();
+            this.initCitySelect2();
+            this.initFilterRegionSelect2();
+            this.initFilterCitySelect2();
+        });
         this.load();
     },
 
@@ -115,6 +133,61 @@ new Vue({
     },
 
     methods: {
+        initRegionSelect2() {
+            initSelect2ForVue(this.$refs.regionSelect, {
+                getValue: () => this.form.region_id,
+                setValue: (value) => { this.form.region_id = value; },
+                placeholder: "Sélectionner une région",
+            });
+        },
+
+        initCitySelect2() {
+            initSelect2ForVue(this.$refs.citySelect, {
+                getValue: () => this.form.city_id,
+                setValue: (value) => { this.form.city_id = value; },
+                placeholder: "Sélectionner une cité",
+            });
+        },
+
+        initFilterRegionSelect2() {
+            initSelect2ForVue(this.$refs.filterRegionSelect, {
+                placeholder: "Toutes les régions",
+                getValue: () => this.filters.region_id,
+                setValue: (value) => {
+                    if (String(this.filters.region_id || "") === String(value || "")) return;
+                    this.filters.region_id = value;
+                    this.changeFilterRegion();
+                },
+            });
+        },
+
+        initFilterCitySelect2() {
+            initSelect2ForVue(this.$refs.filterCitySelect, {
+                placeholder: "Toutes les cités",
+                getValue: () => this.filters.city_id,
+                setValue: (value) => {
+                    if (String(this.filters.city_id || "") === String(value || "")) return;
+                    this.filters.city_id = value;
+                    this.changeFilterCity();
+                },
+            });
+        },
+
+        changeFilterRegion() {
+            this.filters.city_id = "";
+            this.$nextTick(() => this.initFilterCitySelect2());
+            this.load();
+        },
+
+        changeFilterCity() {
+            this.load();
+        },
+
+        citiesForRegion(regionId) {
+            const region = this.regions.find(r => String(r.id) === String(regionId));
+            return region && Array.isArray(region.city_records) ? region.city_records : [];
+        },
+
         normalizeName(name) {
             const s = String(name || "").trim();
             if (!s) return "";
@@ -243,6 +316,8 @@ new Vue({
                 destroyDatatable(this.$refs.table);
                 const params = new URLSearchParams();
                 if (this.filters.date) params.set("date", this.filters.date);
+                if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+                if (this.filters.city_id) params.set("city_id", this.filters.city_id);
                 const { data } = await get(`/stations/list?${params.toString()}`);
                 this.sites = data?.sites ?? [];
                 this.$nextTick(() => initOrRefreshDatatable(this.$refs.table));
@@ -260,9 +335,15 @@ new Vue({
                 type: site.type ?? "",
                 code: site.code ?? "",
                 adresse: site.adresse ?? "",
+                region_id: site.region_id ? String(site.region_id) : "",
+                city_id: site.city_id ? String(site.city_id) : "",
             };
             this.codeManuallyEdited = true;
             this.openModal();
+            this.$nextTick(() => {
+                this.initRegionSelect2();
+                this.initCitySelect2();
+            });
         },
 
         reset() {
@@ -272,8 +353,14 @@ new Vue({
                 type: "",
                 code: "",
                 adresse: "",
+                region_id: "",
+                city_id: "",
             };
             this.codeManuallyEdited = false;
+            this.$nextTick(() => {
+                this.initRegionSelect2();
+                this.initCitySelect2();
+            });
         },
 
         resetImportForm() {

@@ -376,6 +376,7 @@ new Vue({
         const qMonth = parseInt(getQueryParam("month") || "", 10);
         const qYear = parseInt(getQueryParam("year") || "", 10);
         const qStation = getQueryParam("station_id");
+        const regions = Array.isArray(window.monthlyReportRegions) ? window.monthlyReportRegions : [];
 
         const qFrom = getQueryParam("from");
         const qTo = getQueryParam("to");
@@ -384,6 +385,7 @@ new Vue({
             isLoading: false,
             activeTab: "brut",
             sites: [],
+            regions,
             prefixes: [],
             show_matricule_filter: false,
             useRange: !!(qFrom && qTo),
@@ -391,6 +393,8 @@ new Vue({
                 month: Number.isFinite(qMonth) && qMonth >= 1 && qMonth <= 12 ? qMonth : mm,
                 year: Number.isFinite(qYear) && qYear >= minYear ? qYear : yyyy,
                 station_id: qStation || "",
+                region_id: getQueryParam("region_id") || "",
+                city_id: getQueryParam("city_id") || "",
                 matricule_prefix: "",
                 from: qFrom || "",
                 to: qTo || "",
@@ -422,13 +426,72 @@ new Vue({
         if (document.getElementById("global-loader")) {
             document.getElementById("global-loader").style.display = "none";
         }
+        this.$nextTick(() => {
+            this.initRegionSelect2();
+            this.initCitySelect2();
+        });
         this.init();
     },
 
     methods: {
         async init() {
-            const { data } = await get("/stations/list");
+            await this.loadSites();
+            this.$nextTick(() => this.initRangePicker());
+            await this.load();
+        },
+
+        async changeRegion() {
+            this.filters.station_id = "";
+            this.filters.city_id = "";
+            this.$nextTick(() => this.initCitySelect2());
+            await this.loadSites();
+            await this.load();
+        },
+
+        async changeCity() {
+            this.filters.station_id = "";
+            await this.loadSites();
+            await this.load();
+        },
+
+        citiesForRegion(regionId) {
+            const region = this.regions.find((item) => String(item.id) === String(regionId));
+            return region && Array.isArray(region.city_records) ? region.city_records : [];
+        },
+
+        initRegionSelect2() {
+            initSelect2ForVue(this.$refs.regionSelect, {
+                placeholder: "Toutes les régions",
+                getValue: () => this.filters.region_id,
+                setValue: (value) => {
+                    if (String(this.filters.region_id || "") === String(value || "")) return;
+                    this.filters.region_id = value;
+                    this.changeRegion();
+                },
+            });
+        },
+
+        initCitySelect2() {
+            initSelect2ForVue(this.$refs.citySelect, {
+                placeholder: "Toutes les cités",
+                getValue: () => this.filters.city_id,
+                setValue: (value) => {
+                    if (String(this.filters.city_id || "") === String(value || "")) return;
+                    this.filters.city_id = value;
+                    this.changeCity();
+                },
+            });
+        },
+
+        async loadSites() {
+            const params = new URLSearchParams();
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
+            const { data } = await get(`/stations/list?${params.toString()}`);
             this.sites = data?.sites ?? [];
+            if (this.filters.station_id && !this.sites.some((site) => String(site.id) === String(this.filters.station_id))) {
+                this.filters.station_id = "";
+            }
             this.$nextTick(() => {
                 initSelect2ForVue(this.$refs.stationSelect, {
                     placeholder: "Toutes les stations",
@@ -437,9 +500,7 @@ new Vue({
                         this.filters.station_id = v;
                     },
                 });
-                this.initRangePicker();
             });
-            await this.load();
         },
 
         initRangePicker() {
@@ -558,6 +619,8 @@ new Vue({
                 }
 
                 if (stationId) params.set("station_id", stationId);
+                if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+                if (this.filters.city_id) params.set("city_id", this.filters.city_id);
                 if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
 
                 const { data } = await get(`/reports/monthly?${params.toString()}`);
@@ -654,6 +717,8 @@ new Vue({
                 params.set("year", String(this.filters.year));
             }
             params.set("tab", this.activeTab);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/monthly/export/pdf?${params.toString()}`;
@@ -669,6 +734,8 @@ new Vue({
                 params.set("year", String(this.filters.year));
             }
             params.set("tab", this.activeTab);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/monthly/export/excel?${params.toString()}`;

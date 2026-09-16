@@ -156,14 +156,25 @@ class ExportController extends Controller
     {
         $data = $request->validate([
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
         $agents = Agent::query()
             ->with('station')
             ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->when($regionId !== null || $cityId !== null, function ($q) use ($regionId, $cityId) {
+                $q->whereHas('station', function ($stationQuery) use ($regionId, $cityId) {
+                    $stationQuery->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', (int) $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', (int) $cityId));
+                });
+            })
             ->orderBy('fullname')
             ->get();
 
@@ -180,14 +191,25 @@ class ExportController extends Controller
     {
         $data = $request->validate([
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
         $agents = Agent::query()
             ->with('station')
             ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->when($regionId !== null || $cityId !== null, function ($q) use ($regionId, $cityId) {
+                $q->whereHas('station', function ($stationQuery) use ($regionId, $cityId) {
+                    $stationQuery->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', (int) $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', (int) $cityId));
+                });
+            })
             ->orderBy('fullname')
             ->get();
 
@@ -559,6 +581,8 @@ class ExportController extends Controller
             'from' => 'nullable|date',
             'to' => 'nullable|date',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
             'tab' => 'nullable|string',
             'matricule_prefix' => 'nullable|string',
         ]);
@@ -568,7 +592,11 @@ class ExportController extends Controller
         $tab = $data['tab'] ?? 'brut';
         $prefix = $data['matricule_prefix'] ?? null;
 
-        $filters = ['station_id' => $stationId];
+        $filters = [
+            'station_id' => $stationId,
+            'region_id' => $data['region_id'] ?? null,
+            'city_id' => $data['city_id'] ?? null,
+        ];
         if ($prefix) {
             $filters['matricule_prefix'] = $prefix;
         }
@@ -1293,12 +1321,13 @@ class ExportController extends Controller
             foreach (($days ?? []) as $dayKey => $cell) {
                 $s = $cell['status'] ?? null;
                 $depart = $cell['depart'] ?? null;
-                $mapped = $this->mapStatusToCode($s, $depart);
+                $leaveCode = $this->normalizeLeaveCode($s, $cell['arrivee'] ?? null);
+                $mapped = $this->mapStatusToCode($s, $depart, $leaveCode);
                 $acc['days'][$dayKey] = $mapped['code'];
 
                 if ($depart === 'AN') {
                     $acc['an'] += 1;
-                    $acc['absent'] += 1;
+                    $code = $leaveCode;
                 } else if ($s === 'present') $acc['present'] += 1;
                 else if ($s === 'retard') {
                     $acc['present'] += 1;
@@ -1321,7 +1350,7 @@ class ExportController extends Controller
                 }
                 else if ($s === 'autorisation' || $s === 'maladie') {
                     $acc['autorisation'] += 1;
-                    $code = strtoupper((string)($cell['arrivee'] ?? ''));
+                    $code = $leaveCode;
                     if ($code === 'CM') $acc['total_cm'] += 1;
                     elseif ($code === 'M') $acc['total_m'] += 1;
                     elseif ($code === 'CC') $acc['total_cc'] += 1;
@@ -1365,7 +1394,16 @@ class ExportController extends Controller
         return $rows;
     }
 
-    private function mapStatusToCode(?string $status, ?string $depart = null): array
+    private function normalizeLeaveCode(?string $status, ?string $arrivee = null): string
+    {
+        if ($status === 'maladie') {
+            return 'M';
+        }
+
+        return strtoupper(trim((string) $arrivee));
+    }
+
+    private function mapStatusToCode(?string $status, ?string $depart = null, ?string $leaveCode = null): array
     {
         if ($depart === 'AN') {
             return ['code' => 'AN', 'bucket' => 'an'];
@@ -1383,9 +1421,9 @@ class ExportController extends Controller
             case "off":
                 return ['code' => 'OFF', 'bucket' => 'off'];
             case "conge":
-                return ['code' => 'C', 'bucket' => 'conge'];
+                return ['code' => $leaveCode ?: 'C', 'bucket' => 'conge'];
             case "autorisation":
-                return ['code' => 'AS', 'bucket' => 'autorisation'];
+                return ['code' => $leaveCode ?: 'AS', 'bucket' => 'autorisation'];
             case "maladie":
                 return ['code' => 'M', 'bucket' => 'autorisation'];
             case "future":

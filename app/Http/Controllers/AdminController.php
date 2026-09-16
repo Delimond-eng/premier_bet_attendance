@@ -15,6 +15,7 @@ use App\Models\MaintenanceAgent;
 use App\Models\MobileDevice;
 use App\Models\PresenceAgents;
 use App\Models\PresenceHoraire;
+use App\Models\Region;
 use App\Models\Station;
 use App\Models\User;
 use App\Services\FcmService;
@@ -26,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Reader\Csv as CsvReader;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -41,6 +43,12 @@ class AdminController extends Controller
                 'type' => 'nullable|string|max:255',
                 'code' => 'nullable|string|unique:sites,code,' . ($request->id ?? 'NULL'),
                 'adresse' => 'required|string',
+                'region_id' => 'nullable|integer|exists:regions,id',
+                'city_id' => [
+                    'nullable',
+                    'integer',
+                    Rule::exists('cities', 'id')->where(fn ($query) => $query->where('region_id', $request->input('region_id'))),
+                ],
             ]);
 
             $managerStationId = ManagerStationContext::stationId();
@@ -123,10 +131,20 @@ class AdminController extends Controller
         $hasDate = $dateRaw !== null && trim((string) $dateRaw) !== '';
         $date = $hasDate ? Carbon::parse($dateRaw) : Carbon::today();
         $dateString = $date->toDateString();
+        $regionId = request()->query('region_id');
+        $cityId = request()->query('city_id');
 
         $stations = Station::query()
             ->withoutGlobalScopes()
-            ->select(['id', 'name', 'type', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'created_at'])
+            ->select(['id', 'name', 'type', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'region_id', 'city_id', 'created_at'])
+            ->with(['region:id,name,timezone', 'city:id,name,timezone'])
+            ->when($regionId !== null && $regionId !== '', fn ($q) => $q->where('region_id', (int) $regionId))
+            ->when($cityId !== null && $cityId !== '', function ($q) use ($cityId, $regionId) {
+                $q->where('city_id', (int) $cityId)
+                    ->when($regionId !== null && $regionId !== '', function ($query) use ($regionId) {
+                        $query->where('region_id', (int) $regionId);
+                    });
+            })
             ->withCount([
                 'agents',
                 'agents as assigned_agents_count',
@@ -1450,6 +1468,8 @@ class AdminController extends Controller
             'per_page' => 'nullable|integer|min:1|max:1000',
             'search' => 'nullable|string',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $perPage = (int) ($data['per_page'] ?? 10);
@@ -1457,10 +1477,19 @@ class AdminController extends Controller
 
         $search = $data['search'] ?? null;
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
 
         $agents = Agent::query()
             ->with('station')
             ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->when($regionId !== null || $cityId !== null, function ($q) use ($regionId, $cityId) {
+                $q->whereHas('station', function ($stationQuery) use ($regionId, $cityId) {
+                    $stationQuery->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', (int) $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', (int) $cityId));
+                });
+            })
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
                     $sub->where('fullname', 'like', '%' . $search . '%')
@@ -1471,7 +1500,15 @@ class AdminController extends Controller
             ->paginate($perPage);
 
         $today = Carbon::today('Africa/Kinshasa')->toDateString();
-        $agentsBase = Agent::query()->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId));
+        $agentsBase = Agent::query()
+            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
+            ->when($regionId !== null || $cityId !== null, function ($q) use ($regionId, $cityId) {
+                $q->whereHas('station', function ($stationQuery) use ($regionId, $cityId) {
+                    $stationQuery->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', (int) $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', (int) $cityId));
+                });
+            });
         $agentIds = $stationId !== null ? $agentsBase->pluck('id')->all() : $agents->getCollection()->pluck('id')->all();
 
         $presenceByAgent = PresenceAgents::query()

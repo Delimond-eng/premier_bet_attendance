@@ -12,26 +12,42 @@
                 </nav>
             </div>
 
-            <div class="dropdown">
-                <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="ti ti-file-export me-1"></i>Exporter
-                </a>
-                <ul class="dropdown-menu dropdown-menu-end p-3" style="">
-                    <li>
-                        <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
-                    </li>
-                </ul>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div style="width: 210px;">
+                    <select class="form-select" v-model="filters.region_id" ref="regionSelect" style="width: 210px;">
+                        <option value="">Toutes les régions</option>
+                        @foreach($regions ?? [] as $region)
+                            <option value="{{ $region->id }}">{{ $region->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="width: 210px;">
+                    <select class="form-select" v-model="filters.city_id" ref="citySelect" :disabled="!filters.region_id" style="width: 210px;">
+                        <option value="">Toutes les cités</option>
+                        <option v-for="city in citiesForRegion(filters.region_id)" :key="city.id" :value="city.id">@{{ city.name }}</option>
+                    </select>
+                </div>
+                <div class="dropdown">
+                    <a href="javascript:void(0);" class="dropdown-toggle btn btn-white d-inline-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="ti ti-file-export me-1"></i>Exporter
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end p-3" style="">
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportExcelUrl" target="_blank">Exporter en Excel</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item rounded-1" :href="exportPdfUrl" target="_blank">Exporter en PDF</a>
+                        </li>
+                    </ul>
+                </div>
             </div>
 
         </div>
 
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                 <h5>Journal de Pointage</h5>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center flex-wrap gap-2">
                     <div class="flex-fill" style="width: 260px;">
                         <select class="form-select mb-2" v-model="filters.station_id" ref="stationSelect">
                             <option value="">Toutes les stations</option>
@@ -131,5 +147,6 @@
 @endsection
 
 @push("scripts")
+    <script>window.attendanceRegions = @json($regions ?? []);</script>
     <script type="module" src="{{ asset("assets/js/scripts/attendances.js") }}"></script>
 @endpush

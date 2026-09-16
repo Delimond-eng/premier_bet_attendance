@@ -21,6 +21,21 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap ">
 
+                <div class="me-2 mb-2" style="width: 210px;">
+                    <select class="form-select" v-model="filters.region_id" ref="regionSelect">
+                        <option value="">Toutes les régions</option>
+                        @foreach($regions ?? [] as $region)
+                            <option value="{{ $region->id }}">{{ $region->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="me-2 mb-2" style="width: 210px;">
+                    <select class="form-select" v-model="filters.city_id" ref="citySelect" :disabled="!filters.region_id">
+                        <option value="">Toutes les cités</option>
+                        <option v-for="city in citiesForRegion(filters.region_id)" :key="city.id" :value="city.id">@{{ city.name }}</option>
+                    </select>
+                </div>
+
                 @can('agents.export')
                     <div class="me-2 mb-2">
                         <div class="dropdown">
@@ -161,7 +176,7 @@
                     <div class="flex-fill" style="width: 260px;">
                         <select class="form-select" v-model="filters.station_id" ref="stationSelect">
                             <option value="">Toutes les stations</option>
-                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                            <option v-for="s in filteredSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                         </select>
                     </div>
                     <button class="btn btn-white border" @click="load" :disabled="isLoading">
@@ -523,6 +538,7 @@
 @endsection
 
 @push("scripts")
+    <script>window.agentRegions = @json($regions ?? []);</script>
     <script>
         window.__SITES__ = @json($sites);
     </script>

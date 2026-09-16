@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Station extends Model
 {
@@ -15,7 +16,7 @@ class Station extends Model
     protected $table = 'sites';
     protected $fillable = [
         "name", "type", "code", "latlng", "adresse", "phone", "emails",
-        "presence", "status", "blockedgps", "gps_meter"
+        "presence", "status", "blockedgps", "gps_meter", "region_id", "city_id"
     ];
 
     protected $casts = [
@@ -51,5 +52,15 @@ class Station extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class, 'station_id');
+    }
+
+    public function region(): BelongsTo
+    {
+        return $this->belongsTo(Region::class, 'region_id');
+    }
+
+    public function city(): BelongsTo
+    {
+        return $this->belongsTo(City::class, 'city_id');
     }
 }

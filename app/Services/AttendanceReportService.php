@@ -96,6 +96,13 @@ class AttendanceReportService
                 $prefix = trim((string)$filters['matricule_prefix']);
                 $q->where('matricule', 'like', $prefix . '%');
             })
+            ->when(!empty($filters['region_id']) || !empty($filters['city_id']), function ($q) use ($filters) {
+                $q->whereHas('station', function ($stationQuery) use ($filters) {
+                    $stationQuery->withoutGlobalScopes()
+                        ->when(!empty($filters['region_id']), fn ($query) => $query->where('region_id', (int) $filters['region_id']))
+                        ->when(!empty($filters['city_id']), fn ($query) => $query->where('city_id', (int) $filters['city_id']));
+                });
+            })
             ->orderBy('fullname');
 
         $agents = $agentsQuery->get();
