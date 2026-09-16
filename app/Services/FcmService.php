@@ -89,6 +89,24 @@ class FcmService
         ]);
     }
 
+    public function sendFaceListRequest(string $token, string $requestId)
+    {
+        return $this->send([
+            'message' => [
+                'token' => $token,
+                'data' => [
+                    'command' => 'FACE_LIST',
+                    'request_id' => $requestId,
+                    'type' => 'device_command',
+                    'sent_at' => now()->toIso8601String(),
+                ],
+                'android' => [
+                    'priority' => 'high',
+                ],
+            ]
+        ]);
+    }
+
     public function sendBiometricSync(string $token, array $matricules)
     {
         return $this->send([

@@ -20,4 +20,9 @@ class MobileDevice extends Model
     protected $casts = [
         'last_seen_at' => 'datetime',
     ];
+
+    public function faceLists()
+    {
+        return $this->hasMany(DeviceFaceList::class, 'device_id');
+    }
 }

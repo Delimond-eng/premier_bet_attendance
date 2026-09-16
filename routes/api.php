@@ -30,8 +30,10 @@ Route::middleware(["cors"])->group(function () {
     });
 
     // Device & MDM Management
-    Route::get('/devices/send-update', [DeviceManagementController::class, 'sendFcmUpdate']);
+    Route::get('/devices/send-update', [DeviceManagementController::class, 'sendFcmUpdate'])
+        ->name('api.devices.send_update');
     Route::post('/devices/register', [BiometricApiController::class, 'registerDevice']);
+    Route::post('/devices/response', [DeviceManagementController::class, 'handleFaceListResponse']);
 
     // Biometric Synchronization
     Route::post('/biometrics/by-matricules', [BiometricApiController::class, 'getEmbeddingsByMatricules']);

@@ -80,6 +80,18 @@
                                                     title="Sync Biométrie">
                                                 <i class="ti ti-refresh"></i>
                                             </button>
+                                            <button class="btn btn-secondary btn-sm btn-face-list"
+                                                    data-id="{{ $device->id }}"
+                                                    data-name="{{ $device->device_name ?? $device->imei }}"
+                                                    title="Demander la liste des matricules du terminal">
+                                                <i class="ti ti-list-search"></i>
+                                            </button>
+                                            <button class="btn btn-warning btn-sm btn-view-face-list"
+                                                    data-id="{{ $device->id }}"
+                                                    data-name="{{ $device->device_name ?? $device->imei }}"
+                                                    title="Voir la dernière liste reçue">
+                                                <i class="ti ti-eye"></i>
+                                            </button>
                                             @endcan
                                             @can('devices.delete')
                                             <button class="btn btn-danger btn-sm btn-delete"
@@ -96,8 +108,8 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-3">
-                        {{ $devices->links() }}
+                    <div class="mt-3 devices-pagination">
+                        {{ $devices->appends(request()->query())->links() }}
                     </div>
                 </div>
             </div>
@@ -223,6 +235,9 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" id="btnDeleteFromDevice" class="btn btn-danger me-2">
+                    <i class="ti ti-trash me-1"></i> Supprimer sur le terminal
+                </button>
                 <button type="button" id="btnSubmitSync" class="btn btn-primary">
                     <i class="ti ti-send me-1"></i> Envoyer la synchronisation
                 </button>
@@ -232,6 +247,51 @@
 </div>
 @endcan
 @endsection
+
+<!-- Modal pour la liste des matricules reçue du terminal -->
+<div class="modal fade" id="faceListModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title">Liste des matricules reçus - <span id="faceListDeviceName" class="text-primary"></span></h4>
+                <button type="button" class="btn-close custom-btn-close" data-bs-dismiss="modal" aria-label="Close">
+                    <i class="ti ti-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 text-end small text-muted" id="faceListMeta"></div>
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="selectAllFaceList" class="form-check-input">
+                                </th>
+                                <th>#</th>
+                                <th>Matricule</th>
+                                <th>Agent</th>
+                            </tr>
+                        </thead>
+                        <tbody id="faceListRows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnDeleteFaceListSelection" class="btn btn-danger me-2">
+                    <i class="ti ti-trash me-1"></i> Supprimer sélection du terminal
+                </button>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .devices-pagination .page-item:first-child,
+    .devices-pagination .page-item:last-child {
+        display: none;
+    }
+</style>
 
 @push('scripts')
 <script>
@@ -338,6 +398,157 @@ $(document).ready(function() {
         });
     });
 
+    // --- FACE LIST REQUEST ---
+    $(document).on('click', '.btn-face-list', function() {
+        let deviceId = $(this).data('id');
+        let deviceName = $(this).data('name');
+
+        Swal.fire({
+            title: 'Questionner le terminal ?',
+            text: `Interroger le terminal "${deviceName}" pour demander la liste des visages disponibles sur le terminal ?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Oui, envoyer',
+            cancelButtonText: 'Annuler'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+
+            let btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
+
+            $.ajax({
+                url: `/admin/devices/${deviceId}/face-list`,
+                method: 'POST',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Commande envoyée', response.message, 'success');
+                    }
+                },
+                error: function(xhr) {
+                    let msg = 'Erreur lors de l\'envoi de la commande FACE_LIST.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                    Swal.fire('Erreur', msg, 'error');
+                },
+                complete: function() {
+                    btn.prop('disabled', false).html('<i class="ti ti-list-search"></i>');
+                }
+            });
+        });
+    });
+
+    $(document).on('click', '.btn-view-face-list', function() {
+        const deviceId = $(this).data('id');
+        const deviceName = $(this).data('name');
+        window.currentFaceListDeviceId = deviceId;
+
+        $('#faceListDeviceName').text(deviceName);
+        $('#faceListMeta').text('Chargement...');
+        $('#faceListRows').html('<tr><td colspan="4" class="text-center py-4">Chargement...</td></tr>');
+        $('#selectAllFaceList').prop('checked', false);
+        $('#faceListModal').modal('show');
+
+        $.ajax({
+            url: `/admin/devices/${deviceId}/face-list`,
+            method: 'GET',
+            success: function(response) {
+                if (!response.success) {
+                    $('#faceListRows').html('<tr><td colspan="4" class="text-center py-4">'+(response.message || 'Aucune donnée disponible.')+'</td></tr>');
+                    $('#faceListMeta').text('');
+                    return;
+                }
+
+                const items = response.data.matricules || [];
+                $('#faceListMeta').text(`Total: ${response.data.count} matricules • Reçu le ${response.data.received_at || '-'}`);
+
+                if (!items.length) {
+                    $('#faceListRows').html('<tr><td colspan="4" class="text-center py-4">Aucun matricule reçu.</td></tr>');
+                    return;
+                }
+
+                const rows = items.map((item, index) => {
+                    const matricule = item && item.matricule ? item.matricule : (item || '---');
+                    const fullname = item && item.fullname ? item.fullname : 'N/A';
+                    const photo = item && item.photo ? item.photo : '{{ asset('assets/img/avatar.jpg') }}';
+                    const station = item && item.station_name ? item.station_name : '--';
+
+                    return `
+                        <tr>
+                            <td><input type="checkbox" class="form-check-input face-list-checkbox" value="${matricule}"></td>
+                            <td>${index + 1}</td>
+                            <td><strong>${matricule}</strong></td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="avatar avatar-sm rounded-circle overflow-hidden border">
+                                        <img src="${photo}" class="img-fluid rounded-circle" alt="agent" style="width: 32px; height: 32px; object-fit: cover;">
+                                    </span>
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-semibold text-dark">${fullname}</span>
+                                        <small class="text-muted">${station}</small>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                $('#faceListRows').html(rows);
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Impossible de récupérer la liste du terminal.';
+                $('#faceListRows').html('<tr><td colspan="4" class="text-center py-4">'+msg+'</td></tr>');
+                $('#faceListMeta').text('');
+            }
+        });
+    });
+
+    $('#selectAllFaceList').on('change', function() {
+        $('.face-list-checkbox').prop('checked', $(this).is(':checked'));
+    });
+
+    $('#btnDeleteFaceListSelection').on('click', function() {
+        if (!window.currentFaceListDeviceId) {
+            Swal.fire('Attention', 'Aucun terminal sélectionné.', 'warning');
+            return;
+        }
+
+        const selected = $('.face-list-checkbox:checked').map(function() {
+            return $(this).val();
+        }).get();
+
+        if (!selected.length) {
+            Swal.fire('Attention', 'Sélectionnez au moins un matricule à supprimer sur le terminal.', 'warning');
+            return;
+        }
+
+        Swal.fire({
+            title: 'Supprimer du terminal ?',
+            text: `Voulez-vous supprimer ${selected.length} matricule(s) sur ce terminal ?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Oui, supprimer',
+            cancelButtonText: 'Annuler'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+
+            $.ajax({
+                url: `/admin/devices/${window.currentFaceListDeviceId}/delete-biometric`,
+                method: 'POST',
+                data: { _token: '{{ csrf_token() }}', matricules: selected },
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Suppression envoyée', response.message, 'success');
+                        $('#faceListModal').modal('hide');
+                    }
+                },
+                error: function(xhr) {
+                    const msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Erreur lors de la suppression sur le terminal.';
+                    Swal.fire('Erreur', msg, 'error');
+                }
+            });
+        });
+    });
+
     // --- SYNC BIOMETRIE ---
     $(document).on('click', '.btn-sync', function() {
         currentDeviceId = $(this).data('id');
@@ -355,6 +566,53 @@ $(document).ready(function() {
         let val = $(this).val().toLowerCase();
         $('.bio-row').each(function() {
             $(this).toggle($(this).data('search').indexOf(val) > -1);
+        });
+    });
+
+    function sendBiometricDeleteToDevice(deviceId, matricules, successMessage) {
+        if (!matricules.length) {
+            Swal.fire('Attention', 'Sélectionnez au moins un matricule.', 'warning');
+            return;
+        }
+
+        $.ajax({
+            url: `/admin/devices/${deviceId}/delete-biometric`,
+            method: 'POST',
+            data: { _token: '{{ csrf_token() }}', matricules: matricules },
+            success: function(response) {
+                if (response.success) {
+                    Swal.fire('Suppression envoyée', successMessage || response.message, 'success');
+                }
+            },
+            error: function(xhr) {
+                let msg = 'Erreur lors de la suppression sur le terminal.';
+                if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                Swal.fire('Erreur', msg, 'error');
+            }
+        });
+    }
+
+    $('#btnDeleteFromDevice').on('click', function() {
+        let selectedMatricules = [];
+        $('.agent-checkbox:checked').each(function() {
+            selectedMatricules.push($(this).val());
+        });
+
+        if (!selectedMatricules.length) {
+            Swal.fire('Attention', 'Veuillez sélectionner au moins un agent.', 'warning');
+            return;
+        }
+
+        Swal.fire({
+            title: 'Supprimer sur le terminal ?',
+            text: `Voulez-vous supprimer ${selectedMatricules.length} matricule(s) sur ce terminal ?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Oui, supprimer',
+            cancelButtonText: 'Annuler'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+            sendBiometricDeleteToDevice(currentDeviceId, selectedMatricules, 'Les matricules sélectionnées ont été envoyées pour suppression sur le terminal.');
         });
     });
 

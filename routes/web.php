@@ -422,6 +422,9 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::post('/devices/{device}/update', [DeviceManagementController::class, 'update'])->name('devices.update');
         Route::post('/devices/{device}/delete', [DeviceManagementController::class, 'destroy'])->name('devices.destroy');
         Route::post('/devices/{device}/sync', [DeviceManagementController::class, 'sync'])->name('devices.sync');
+        Route::post('/devices/{device}/face-list', [DeviceManagementController::class, 'requestFaceList'])->name('devices.face_list');
+        Route::get('/devices/{device}/face-list', [DeviceManagementController::class, 'getFaceListForDevice'])->name('devices.face_list.view');
+        Route::post('/devices/{device}/delete-biometric', [DeviceManagementController::class, 'deleteBiometricsFromDevice'])->name('devices.delete_biometric');
         Route::post('/biometrics/{id}/delete', [DeviceManagementController::class, 'destroyBiometric'])->name('biometrics.destroy');
     });
 
