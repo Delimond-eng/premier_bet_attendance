@@ -47,11 +47,14 @@ new Vue({
         return {
             isLoading: false,
             sites: [],
+            regions: Array.isArray(window.reportPresenceRegions) ? window.reportPresenceRegions : [],
             prefixes: [],
             show_matricule_filter: false,
             filters: {
                 date: `${yyyy}-${mm}-${dd}`,
                 station_id: "",
+                region_id: "",
+                city_id: "",
                 matricule_prefix: "",
             },
             count: {
@@ -75,25 +78,78 @@ new Vue({
     },
 
     methods: {
+        citiesForRegion(regionId) {
+            const region = this.regions.find((item) => String(item.id) === String(regionId));
+            return region && Array.isArray(region.city_records) ? region.city_records : [];
+        },
+
+        initRegionSelect2() {
+            initSelect2ForVue(this.$refs.regionSelect, {
+                placeholder: "Toutes les régions",
+                getValue: () => this.filters.region_id,
+                setValue: (value) => {
+                    if (String(this.filters.region_id || "") === String(value || "")) return;
+                    this.filters.region_id = value;
+                    this.filters.city_id = "";
+                    this.filters.station_id = "";
+                    this.$nextTick(() => {
+                        this.initCitySelect2();
+                    });
+                    this.loadSites().then(() => this.load());
+                },
+            });
+        },
+
+        initCitySelect2() {
+            initSelect2ForVue(this.$refs.citySelect, {
+                placeholder: "Toutes les cités",
+                getValue: () => this.filters.city_id,
+                setValue: (value) => {
+                    if (String(this.filters.city_id || "") === String(value || "")) return;
+                    this.filters.city_id = value;
+                    this.filters.station_id = "";
+                    this.loadSites().then(() => this.load());
+                },
+            });
+        },
+
+        initStationSelect2() {
+            initSelect2ForVue(this.$refs.siteSelect, {
+                placeholder: "Toutes les stations",
+                getValue: () => this.filters.station_id,
+                setValue: (value) => {
+                    this.filters.station_id = value;
+                    this.load();
+                },
+            });
+        },
+
         async init() {
+            this.$nextTick(() => {
+                this.initRegionSelect2();
+                this.initCitySelect2();
+                this.initStationSelect2();
+            });
+            await this.loadSites();
+            await this.load();
+        },
+
+        async loadSites() {
             try {
-                const { data } = await get("/stations/list");
+                const params = new URLSearchParams();
+                if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+                if (this.filters.city_id) params.set("city_id", this.filters.city_id);
+                const { data } = await get(`/stations/list?${params.toString()}`);
                 this.sites = data?.sites ?? [];
+                if (this.filters.station_id && !this.sites.some((site) => String(site.id) === String(this.filters.station_id))) {
+                    this.filters.station_id = "";
+                }
             } catch (e) {
                 this.sites = [];
+                this.filters.station_id = "";
             }
 
-            this.$nextTick(() => {
-                initSelect2ForVue(this.$refs.stationSelect, {
-                    placeholder: "Toutes les stations",
-                    getValue: () => this.filters.station_id,
-                    setValue: (v) => {
-                        this.filters.station_id = v;
-                    },
-                });
-            });
-
-            await this.load();
+            this.$nextTick(() => this.initStationSelect2());
         },
 
         async load() {
@@ -101,7 +157,7 @@ new Vue({
             this.isLoading = true;
 
             const stationId =
-                (this.$refs.stationSelect && String(this.$refs.stationSelect.value || "")) ||
+                (this.$refs.siteSelect && String(this.$refs.siteSelect.value || "")) ||
                 String(this.filters.station_id || "");
             this.filters.station_id = stationId;
 
@@ -109,6 +165,8 @@ new Vue({
             if (this.filters.date) params.set("date", this.filters.date);
             if (stationId) params.set("station_id", stationId);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             params.set("per_page", "200");
 
             try {
@@ -204,6 +262,8 @@ new Vue({
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/daily/export/pdf?${params.toString()}`;
         },
@@ -212,6 +272,8 @@ new Vue({
             const params = new URLSearchParams();
             if (this.filters.date) params.set("date", this.filters.date);
             if (this.filters.station_id) params.set("station_id", this.filters.station_id);
+            if (this.filters.region_id) params.set("region_id", this.filters.region_id);
+            if (this.filters.city_id) params.set("city_id", this.filters.city_id);
             if (this.filters.matricule_prefix) params.set("matricule_prefix", this.filters.matricule_prefix);
             return `/reports/daily/export/excel?${params.toString()}`;
         },

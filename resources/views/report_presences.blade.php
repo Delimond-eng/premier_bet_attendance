@@ -18,26 +18,19 @@
             </div>
             <div class="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
 
-                @if(Auth::user()->matricule_prefix === null)
-                <div v-if="show_matricule_filter" class="mb-2" style="width: 160px;">
-                    <select class="form-select" v-model="filters.matricule_prefix" @change="load">
-                        <option value="">Sous-traitance</option>
-                        <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
+                <div class="mb-2" style="width: 210px;">
+                    <select class="form-select" v-model="filters.region_id" ref="regionSelect">
+                        <option value="">Toutes les régions</option>
+                        @foreach($regions ?? [] as $region)
+                            <option value="{{ $region->id }}">{{ $region->name }}</option>
+                        @endforeach
                     </select>
                 </div>
-                @endif
-
-                <div class="flex-fill mb-2" style="width: 260px;">
-                    <select class="form-select" v-model="filters.station_id" ref="stationSelect">
-                        <option value="">Toutes les stations</option>
-                        <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                <div class="mb-2" style="width: 210px;">
+                    <select class="form-select" v-model="filters.city_id" ref="citySelect" :disabled="!filters.region_id">
+                        <option value="">Toutes les cités</option>
+                        <option v-for="city in citiesForRegion(filters.region_id)" :key="city.id" :value="String(city.id)">@{{ city.name }}</option>
                     </select>
-                </div>
-                <div class="me-2 mb-2">
-                    <input type="date" class="form-control" v-model="filters.date" @change="load">
-                </div>
-                <div class="me-2 mb-2">
-                    <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>
                 </div>
 
                 @can('rapport_presences.export')
@@ -130,8 +123,30 @@
         <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                 <h5>Liste des pointages</h5>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="text-muted" v-if="isLoading">Chargement...</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                
+                    <div class="mb-2" style="width: 260px;">
+                        <select id="report-presence-station-select" class="form-select" v-model="filters.station_id" ref="siteSelect" style="width: 260px;">
+                            <option value="">Toutes les stations</option>
+                            <option v-for="s in sites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                        </select>
+                    </div>
+                    @if(Auth::user()->matricule_prefix === null)
+                    <div v-if="show_matricule_filter" class="mb-2" style="width: 150px;">
+                        <select class="form-control" v-model="filters.matricule_prefix" @change="load">
+                            <option value="">Sous-traitance</option>
+                            <option v-for="p in prefixes" :key="p" :value="p">@{{ p }}</option>
+                        </select>
+                    </div>
+                    @endif
+
+                    <div class="me-2 mb-2">
+                        <input type="date" class="form-control" v-model="filters.date" @change="load">
+                    </div>
+                    <div class="me-2 mb-2">
+                        <button class="btn btn-primary" @click="load" :disabled="isLoading">@{{ isLoading ? '...' : 'Charger' }}</button>
+                    </div>
+                    <span class="text-muted ms-2" v-if="isLoading">Chargement...</span>
                 </div>
             </div>
             <div class="card-body">
@@ -247,5 +262,6 @@
 @endsection
 
 @push("scripts")
-    <script type="module" src="{{ asset("assets/js/scripts/report-presences.js") }}"></script>
+    <script>window.reportPresenceRegions = @json($regions ?? []);</script>
+    <script type="module" src="{{ asset("assets/js/scripts/report-presences.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences.js')) }}"></script>
 @endpush

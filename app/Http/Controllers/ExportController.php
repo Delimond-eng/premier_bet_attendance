@@ -29,10 +29,14 @@ class ExportController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $date = Carbon::parse($data['date'] ?? Carbon::today()->toDateString())->toDateString();
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
         $query = PresenceAgents::withoutGlobalScopes()
@@ -730,10 +734,14 @@ class ExportController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $date = Carbon::parse($data['date'] ?? Carbon::today()->toDateString())->toDateString();
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
         $query = PresenceAgents::query()
@@ -743,6 +751,17 @@ class ExportController extends Controller
         if ($stationId !== null) {
             $agentIds = Agent::query()
                 ->where('site_id', (int) $stationId)
+                ->pluck('id')
+                ->all();
+            $query->whereIn('agent_id', $agentIds);
+        }
+        if ($regionId !== null || $cityId !== null) {
+            $agentIds = Agent::query()
+                ->whereHas('station', function ($q) use ($regionId, $cityId) {
+                    $q->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', $cityId));
+                })
                 ->pluck('id')
                 ->all();
             $query->whereIn('agent_id', $agentIds);
@@ -780,10 +799,14 @@ class ExportController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer|exists:sites,id',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
         ]);
 
         $date = Carbon::parse($data['date'] ?? Carbon::today()->toDateString())->toDateString();
         $stationId = $data['station_id'] ?? null;
+        $regionId = $data['region_id'] ?? null;
+        $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
 
         $query = PresenceAgents::query()
@@ -793,6 +816,17 @@ class ExportController extends Controller
         if ($stationId !== null) {
             $agentIds = Agent::query()
                 ->where('site_id', (int) $stationId)
+                ->pluck('id')
+                ->all();
+            $query->whereIn('agent_id', $agentIds);
+        }
+        if ($regionId !== null || $cityId !== null) {
+            $agentIds = Agent::query()
+                ->whereHas('station', function ($q) use ($regionId, $cityId) {
+                    $q->withoutGlobalScopes()
+                        ->when($regionId !== null, fn ($query) => $query->where('region_id', $regionId))
+                        ->when($cityId !== null, fn ($query) => $query->where('city_id', $cityId));
+                })
                 ->pluck('id')
                 ->all();
             $query->whereIn('agent_id', $agentIds);

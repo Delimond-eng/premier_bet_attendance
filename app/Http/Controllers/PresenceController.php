@@ -988,6 +988,8 @@ class PresenceController extends Controller
         $data = $request->validate([
             'date' => 'nullable|date',
             'station_id' => 'nullable|integer',
+            'region_id' => 'nullable|integer|exists:regions,id',
+            'city_id' => 'nullable|integer|exists:cities,id',
             'agent_id' => 'nullable|integer',
             'group_id' => 'nullable|integer',
             'matricule_prefix' => 'nullable|string',
@@ -997,6 +999,8 @@ class PresenceController extends Controller
         $date = Carbon::parse($data['date'] ?? Carbon::today()->toDateString())->toDateString();
         $filters = [
             'station_id' => $data['station_id'] ?? null,
+            'region_id' => $data['region_id'] ?? null,
+            'city_id' => $data['city_id'] ?? null,
             'agent_id' => $data['agent_id'] ?? null,
             'group_id' => $data['group_id'] ?? null,
             'matricule_prefix' => $data['matricule_prefix'] ?? null,
@@ -1486,7 +1490,7 @@ class PresenceController extends Controller
         return response()->json(['status' => 'success', 'result' => $group]);
     }
 
-    private function normalizePunchPhoto($value, $dir): ?string
+    /* private function normalizePunchPhoto($value, $dir): ?string
     {
         if (!$value) return null;
         if (is_string($value)) return $value;
@@ -1534,7 +1538,441 @@ class PresenceController extends Controller
             return url("punches/$dir/$filename");
         }
         return null;
+    } */
+    private function normalizePunchPhoto($value, $dir): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Si la valeur est déjà une chaîne (URL existante)
+        |--------------------------------------------------------------------------
+        */
+        if (is_string($value)) {
+            return $value;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Vérification du fichier uploadé
+        |--------------------------------------------------------------------------
+        */
+        if (
+            !($value instanceof \Illuminate\Http\UploadedFile) ||
+            !$value->isValid()
+        ) {
+            return null;
+        }
+
+        $tempPath = $value->getRealPath();
+
+        if (!$tempPath || !file_exists($tempPath)) {
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Vérification de l'image
+        |--------------------------------------------------------------------------
+        */
+        $info = @getimagesize($tempPath);
+
+        if (!$info || empty($info['mime'])) {
+            return null;
+        }
+
+        $mime = strtolower($info['mime']);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Charger l'image avec GD
+        |--------------------------------------------------------------------------
+        */
+        $source = null;
+
+        switch ($mime) {
+
+            case 'image/jpeg':
+                $source = @imagecreatefromjpeg($tempPath);
+                break;
+
+            case 'image/png':
+                $source = @imagecreatefrompng($tempPath);
+                break;
+
+            case 'image/webp':
+                $source = @imagecreatefromwebp($tempPath);
+                break;
+
+            default:
+                return null;
+        }
+
+        if (!$source) {
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Configuration
+        |--------------------------------------------------------------------------
+        |
+        | Une photo de présence n'a pas besoin d'être en haute résolution.
+        |
+        | 800 px permet de garder une photo suffisamment claire tout en
+        | réduisant fortement la taille.
+        |
+        */
+
+        $maxWidth = 800;
+
+        // Taille maximale souhaitée : 120 Ko
+        $maxSize = 120 * 1024;
+
+        // Qualité initiale JPEG
+        $quality = 60;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Dimensions originales
+        |--------------------------------------------------------------------------
+        */
+
+        $width  = imagesx($source);
+        $height = imagesy($source);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Corriger l'orientation EXIF des JPG
+        |--------------------------------------------------------------------------
+        |
+        | Les téléphones peuvent enregistrer une photo horizontalement avec
+        | une information EXIF indiquant qu'elle doit être tournée.
+        |
+        */
+
+        if ($mime === 'image/jpeg' && function_exists('exif_read_data')) {
+
+            $exif = @exif_read_data($tempPath);
+
+            if (!empty($exif['Orientation'])) {
+
+                switch ($exif['Orientation']) {
+
+                    // Rotation 180°
+                    case 3:
+                        $rotated = imagerotate($source, 180, 0);
+
+                        if ($rotated !== false) {
+                            imagedestroy($source);
+                            $source = $rotated;
+                        }
+                        break;
+
+                    // Rotation 90° antihoraire
+                    case 6:
+                        $rotated = imagerotate($source, -90, 0);
+
+                        if ($rotated !== false) {
+                            imagedestroy($source);
+                            $source = $rotated;
+                        }
+                        break;
+
+                    // Rotation 90° horaire
+                    case 8:
+                        $rotated = imagerotate($source, 90, 0);
+
+                        if ($rotated !== false) {
+                            imagedestroy($source);
+                            $source = $rotated;
+                        }
+                        break;
+                }
+
+                // Recalculer les dimensions après rotation
+                $width  = imagesx($source);
+                $height = imagesy($source);
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Redimensionnement
+        |--------------------------------------------------------------------------
+        */
+
+        if ($width > $maxWidth) {
+
+            $newWidth = $maxWidth;
+
+            $newHeight = (int) round(
+                $height * ($newWidth / $width)
+            );
+
+            $target = imagecreatetruecolor(
+                $newWidth,
+                $newHeight
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Fond blanc
+            |--------------------------------------------------------------------------
+            |
+            | Utile lorsqu'une image PNG/WebP possède de la transparence.
+            |
+            */
+
+            $white = imagecolorallocate(
+                $target,
+                255,
+                255,
+                255
+            );
+
+            imagefill(
+                $target,
+                0,
+                0,
+                $white
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Redimensionnement haute qualité
+            |--------------------------------------------------------------------------
+            */
+
+            imagecopyresampled(
+                $target,
+                $source,
+                0,
+                0,
+                0,
+                0,
+                $newWidth,
+                $newHeight,
+                $width,
+                $height
+            );
+
+            imagedestroy($source);
+
+            $source = $target;
+
+            $width  = $newWidth;
+            $height = $newHeight;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Création du dossier
+        |--------------------------------------------------------------------------
+        */
+
+        $destDir = public_path("punches/$dir");
+
+        if (!file_exists($destDir)) {
+
+            if (!mkdir($destDir, 0755, true) && !is_dir($destDir)) {
+                imagedestroy($source);
+                return null;
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Nom du fichier
+        |--------------------------------------------------------------------------
+        */
+
+        $filename = 'punch_' . uniqid('', true) . '.jpg';
+
+        $fullPath = $destDir . DIRECTORY_SEPARATOR . $filename;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Première compression
+        |--------------------------------------------------------------------------
+        */
+
+        $currentQuality = $quality;
+
+        imageinterlace($source, true);
+
+        imagejpeg(
+            $source,
+            $fullPath,
+            $currentQuality
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Réduction progressive de la qualité
+        |--------------------------------------------------------------------------
+        |
+        | Si l'image dépasse 120 Ko, on diminue progressivement la qualité.
+        |
+        | Exemple :
+        |
+        | 60% → 55% → 50% → 45% → 40% → 35% → 30%
+        |
+        */
+
+        while (
+            file_exists($fullPath) &&
+            filesize($fullPath) > $maxSize &&
+            $currentQuality > 30
+        ) {
+
+            $currentQuality -= 5;
+
+            imagejpeg(
+                $source,
+                $fullPath,
+                $currentQuality
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Si l'image est toujours trop grande
+        |--------------------------------------------------------------------------
+        |
+        | On réduit également la résolution.
+        |
+        */
+
+        while (
+            file_exists($fullPath) &&
+            filesize($fullPath) > $maxSize &&
+            $width > 500
+        ) {
+
+            $newWidth = (int) round($width * 0.85);
+
+            $newHeight = (int) round(
+                $height * ($newWidth / $width)
+            );
+
+            $target = imagecreatetruecolor(
+                $newWidth,
+                $newHeight
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Fond blanc
+            |--------------------------------------------------------------------------
+            */
+
+            $white = imagecolorallocate(
+                $target,
+                255,
+                255,
+                255
+            );
+
+            imagefill(
+                $target,
+                0,
+                0,
+                $white
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Redimensionnement
+            |--------------------------------------------------------------------------
+            */
+
+            imagecopyresampled(
+                $target,
+                $source,
+                0,
+                0,
+                0,
+                0,
+                $newWidth,
+                $newHeight,
+                $width,
+                $height
+            );
+
+            imagedestroy($source);
+
+            $source = $target;
+
+            $width  = $newWidth;
+            $height = $newHeight;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Nouvelle compression
+            |--------------------------------------------------------------------------
+            */
+
+            $currentQuality = 50;
+
+            imagejpeg(
+                $source,
+                $fullPath,
+                $currentQuality
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Continuer à diminuer la qualité si nécessaire
+            |--------------------------------------------------------------------------
+            */
+
+            while (
+                file_exists($fullPath) &&
+                filesize($fullPath) > $maxSize &&
+                $currentQuality > 30
+            ) {
+
+                $currentQuality -= 5;
+
+                imagejpeg(
+                    $source,
+                    $fullPath,
+                    $currentQuality
+                );
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Libération mémoire
+        |--------------------------------------------------------------------------
+        */
+
+        imagedestroy($source);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Vérification finale
+        |--------------------------------------------------------------------------
+        */
+
+        if (!file_exists($fullPath)) {
+            return null;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Retourner l'URL
+        |--------------------------------------------------------------------------
+        */
+
+        return url("punches/$dir/$filename");
     }
+
+
 
     public function weeklyReport(Request $request, AttendanceReportService $service): JsonResponse
     {

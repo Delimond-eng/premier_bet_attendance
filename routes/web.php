@@ -316,7 +316,11 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Reports
     Route::prefix('reports')->group(function () {
-        Route::get('/daily', fn () => view('report_presences'))
+        Route::get('/daily', fn () => view('report_presences', [
+            'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
+                ->orderBy('name')
+                ->get(['id', 'name', 'timezone']),
+        ]))
             ->name('reports.presences')
             ->middleware('can:rapport_presences.view');
         Route::get('/absences/daily', fn () => view('report_absences_daily'))
