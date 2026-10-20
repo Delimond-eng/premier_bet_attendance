@@ -61,7 +61,7 @@
                             <th>Date création</th>
                             <th>Date modif.</th>
                             <th>Role</th>
-                            <th>Station / Sous-traitance</th>
+                            <th>Périmètre / Sous-traitance</th>
                             <th>Status</th>
                             <th></th>
                         </tr>
@@ -97,9 +97,12 @@
                                       class=" badge badge-md p-2 fs-10">@{{ data.role }}</span>
                             </td>
                             <td>
-                                <span v-if="data.station" class="badge badge-purple mb-1">@{{ data.station.name }}</span>
+                                <span v-if="data.region" class="badge badge-info mb-1">@{{ data.region.name }}</span>
+                                <span v-if="data.city" class="badge badge-info mb-1">@{{ data.city.name }}</span>
+                                <span v-for="station in data.stations" :key="station.id" class="badge badge-purple mb-1 me-1">@{{ station.name }}</span>
+                                <span v-if="(!data.stations || !data.stations.length) && data.station" class="badge badge-purple mb-1">@{{ data.station.name }}</span>
                                 <span v-if="data.matricule_prefix" class="badge badge-info d-block">Sous-traitance: @{{ data.matricule_prefix }}</span>
-                                <span v-if="!data.station && !data.matricule_prefix" class="text-muted">Accès global</span>
+                                <span v-if="!data.region && !data.city && (!data.stations || !data.stations.length) && !data.station && !data.matricule_prefix" class="text-muted">Accès global</span>
                             </td>
                             <td>
                                 <span class="badge badge-success d-inline-flex align-items-center badge-xs">
@@ -173,12 +176,29 @@
                                 </div>
                                 <div class="col-md-6" v-if="form.role !== 'admin'">
                                     <div class="mb-3">
-                                        <label class="form-label">Station</label>
-                                        <select class="form-select" v-model="form.station_id">
-                                            <option value="">--Toutes les stations (Accès global)--</option>
-                                            <option v-for="s in allSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                                        <label class="form-label">Province</label>
+                                        <select class="form-select" v-model="form.region_id">
+                                            <option value="">--Toutes les provinces--</option>
+                                            <option v-for="region in allRegions" :key="region.id" :value="region.id">@{{ region.name }}</option>
                                         </select>
-                                        <small class="text-muted">Optionnel. Si vide, l'utilisateur verra toutes les stations.</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6" v-if="form.role !== 'admin'">
+                                    <div class="mb-3">
+                                        <label class="form-label">Cité</label>
+                                        <select class="form-select" v-model="form.city_id" :disabled="!form.region_id">
+                                            <option value="">--Toutes les cités--</option>
+                                            <option v-for="city in availableCities" :key="city.id" :value="city.id">@{{ city.name }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-12" v-if="form.role !== 'admin'">
+                                    <div class="mb-3">
+                                        <label class="form-label">Stations (sélection multiple)</label>
+                                        <select class="form-select" v-model="form.station_ids" multiple size="5">
+                                            <option v-for="s in availableSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
+                                        </select>
+                                        <small class="text-muted">Optionnel. Les stations proposées suivent la province et la cité sélectionnées. Sans station choisie, l’accès couvre la zone sélectionnée; sans zone non plus, l’accès est global.</small>
                                     </div>
                                 </div>
                                 <div class="col-md-6" v-if="isTraitanceRole">
@@ -289,6 +309,7 @@
 @push("scripts")
     <script>
         window.__SITES__ = @json($sites ?? []);
+        window.__REGIONS__ = @json($regions ?? []);
     </script>
     <script type="module" src="{{ asset("assets/js/scripts/user.js") }}"></script>
 @endpush

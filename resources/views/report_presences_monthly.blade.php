@@ -117,6 +117,7 @@
                             <th>Agent</th>
                             <th>Fonction</th>
                             <th>Station</th>
+                            <th v-if="showManualAttendance">Pointages manuels</th>
                             <th>Present</th>
                             <th>Retard</th>
                             <th>Absent</th>
@@ -151,6 +152,7 @@
                             </td>
                             <td>@{{ r.agent?.fonction ?? '-' }}</td>
                             <td><span class="badge badge-lg badge-purple">@{{ r.agent?.station_name ?? '-' }}</span></td>
+                            <td v-if="showManualAttendance">@{{ r.manual_count }}</td>
                             <td>@{{ r.present }}</td>
                             <td>@{{ r.retard }}</td>
                             <td>@{{ r.absent }}</td>
@@ -172,6 +174,7 @@
                             <td></td>
                             <td></td>
                             <td></td>
+                            <td v-if="showManualAttendance">@{{ summaryTotals.manual_count }}</td>
                             <td>@{{ summaryTotals.present }}</td>
                             <td>@{{ summaryTotals.retard }}</td>
                             <td>@{{ summaryTotals.absent }}</td>
@@ -196,6 +199,7 @@
                 <div class="table-responsive" v-show="activeTab === 'details'">
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <span class="badge text-bg-success">1 = Presence</span>
+                        <span v-if="showManualAttendance" class="badge text-bg-success">1M = Presence manuelle</span>
                         <span class="badge text-bg-success">2 = Double shift</span>
                         <span class="badge text-bg-success">2 C-1 = Double shift avec retard</span>
                         <span class="badge text-bg-info">1-R = Retard</span>
@@ -217,6 +221,7 @@
                             <th v-for="d in dynamicDayKeys" :key="'head-' + d" class="text-center attendance-day-head" v-html="formatDayHeader(d)"></th>
                             <th>Total</th>
                             <th>Tot presences</th>
+                            <th v-if="showManualAttendance">Pointages manuels</th>
                             <th>Tot absences</th>
                             <th>Tot AN</th>
                             <th>Tot retard</th>
@@ -262,6 +267,7 @@
                             </td>
                             <td class="fw-semibold">@{{ r.total_count }}</td>
                             <td>@{{ r.total_presences }}</td>
+                            <td v-if="showManualAttendance">@{{ r.total_manual }}</td>
                             <td>@{{ r.total_absences }}</td>
                             <td class="text-danger fw-bold">@{{ r.total_an }}</td>
                             <td>@{{ r.total_retards }}</td>
@@ -416,6 +422,7 @@
 
 @push("scripts")
     <script>window.monthlyReportRegions = @json($regions ?? []);</script>
+    <script>window.manualAttendanceReportingEnabled = @json($manualAttendanceReportingEnabled ?? false);</script>
     <script type="module">
         import "{{ asset("assets/js/scripts/report-presences-monthly.js") . '?v=' . filemtime(public_path('assets/js/scripts/report-presences-monthly.js')) }}";
 

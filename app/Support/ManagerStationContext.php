@@ -4,10 +4,20 @@ namespace App\Support;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ManagerStationContext
 {
     public static function stationId(): ?int
+    {
+        $stationIds = self::stationIds();
+        return $stationIds !== null && count($stationIds) === 1 ? $stationIds[0] : null;
+    }
+
+    /**
+     * Null means unrestricted; an empty array means the user has no station access.
+     */
+    public static function stationIds(): ?array
     {
         $user = Auth::user();
         if (!$user) {
@@ -23,11 +33,44 @@ class ManagerStationContext
             return null;
         }
 
-        if ($user->station_id === null || $user->station_id === '') {
+        $request = app()->bound('request') ? app('request') : null;
+        $cacheKey = 'manager_station_ids.' . $user->id;
+        if ($request instanceof Request && $request->attributes->has($cacheKey)) {
+            return $request->attributes->get($cacheKey);
+        }
+
+        $assignedStationIds = DB::table('user_station')
+            ->where('user_id', $user->id)
+            ->pluck('station_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (!$assignedStationIds && $user->station_id !== null && $user->station_id !== '') {
+            $assignedStationIds = [(int) $user->station_id];
+        }
+
+        $hasGeographicAssignment = $user->region_id !== null || $user->city_id !== null;
+        if (!$assignedStationIds && !$hasGeographicAssignment) {
             return null;
         }
 
-        return (int) $user->station_id;
+        $query = DB::table('sites')->select('id');
+        if ($assignedStationIds) {
+            $query->whereIn('id', $assignedStationIds);
+        }
+        if ($user->region_id !== null) {
+            $query->where('region_id', $user->region_id);
+        }
+        if ($user->city_id !== null) {
+            $query->where('city_id', $user->city_id);
+        }
+
+        $stationIds = $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if ($request instanceof Request) {
+            $request->attributes->set($cacheKey, $stationIds);
+        }
+
+        return $stationIds;
     }
 
     /**
@@ -49,7 +92,7 @@ class ManagerStationContext
 
     public static function isScopedManager(): bool
     {
-        return self::stationId() !== null || self::matriculePrefix() !== null;
+        return self::stationIds() !== null || self::matriculePrefix() !== null;
     }
 
     private static function isPresencePunchRequest(): bool

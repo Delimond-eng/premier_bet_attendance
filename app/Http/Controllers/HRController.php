@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\AgentGroup;
+use App\Models\AgentGroupAssignment;
+use App\Models\AgentGroupPlanning;
 use App\Models\AttendanceAuthorization;
 use App\Models\AttendanceJustification;
 use App\Models\Conge;
 use App\Models\CongeType;
 use App\Models\PresenceAgents;
+use App\Models\PresenceHoraire;
 use App\Services\AttendanceReportService;
 use App\Support\ManagerStationContext;
 use Carbon\Carbon;
@@ -18,6 +22,231 @@ use Illuminate\Validation\Rule;
 
 class HRController extends Controller
 {
+    public function manualAttendanceAgents(Request $request): JsonResponse
+    {
+        $this->ensureElectrocoolManualAttendance();
+        $stationIds = ManagerStationContext::stationIds();
+        $prefix = ManagerStationContext::matriculePrefix();
+
+        $agents = Agent::withoutGlobalScopes()
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
+            ->when($prefix !== null, fn ($query) => $query->where('matricule', 'like', $prefix . '%'))
+            ->orderBy('fullname')
+            ->get(['id', 'fullname', 'matricule']);
+
+        return response()->json([
+            'results' => $agents->map(fn (Agent $agent) => [
+                'id' => $agent->id,
+                'text' => $agent->fullname . ' (' . $agent->matricule . ')',
+                'fullname' => $agent->fullname,
+                'matricule' => $agent->matricule,
+            ])->values(),
+        ]);
+    }
+
+    public function manualAttendanceMonth(Request $request): JsonResponse
+    {
+        $this->ensureElectrocoolManualAttendance();
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'month' => 'required|date_format:Y-m',
+        ]);
+
+        $agent = $this->findManualAttendanceAgent((int) $data['agent_id']);
+        $month = Carbon::createFromFormat('Y-m', $data['month'], 'Africa/Kinshasa')->startOfMonth();
+        $today = Carbon::now('Africa/Kinshasa')->startOfDay();
+        $days = [];
+
+        for ($day = $month->copy(); $day->lte($month->copy()->endOfMonth()); $day->addDay()) {
+            $date = $day->toDateString();
+            $schedule = $this->manualAttendanceSchedule($agent, $date);
+            $presence = PresenceAgents::withoutGlobalScopes()
+                ->where('agent_id', $agent->id)
+                ->whereDate('date_reference', $date)
+                ->orderByDesc('id')
+                ->first();
+            $completed = PresenceAgents::withoutGlobalScopes()
+                ->where('agent_id', $agent->id)
+                ->whereDate('date_reference', $date)
+                ->whereNotNull('started_at')
+                ->whereNotNull('ended_at')
+                ->exists();
+
+            $days[] = [
+                'date' => $date,
+                'weekday' => $day->locale('fr')->translatedFormat('l'),
+                'future' => $day->gt($today),
+                'completed' => $completed,
+                'has_entry' => $presence && $presence->started_at !== null,
+                'started_at' => $presence?->getRawOriginal('started_at')
+                    ? Carbon::parse($presence->getRawOriginal('started_at'))->setTimezone('Africa/Kinshasa')->format('H:i')
+                    : null,
+                'ended_at' => $presence?->getRawOriginal('ended_at')
+                    ? Carbon::parse($presence->getRawOriginal('ended_at'))->setTimezone('Africa/Kinshasa')->format('H:i')
+                    : null,
+                'horaire' => $schedule['horaire']?->libelle ?? ($schedule['rest'] ? 'Repos prévu' : 'Horaire à définir'),
+                'default_started_at' => $schedule['horaire']?->getRawOriginal('started_at')
+                    ? substr((string) $schedule['horaire']->getRawOriginal('started_at'), 0, 5)
+                    : null,
+                'default_ended_at' => $schedule['horaire']?->getRawOriginal('ended_at')
+                    ? substr((string) $schedule['horaire']->getRawOriginal('ended_at'), 0, 5)
+                    : null,
+                'manual' => (bool) ($presence?->is_manual ?? false),
+            ];
+        }
+
+        return response()->json([
+            'agent' => ['id' => $agent->id, 'fullname' => $agent->fullname, 'matricule' => $agent->matricule],
+            'days' => $days,
+        ]);
+    }
+
+    public function manualAttendanceStore(Request $request): JsonResponse
+    {
+        $this->ensureElectrocoolManualAttendance();
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:agents,id',
+            'date' => 'required|date_format:Y-m-d',
+            'started_at' => 'nullable|date_format:H:i',
+            'ended_at' => 'nullable|date_format:H:i',
+        ]);
+
+        $agent = $this->findManualAttendanceAgent((int) $data['agent_id']);
+        $date = Carbon::parse($data['date'], 'Africa/Kinshasa')->startOfDay();
+        abort_if($date->gt(Carbon::now('Africa/Kinshasa')->startOfDay()), 422, 'Les dates futures ne peuvent pas être pointées.');
+
+        $query = PresenceAgents::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date_reference', $date->toDateString())
+            ->orderByDesc('id');
+        $presence = (clone $query)->whereNotNull('started_at')->whereNull('ended_at')->first();
+        $hasCompletedPresence = (clone $query)->whereNotNull('started_at')->whereNotNull('ended_at')->exists();
+
+        abort_if($hasCompletedPresence, 422, 'Le pointage de cette journée est déjà complet.');
+        if (!$presence && empty($data['started_at'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'started_at' => 'L’heure d’entrée est requise pour créer un pointage.',
+            ]);
+        }
+
+        $horaireData = $this->manualAttendanceSchedule($agent, $date->toDateString());
+        $horaire = $horaireData['horaire'];
+        $siteId = $horaireData['site_id'] ?: $agent->site_id;
+        abort_if(!$siteId, 422, 'Aucune station n’est définie pour cet agent.');
+
+        $startedAt = $presence?->getRawOriginal('started_at')
+            ? Carbon::parse($presence->getRawOriginal('started_at'))->setTimezone('Africa/Kinshasa')
+            : null;
+        if (!$presence && !empty($data['started_at'])) {
+            $startedAt = $date->copy()->setTimeFromTimeString($data['started_at']);
+        }
+        if (!empty($data['ended_at']) && !$startedAt) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'started_at' => 'Une heure d’entrée est nécessaire avant l’heure de sortie.',
+            ]);
+        }
+
+        $endedAt = null;
+        if (!empty($data['ended_at'])) {
+            $endedAt = $date->copy()->setTimeFromTimeString($data['ended_at']);
+            if ($endedAt->lt($startedAt)) {
+                $endedAt->addDay();
+            }
+        }
+
+        $retard = 'non';
+        if ($startedAt && $horaire?->getRawOriginal('started_at')) {
+            $scheduledStart = $date->copy()->setTimeFromTimeString((string) $horaire->getRawOriginal('started_at'));
+            $tolerance = (int) ($horaire->tolerence_minutes ?? 15);
+            $retard = $startedAt->gt($scheduledStart->addMinutes($tolerance)) ? 'oui' : 'non';
+        }
+
+        $presence ??= new PresenceAgents([
+            'agent_id' => $agent->id,
+            'site_id' => $siteId,
+            'date_reference' => $date->toDateString(),
+            'status' => 'arrive',
+        ]);
+        $presence->fill([
+            'site_id' => $siteId,
+            'horaire_id' => $horaire?->id,
+            'started_at' => $startedAt?->toDateTimeString(),
+            'ended_at' => $endedAt?->toDateTimeString(),
+            'retard' => $retard,
+            'status' => $endedAt ? 'depart' : 'arrive',
+            'is_manual' => true,
+            'manual_recorded_by' => auth()->id(),
+        ])->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pointage manuel enregistré.',
+            'presence' => $presence,
+        ]);
+    }
+
+    private function ensureElectrocoolManualAttendance(): void
+    {
+        $host = strtolower(request()->getHost());
+        abort_unless(
+            str_contains($host, 'electrocool') || in_array($host, ['localhost', '127.0.0.1'], true),
+            404
+        );
+    }
+
+    private function findManualAttendanceAgent(int $agentId): Agent
+    {
+        $stationIds = ManagerStationContext::stationIds();
+        $prefix = ManagerStationContext::matriculePrefix();
+
+        return Agent::withoutGlobalScopes()
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
+            ->when($prefix !== null, fn ($query) => $query->where('matricule', 'like', $prefix . '%'))
+            ->findOrFail($agentId);
+    }
+
+    private function manualAttendanceSchedule(Agent $agent, string $date): array
+    {
+        $assignment = AgentGroupAssignment::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->whereDate('start_date', '<=', $date)
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', $date))
+            ->orderByDesc('start_date')
+            ->first();
+        $groupId = $assignment?->agent_group_id ?: $agent->groupe_id;
+        $group = $groupId ? AgentGroup::withoutGlobalScopes()->find($groupId) : null;
+
+        $planning = AgentGroupPlanning::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->when($groupId, fn ($query) => $query->where('agent_group_id', $groupId))
+            ->whereDate('date', $date)
+            ->where(function ($query) use ($agent) {
+                $query->whereNull('site_id')->orWhere('site_id', $agent->site_id);
+            })
+            ->orderByRaw('CASE WHEN site_id = ? THEN 0 WHEN site_id IS NULL THEN 1 ELSE 2 END', [$agent->site_id])
+            ->first();
+
+        if ($planning) {
+            return [
+                'horaire' => $planning->horaire_id ? PresenceHoraire::withoutGlobalScopes()->find($planning->horaire_id) : null,
+                'rest' => (bool) $planning->is_rest_day,
+                'site_id' => $planning->site_id,
+            ];
+        }
+
+        $horaire = $group?->horaire_id
+            ? PresenceHoraire::withoutGlobalScopes()->find($group->horaire_id)
+            : null;
+        $horaire ??= $agent->horaire_id
+            ? PresenceHoraire::withoutGlobalScopes()->find($agent->horaire_id)
+            : null;
+        $horaire ??= $agent->site_id
+            ? PresenceHoraire::withoutGlobalScopes()->where('site_id', $agent->site_id)->orderBy('started_at')->first()
+            : null;
+
+        return ['horaire' => $horaire, 'rest' => false, 'site_id' => $agent->site_id];
+    }
+
     /**
      * Congés (TYPES) : liste.
      */
@@ -209,6 +438,12 @@ class HRController extends Controller
 
     public function globalAuthorizationStore(Request $request): JsonResponse
     {
+        $stationRule = Rule::exists('sites', 'id')
+            ->where(fn ($query) => $query->where('region_id', $request->input('region_id')));
+        if ($request->filled('city_id')) {
+            $stationRule->where('city_id', $request->input('city_id'));
+        }
+
         $data = $request->validate([
             'region_id' => 'required|integer|exists:regions,id',
             'city_id' => [
@@ -216,6 +451,7 @@ class HRController extends Controller
                 'integer',
                 Rule::exists('cities', 'id')->where(fn ($query) => $query->where('region_id', $request->input('region_id'))),
             ],
+            'station_id' => ['nullable', 'integer', $stationRule],
             'date_reference' => 'required|date',
             'type' => 'required|string|max:255',
             'minutes' => 'nullable|integer|min:0',
@@ -223,18 +459,21 @@ class HRController extends Controller
             'status' => 'nullable|string|in:pending,approved,rejected',
         ]);
 
+        $stationIds = ManagerStationContext::stationIds();
         $agents = Agent::withoutGlobalScopes()
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
             ->whereHas('station', function ($query) use ($data) {
                 $query->withoutGlobalScopes()
                     ->where('region_id', (int) $data['region_id'])
-                    ->when(!empty($data['city_id']), fn ($q) => $q->where('city_id', (int) $data['city_id']));
+                    ->when(!empty($data['city_id']), fn ($q) => $q->where('city_id', (int) $data['city_id']))
+                    ->when(!empty($data['station_id']), fn ($q) => $q->whereKey((int) $data['station_id']));
             })
             ->get(['id']);
 
         if ($agents->isEmpty()) {
             return response()->json([
                 'status' => 'error',
-                'errors' => ['Aucun agent trouvé pour la région et la cité sélectionnées.'],
+                'errors' => ['Aucun agent trouvé pour la région, la cité et la station sélectionnées.'],
             ], 422);
         }
 

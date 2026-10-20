@@ -58,8 +58,15 @@ class AttendanceReportService
         $today = Carbon::now('Africa/Kinshasa')->startOfDay();
         $host = request()->getHost();
         $isElectrocool = str_contains($host, 'electrocool') || $host === '127.0.0.1';
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
         $userPrefix = ManagerStationContext::matriculePrefix();
+        $stationFilterIds = $managerStationIds;
+        if (!empty($filters['station_id'])) {
+            $requestedStationIds = [(int) $filters['station_id']];
+            $stationFilterIds = $managerStationIds === null
+                ? $requestedStationIds
+                : array_values(array_intersect($managerStationIds, $requestedStationIds));
+        }
 
         $days = [];
         $cursor = $start->copy();
@@ -77,19 +84,10 @@ class AttendanceReportService
             ->when($userPrefix !== null, function($q) use ($userPrefix) {
                 $q->where('matricule', 'like', $userPrefix . '%');
             })
-            ->when(!empty($filters['station_id']), function ($q) use ($filters, $start, $end, $managerStationId) {
-                $sid = (int) $filters['station_id'];
-                if ($managerStationId !== null) { $sid = $managerStationId; }
-
-                $q->where(function ($sub) use ($sid, $start, $end) {
-                    $sub->where('site_id', $sid)
-                        ->orWhereHas('plannings', fn($pq) => $pq->withoutGlobalScopes()->where('site_id', $sid)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
-                });
-            })
-            ->when(empty($filters['station_id']) && $managerStationId !== null, function($q) use ($managerStationId, $start, $end) {
-                $q->where(function ($sub) use ($managerStationId, $start, $end) {
-                    $sub->where('site_id', $managerStationId)
-                        ->orWhereHas('plannings', fn($pq) => $pq->withoutGlobalScopes()->where('site_id', $managerStationId)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
+            ->when($stationFilterIds !== null, function ($q) use ($stationFilterIds, $start, $end) {
+                $q->where(function ($sub) use ($stationFilterIds, $start, $end) {
+                    $sub->whereIn('site_id', $stationFilterIds)
+                        ->orWhereHas('plannings', fn($pq) => $pq->withoutGlobalScopes()->whereIn('site_id', $stationFilterIds)->whereBetween('date', [$start->toDateString(), $end->toDateString()]));
                 });
             })
             ->when(!empty($filters['matricule_prefix']), function($q) use ($filters) {
@@ -112,12 +110,14 @@ class AttendanceReportService
             ->with(['horaire' => fn($q) => $q->withoutGlobalScopes()])
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
+            ->when($stationFilterIds !== null, fn ($query) => $query->whereIn('site_id', $stationFilterIds))
             ->get()
             ->groupBy(fn($p) => $p->agent_id . '|' . Carbon::parse($p->date_reference)->toDateString());
 
         $plannings = AgentGroupPlanning::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->when($stationFilterIds !== null, fn ($query) => $query->whereIn('site_id', $stationFilterIds))
             ->get()
             ->groupBy(fn($p) => $p->agent_id . '|' . Carbon::parse($p->date)->toDateString());
 
@@ -162,6 +162,7 @@ class AttendanceReportService
                 if ($p && $p->started_at) {
                     $presenceCount = $dayPresences->count();
                     $isDoubleShift = $presenceCount > 1;
+                    $manualCount = $dayPresences->where('is_manual', true)->count();
 
                     if ($isDoubleShift) {
                         $firstPresence = $dayPresences->first();
@@ -181,6 +182,8 @@ class AttendanceReportService
                             'duration_minutes' => $totalDuration,
                             'presence_count' => $presenceCount,
                             'late_first_checkin' => $lateFirstCheckIn,
+                            'manual' => $manualCount > 0,
+                            'manual_count' => $manualCount,
                             'type' => 'Double Shift',
                         ];
                     } else {
@@ -207,7 +210,9 @@ class AttendanceReportService
                             'horaire' => $p->horaire?->libelle ?? '--',
                             'overtime_minutes' => $overtime,
                             'late_minutes' => $this->calculateLateMinutes($p, $p->horaire),
-                            'duration_minutes' => $duration
+                            'duration_minutes' => $duration,
+                            'manual' => $manualCount > 0,
+                            'manual_count' => $manualCount,
                         ];
                     }
                 } else {

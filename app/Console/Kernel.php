@@ -15,12 +15,15 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-
-        $schedule->command('planning:generate-horaire')->sundays()->at('23:00')->timezone('Africa/Kinshasa');
-
         $schedule->command('backup:send')->dailyAt('00:00')
         ->timezone("Africa/Kinshasa")
         ->withoutOverlapping();
+
+        $schedule->command('planning:continue-week')
+            ->mondays()
+            ->at('00:00')
+            ->timezone('Africa/Kinshasa')
+            ->withoutOverlapping();
     }
 
     /**

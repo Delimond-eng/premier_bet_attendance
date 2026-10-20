@@ -219,7 +219,7 @@
 
                         @canany(['conges.view', 'attributions.view', 'authorizations.view', 'justifications.view', 'timesheet.view'])
                         <li class="submenu">
-                            <a href="javascript:void(0);" class="@active(['rh.conges.*', 'rh.attributions.*', 'rh.authorizations.*', 'rh.justifications.*', 'rh.timesheet.*'])">
+                            <a href="javascript:void(0);" class="@active(['rh.conges.*', 'rh.attributions.*', 'rh.authorizations.*', 'rh.justifications.*', 'rh.timesheet.*', 'rh.manual_attendance.*'])">
                                 <i class="ti ti-users-group"></i><span>Administration RH</span>
                                 <span class="menu-arrow"></span>
                             </a>
@@ -239,6 +239,9 @@
                                 @endcan
                                 @can('timesheet.view')
                                 <li><a class="@active(['rh.timesheet.view'])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
+                                @if(str_contains(strtolower(request()->getHost()), 'electrocool') || in_array(strtolower(request()->getHost()), ['localhost', '127.0.0.1'], true))
+                                <li><a class="@active(['rh.manual_attendance.*'])" href="{{ route('rh.manual_attendance.view') }}">Pointage manuel</a></li>
+                                @endif
                                 @endcan
                             </ul>
                         </li>

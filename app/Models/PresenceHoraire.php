@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\ManagerStationContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -38,6 +40,16 @@ class PresenceHoraire extends Model
         "tolerence_minutes",
         "site_id",
     ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('manager_station', function (Builder $builder) {
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds !== null) {
+                $builder->whereIn($builder->qualifyColumn('site_id'), $stationIds);
+            }
+        });
+    }
 
 
     protected $hidden = [

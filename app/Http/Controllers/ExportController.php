@@ -15,6 +15,7 @@ use App\Services\AbsenceReportService;
 use App\Services\AttendanceReportService;
 use App\Services\CumulativeAlertService;
 use App\Services\LateReportService;
+use App\Support\ManagerStationContext;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -38,11 +39,19 @@ class ExportController extends Controller
         $regionId = $data['region_id'] ?? null;
         $cityId = $data['city_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
+        $managerStationIds = ManagerStationContext::stationIds();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $query = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
+        if ($managerStationIds !== null) {
+            $query->whereIn('site_id', $managerStationIds);
+        }
+        if ($userPrefix !== null) {
+            $query->whereHas('agent', fn ($q) => $q->where('matricule', 'like', $userPrefix . '%'));
+        }
         if ($stationId !== null) {
             $query->where(function ($q) use ($stationId) {
                 $q->where('site_id', (int) $stationId)
@@ -86,11 +95,19 @@ class ExportController extends Controller
         $date = Carbon::parse($data['date'] ?? Carbon::today()->toDateString())->toDateString();
         $stationId = $data['station_id'] ?? null;
         $station = $stationId ? Station::find($stationId) : null;
+        $managerStationIds = ManagerStationContext::stationIds();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $query = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'horaire', 'stationCheckIn', 'stationCheckOut', 'assignedStation'])
             ->whereDate('date_reference', $date);
 
+        if ($managerStationIds !== null) {
+            $query->whereIn('site_id', $managerStationIds);
+        }
+        if ($userPrefix !== null) {
+            $query->whereHas('agent', fn ($q) => $q->where('matricule', 'like', $userPrefix . '%'));
+        }
         if ($stationId !== null) {
             $query->where(function ($q) use ($stationId) {
                 $q->where('site_id', (int) $stationId)
@@ -444,6 +461,7 @@ class ExportController extends Controller
 
     public function monthlyPresenceSummaryPdf(Request $request, AttendanceReportService $service): Response
     {
+        ini_set('memory_limit', '2048M');
         $payload = $this->buildMonthlySummaryPayload($request, $service);
 
         if ($request->query('tab') === 'details') {
@@ -456,6 +474,7 @@ class ExportController extends Controller
                 'station' => $payload['station'],
                 'rows' => $payload['table_data'],
                 'days' => $payload['days'],
+                'showManualAttendance' => $payload['show_manual_attendance'],
             ])->setPaper('a3', 'landscape');
         } else {
             $pdf = Pdf::loadView('pdf.exports.presences_monthly_summary', [
@@ -467,6 +486,7 @@ class ExportController extends Controller
                 'station' => $payload['station'],
                 'headers' => $payload['headers'],
                 'rows' => $payload['table_data'],
+                'showManualAttendance' => $payload['show_manual_attendance'],
             ])->setPaper('a4', 'landscape');
         }
 
@@ -579,6 +599,8 @@ class ExportController extends Controller
 
     private function buildMonthlySummaryPayload(Request $request, AttendanceReportService $service): array
     {
+        $host = strtolower($request->getHost());
+        $showManualAttendance = str_contains($host, 'electrocool') || $host === '127.0.0.1';
         $data = $request->validate([
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
@@ -630,7 +652,11 @@ class ExportController extends Controller
             foreach ($days as $d) {
                 $headers[] = $d;
             }
-            $headers = array_merge($headers, ['Total', 'Pres.', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'H.Sup', 'OFF']);
+            $headers = array_merge(
+                $headers,
+                $showManualAttendance ? ['Total', 'Pres.', 'Pointages manuels', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'H.Sup', 'OFF']
+                    : ['Total', 'Pres.', 'Abs.', 'AN', 'Ret.', 'Ret. Cumulé', 'Aut.', 'Congé', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'H.Sup', 'OFF']
+            );
 
             $table = [];
             foreach ($summarized as $r) {
@@ -645,6 +671,9 @@ class ExportController extends Controller
                 }
                 $row[] = (int) $r['total_count'];
                 $row[] = (int) $r['total_presences'];
+                if ($showManualAttendance) {
+                    $row[] = (int) $r['total_manual'];
+                }
                 $row[] = (int) $r['total_absences'];
                 $row[] = (int) $r['total_an'];
                 $row[] = (int) $r['total_retards'];
@@ -665,14 +694,23 @@ class ExportController extends Controller
             $sheetTitle = 'Détails Période';
             $filenameBase = 'details_presences_' . str_replace('-', '', $start->toDateString()) . '_' . str_replace('-', '', $end->toDateString()) . ($stationId ? ('_' . $stationId) : '') . ($prefix ? ('_' . $prefix) : '');
         } else {
-            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station', 'Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste'];
+            $headers = ['Matricule', 'Nom complet', 'Fonction', 'Station'];
+            if ($showManualAttendance) {
+                $headers[] = 'Pointages manuels';
+            }
+            $headers = array_merge($headers, ['Present', 'Retard', 'Absent', 'AN', 'Conge', 'Autorisation', 'T.CM', 'T.M', 'T.CC', 'T.CA', 'T.C Autres', 'Retard Justifie', 'Absence Justifiee', 'Ret. Cumulé', 'H. Norm', 'H. Sup', 'Total Preste']);
             $table = [];
             foreach ($summarized as $r) {
-                $table[] = [
+                $row = [
                     (string) ($r['agent']['matricule'] ?? ''),
                     (string) ($r['agent']['fullname'] ?? ''),
                     (string) ($r['agent']['fonction'] ?? ''),
                     (string) ($r['agent']['station_name'] ?? ''),
+                ];
+                if ($showManualAttendance) {
+                    $row[] = (int) $r['total_manual'];
+                }
+                $table[] = array_merge($row, [
                     (int) $r['present'],
                     (int) $r['retard'],
                     (int) $r['absent'],
@@ -690,7 +728,7 @@ class ExportController extends Controller
                     (string) $r['normal_hours_display'],
                     (string) $r['overtime_display'],
                     (int) $r['total_preste'],
-                ];
+                ]);
             }
             $title = 'Résumé des présences';
             $sheetTitle = 'Résumé Période';
@@ -710,6 +748,9 @@ class ExportController extends Controller
             'OFF = Repos, AUT = Autre',
             'CA = Congé Annuel, CC = Congé Circonstance, CM = Congé Maternité, M = Maladie, AS = Autorisation',
         ];
+        if ($showManualAttendance) {
+            $legend[] = '1M = Présence enregistrée manuellement (comptabilisée par agent)';
+        }
 
         return [
             'title' => $title,
@@ -726,6 +767,7 @@ class ExportController extends Controller
             'station' => $station,
             'days' => $days,
             'legend' => $legend,
+            'show_manual_attendance' => $showManualAttendance,
         ];
     }
 
@@ -1317,6 +1359,8 @@ class ExportController extends Controller
         }
 
         $service = app(AttendanceReportService::class);
+        $host = strtolower(request()->getHost());
+        $showManualAttendance = str_contains($host, 'electrocool') || $host === '127.0.0.1';
         $rows = [];
         foreach ($matrix as $agentKey => $days) {
             $acc = [
@@ -1350,6 +1394,7 @@ class ExportController extends Controller
                 'total_conges' => 0,
                 'total_off' => 0,
                 'total_others' => 0,
+                'total_manual' => 0,
             ];
 
             foreach (($days ?? []) as $dayKey => $cell) {
@@ -1357,7 +1402,14 @@ class ExportController extends Controller
                 $depart = $cell['depart'] ?? null;
                 $leaveCode = $this->normalizeLeaveCode($s, $cell['arrivee'] ?? null);
                 $mapped = $this->mapStatusToCode($s, $depart, $leaveCode);
-                $acc['days'][$dayKey] = $mapped['code'];
+                $acc['days'][$dayKey] = $showManualAttendance
+                    && !empty($cell['manual'])
+                    && $depart !== 'AN'
+                    ? '1M'
+                    : $mapped['code'];
+                if ($showManualAttendance) {
+                    $acc['total_manual'] += (int) ($cell['manual_count'] ?? (!empty($cell['manual']) ? 1 : 0));
+                }
 
                 if ($depart === 'AN') {
                     $acc['an'] += 1;
@@ -1457,7 +1509,7 @@ class ExportController extends Controller
             case "conge":
                 return ['code' => $leaveCode ?: 'C', 'bucket' => 'conge'];
             case "autorisation":
-                return ['code' => $leaveCode ?: 'AS', 'bucket' => 'autorisation'];
+                return ['code' => 'AS', 'bucket' => 'autorisation'];
             case "maladie":
                 return ['code' => 'M', 'bucket' => 'autorisation'];
             case "future":

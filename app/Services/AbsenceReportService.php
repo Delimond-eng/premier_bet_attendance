@@ -22,7 +22,14 @@ class AbsenceReportService
     {
         $today = Carbon::now('Africa/Kinshasa')->startOfDay();
         $userPrefix = ManagerStationContext::matriculePrefix();
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
+        $stationFilterIds = $managerStationIds;
+        if ($stationId !== null) {
+            $requestedStationIds = [(int) $stationId];
+            $stationFilterIds = $managerStationIds === null
+                ? $requestedStationIds
+                : array_values(array_intersect($managerStationIds, $requestedStationIds));
+        }
 
         $start = $start->copy()->startOfDay();
         $end = $end->copy()->startOfDay();
@@ -39,8 +46,7 @@ class AbsenceReportService
             ->when($userPrefix !== null, function($q) use ($userPrefix) {
                 $q->where('matricule', 'like', $userPrefix . '%');
             })
-            ->when($stationId !== null, fn ($q) => $q->where('site_id', (int) $stationId))
-            ->when($managerStationId !== null && $stationId === null, fn($q) => $q->where('site_id', $managerStationId))
+            ->when($stationFilterIds !== null, fn ($q) => $q->whereIn('site_id', $stationFilterIds))
             ->orderBy('fullname')
             ->get();
 
@@ -81,6 +87,7 @@ class AbsenceReportService
         $workPlannings = AgentGroupPlanning::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->when($stationFilterIds !== null, fn ($query) => $query->whereIn('site_id', $stationFilterIds))
             ->where('is_rest_day', false)
             ->get(['agent_id', 'agent_group_id', 'date', 'horaire_id']);
 
@@ -102,6 +109,7 @@ class AbsenceReportService
         $offPlannings = AgentGroupPlanning::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->when($stationFilterIds !== null, fn ($query) => $query->whereIn('site_id', $stationFilterIds))
             ->where('is_rest_day', true)
             ->get(['agent_id', 'agent_group_id', 'date']);
 
@@ -118,6 +126,7 @@ class AbsenceReportService
         $presentKeys = PresenceAgents::withoutGlobalScopes()
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
+            ->when($stationFilterIds !== null, fn ($query) => $query->whereIn('site_id', $stationFilterIds))
             ->whereNotNull('started_at')
             ->get(['agent_id', 'date_reference'])
             ->map(fn ($p) => $p->agent_id . '|' . Carbon::parse($p->date_reference)->toDateString())

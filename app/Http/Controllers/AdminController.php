@@ -51,10 +51,10 @@ class AdminController extends Controller
                 ],
             ]);
 
-            $managerStationId = ManagerStationContext::stationId();
-            if ($managerStationId !== null) {
+            $managerStationIds = ManagerStationContext::stationIds();
+            if ($managerStationIds !== null) {
                 $incomingId = isset($data['id']) ? (int) $data['id'] : null;
-                if ($incomingId === null || $incomingId !== $managerStationId) {
+                if ($incomingId === null || !in_array($incomingId, $managerStationIds, true)) {
                     return response()->json([
                         'status' => 'error',
                         'errors' => ['Un manager peut uniquement modifier sa propre station.'],
@@ -133,11 +133,13 @@ class AdminController extends Controller
         $dateString = $date->toDateString();
         $regionId = request()->query('region_id');
         $cityId = request()->query('city_id');
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $stations = Station::query()
             ->withoutGlobalScopes()
             ->select(['id', 'name', 'type', 'code', 'adresse', 'latlng', 'phone', 'presence', 'status', 'region_id', 'city_id', 'created_at'])
             ->with(['region:id,name,timezone', 'city:id,name,timezone'])
+            ->when($managerStationIds !== null, fn ($q) => $q->whereIn('id', $managerStationIds))
             ->when($regionId !== null && $regionId !== '', fn ($q) => $q->where('region_id', (int) $regionId))
             ->when($cityId !== null && $cityId !== '', function ($q) use ($cityId, $regionId) {
                 $q->where('city_id', (int) $cityId)
@@ -264,7 +266,7 @@ class AdminController extends Controller
                 'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
             ]);
 
-            $managerStationId = ManagerStationContext::stationId();
+            $managerStationIds = ManagerStationContext::stationIds();
             $uploaded = $request->file('file');
             if (!$uploaded) {
                 return response()->json(['errors' => ['Fichier manquant.']], 422);
@@ -359,8 +361,8 @@ class AdminController extends Controller
                     ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
                     ->first();
 
-                if ($managerStationId !== null) {
-                    if (!$station || (int) $station->id !== $managerStationId) {
+                if ($managerStationIds !== null) {
+                    if (!$station || !in_array((int) $station->id, $managerStationIds, true)) {
                         $stats['skipped'] += 1;
                         if (count($errors) < 50) {
                             $errors[] = "Ligne {$rowIndex}: import hors station manager non autorise.";
@@ -487,6 +489,13 @@ class AdminController extends Controller
         ]);
 
         $agent = Agent::withoutGlobalScopes()->findOrFail($data['id']);
+        $stationIds = ManagerStationContext::stationIds();
+        if ($stationIds !== null && !in_array((int) $agent->site_id, $stationIds, true)) {
+            return response()->json([
+                'status' => 'error',
+                'errors' => ['Agent hors périmètre autorisé.'],
+            ], 403);
+        }
         $agent->update(['restrict_station' => $data['restrict_station']]);
 
         return response()->json(['status' => 'success', 'result' => $agent]);
@@ -503,8 +512,8 @@ class AdminController extends Controller
 
             $stationId = (int) $data['station_id'];
             $groupId = (int) $data['groupe_id'];
-            $managerStationId = ManagerStationContext::stationId();
-            if ($managerStationId !== null && $stationId !== $managerStationId) {
+            $managerStationIds = ManagerStationContext::stationIds();
+            if ($managerStationIds !== null && !in_array($stationId, $managerStationIds, true)) {
                 return response()->json([
                     'status' => 'error',
                     'errors' => ['Un manager ne peut importer que sur sa propre station.'],
@@ -626,7 +635,7 @@ class AdminController extends Controller
 
                 if ($agent) {
                     $beforeSiteId = $agent->site_id !== null ? (int) $agent->site_id : null;
-                    if ($managerStationId !== null && $beforeSiteId !== null && $beforeSiteId !== $managerStationId) {
+                    if ($managerStationIds !== null && $beforeSiteId !== null && !in_array($beforeSiteId, $managerStationIds, true)) {
                         $stats['skipped'] += 1;
                         if (count($errors) < 50) {
                             $errors[] = "Ligne {$rowIndex}: matricule {$matricule} appartient a une autre station.";
@@ -1408,12 +1417,12 @@ class AdminController extends Controller
             'id' => 'required|integer',
         ]);
 
-        $managerStationId = ManagerStationContext::stationId();
-        if ($managerStationId !== null) {
+        $managerStationIds = ManagerStationContext::stationIds();
+        if ($managerStationIds !== null) {
             $allowed = $this->canManagerDeleteRow(
                 table: (string) $data['table'],
                 id: (int) $data['id'],
-                stationId: $managerStationId
+                stationIds: $managerStationIds
             );
 
             if (!$allowed) {
@@ -1429,41 +1438,41 @@ class AdminController extends Controller
         return response()->json(['status' => 'success', 'result' => $result]);
     }
 
-    private function canManagerDeleteRow(string $table, int $id, int $stationId): bool
+    private function canManagerDeleteRow(string $table, int $id, array $stationIds): bool
     {
         return match ($table) {
-            'sites' => $id === $stationId,
-            'agents' => Agent::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
-            'presence_horaires' => PresenceHoraire::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
-            'agent_histories' => AgentHistory::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
-            'presence_agents' => PresenceAgents::withoutGlobalScopes()->whereKey($id)->where('site_id', $stationId)->exists(),
+            'sites' => in_array($id, $stationIds, true),
+            'agents' => Agent::withoutGlobalScopes()->whereKey($id)->whereIn('site_id', $stationIds)->exists(),
+            'presence_horaires' => PresenceHoraire::withoutGlobalScopes()->whereKey($id)->whereIn('site_id', $stationIds)->exists(),
+            'agent_histories' => AgentHistory::withoutGlobalScopes()->whereKey($id)->whereIn('site_id', $stationIds)->exists(),
+            'presence_agents' => PresenceAgents::withoutGlobalScopes()->whereKey($id)->whereIn('site_id', $stationIds)->exists(),
             'agent_group_plannings' => AgentGroupPlanning::withoutGlobalScopes()
                 ->whereKey($id)
-                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->whereIn('site_id', $stationIds))
                 ->exists(),
             'conges' => Conge::withoutGlobalScopes()
                 ->whereKey($id)
-                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->whereIn('site_id', $stationIds))
                 ->exists(),
             'attendance_authorizations' => AttendanceAuthorization::withoutGlobalScopes()
                 ->whereKey($id)
-                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->whereIn('site_id', $stationIds))
                 ->exists(),
             'attendance_justifications' => AttendanceJustification::withoutGlobalScopes()
                 ->whereKey($id)
-                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->where('site_id', $stationId))
+                ->whereHas('agent', fn ($q) => $q->withoutGlobalScopes()->whereIn('site_id', $stationIds))
                 ->exists(),
-            'agent_groups' => $this->canManagerDeleteGroup($id, $stationId),
+            'agent_groups' => $this->canManagerDeleteGroup($id, $stationIds),
             default => false,
         };
     }
 
-    private function canManagerDeleteGroup(int $groupId, int $stationId): bool
+    private function canManagerDeleteGroup(int $groupId, array $stationIds): bool
     {
         $usedOutside = Agent::withoutGlobalScopes()
             ->where('groupe_id', $groupId)
-            ->where(function ($q) use ($stationId) {
-                $q->whereNull('site_id')->orWhere('site_id', '!=', $stationId);
+            ->where(function ($q) use ($stationIds) {
+                $q->whereNull('site_id')->orWhereNotIn('site_id', $stationIds);
             })
             ->exists();
 
@@ -1473,7 +1482,7 @@ class AdminController extends Controller
 
         return Agent::withoutGlobalScopes()
             ->where('groupe_id', $groupId)
-            ->where('site_id', $stationId)
+            ->whereIn('site_id', $stationIds)
             ->exists();
     }
 

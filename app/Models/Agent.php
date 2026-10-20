@@ -43,10 +43,9 @@ class Agent extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_restriction', function (Builder $builder) {
-            // Restriction par station
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId !== null) {
-                $builder->where($builder->qualifyColumn('site_id'), $stationId);
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds !== null) {
+                $builder->whereIn($builder->qualifyColumn('site_id'), $stationIds);
             }
 
             // Restriction par sous-traitance (préfixe matricule)

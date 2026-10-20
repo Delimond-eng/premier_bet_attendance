@@ -30,6 +30,14 @@ class LateReportService
         }
 
         $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationIds = ManagerStationContext::stationIds();
+        $stationFilterIds = $managerStationIds;
+        if ($stationId !== null) {
+            $requestedStationIds = [(int) $stationId];
+            $stationFilterIds = $managerStationIds === null
+                ? $requestedStationIds
+                : array_values(array_intersect($managerStationIds, $requestedStationIds));
+        }
 
         $rowsQuery = PresenceAgents::withoutGlobalScopes()
             ->with([
@@ -52,8 +60,12 @@ class LateReportService
             });
         }
 
-        if ($stationId !== null) {
-            $this->applyPresenceStationFilter($rowsQuery, (int) $stationId);
+        if ($stationFilterIds !== null) {
+            $rowsQuery->where(function (Builder $nested) use ($stationFilterIds) {
+                $nested->whereIn('site_id', $stationFilterIds)
+                    ->orWhereIn('station_check_in_id', $stationFilterIds)
+                    ->orWhereIn('station_check_out_id', $stationFilterIds);
+            });
         }
 
         $rows = $rowsQuery->orderByDesc('date_reference')
@@ -161,12 +173,4 @@ class LateReportService
         return $output;
     }
 
-    private function applyPresenceStationFilter(Builder $query, int $stationId): void
-    {
-        $query->where(function (Builder $nested) use ($stationId) {
-            $nested->where('site_id', $stationId)
-                ->orWhere('station_check_in_id', $stationId)
-                ->orWhere('station_check_out_id', $stationId);
-        });
-    }
 }

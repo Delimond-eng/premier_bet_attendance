@@ -231,6 +231,13 @@
                                     <option v-for="city in citiesForRegion(globalForm.region_id)" :key="city.id" :value="String(city.id)">@{{ city.name }}</option>
                                 </select>
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label">Station</label>
+                                <select class="form-select select2-global-station" ref="globalStationSelect" v-model="globalForm.station_id" :disabled="!globalForm.region_id">
+                                    <option value="">Toutes les stations sélectionnées</option>
+                                    <option v-for="site in globalFilteredSites" :key="site.id" :value="String(site.id)">@{{ site.name }}</option>
+                                </select>
+                            </div>
 
                             <div class="row">
                                 <div class="col-md-6">

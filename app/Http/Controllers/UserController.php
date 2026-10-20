@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\User;
+use App\Support\ManagerStationContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -124,9 +126,11 @@ class UserController extends Controller
     public function getAllRoles()
     {
         $roles = Role::with('permissions')->get();
+        $stationIds = ManagerStationContext::stationIds();
 
         // On récupère aussi les préfixes de matricules pour le formulaire utilisateur
         $prefixes = Agent::withoutGlobalScopes()
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
             ->whereNotNull('matricule')
             ->get(['matricule'])
             ->map(function ($a) {
@@ -153,16 +157,18 @@ class UserController extends Controller
 
     public function getAllUsers()
     {
-        $query = User::query()->with(['roles.permissions', 'permissions', 'station']);
-
-        $auth = auth()->user();
-        if ($auth && (!method_exists($auth, 'hasRole') || !$auth->hasRole('admin')) && $auth->station_id !== null && $auth->station_id !== '') {
-            $query->where('station_id', (int) $auth->station_id);
-        }
+        $authStationIds = ManagerStationContext::stationIds();
+        $users = User::query()
+            ->with(['roles.permissions', 'permissions', 'station', 'stations', 'region', 'city'])
+            ->get()
+            ->when($authStationIds !== null, function ($users) use ($authStationIds) {
+                return $users->filter(fn (User $user) => $this->userIsWithinStationScope($user, $authStationIds));
+            })
+            ->values();
 
         return response()->json([
             'status' => 'success',
-            'users' => $query->get(),
+            'users' => $users,
         ]);
     }
 
@@ -170,7 +176,7 @@ class UserController extends Controller
     {
         try {
             $userId = $request->user_id;
-            $managerStationId = $this->managerStationId();
+            $managerStationIds = ManagerStationContext::stationIds();
 
             $data = $request->validate([
                 'name' => 'required|string|max:255',
@@ -178,24 +184,63 @@ class UserController extends Controller
                 'password' => $userId ? 'nullable|string|min:6' : 'required|string|min:6',
                 'role' => 'required|string|exists:roles,name',
                 'station_id' => 'nullable|integer|exists:sites,id',
+                'station_ids' => 'nullable|array',
+                'station_ids.*' => 'integer|distinct|exists:sites,id',
+                'region_id' => 'nullable|integer|exists:regions,id',
+                'city_id' => [
+                    'nullable',
+                    'integer',
+                    Rule::exists('cities', 'id')->where(fn ($query) => $query->where('region_id', $request->input('region_id'))),
+                ],
                 'matricule_prefix' => 'nullable|string',
                 'user_id' => 'nullable|exists:users,id',
                 'permissions' => 'nullable|array',
             ]);
 
+            $stationIds = array_values(array_unique(array_map(
+                'intval',
+                $data['station_ids'] ?? (isset($data['station_id']) ? [$data['station_id']] : [])
+            )));
+            $regionId = $data['region_id'] ?? null;
+            $cityId = $data['city_id'] ?? null;
+            if (Str::lower((string) $data['role']) === 'admin') {
+                $stationIds = [];
+                $regionId = null;
+                $cityId = null;
+            }
+
+            if ($stationIds) {
+                $matchingStations = DB::table('sites')
+                    ->whereIn('id', $stationIds)
+                    ->when($regionId !== null, fn ($query) => $query->where('region_id', $regionId))
+                    ->when($cityId !== null, fn ($query) => $query->where('city_id', $cityId))
+                    ->count();
+                if ($matchingStations !== count($stationIds)) {
+                    return response()->json(['errors' => ['Une ou plusieurs stations ne correspondent pas à la province ou à la cité sélectionnée.']], 422);
+                }
+            }
+
+            $effectiveStationIds = $this->effectiveAssignmentStationIds($stationIds, $regionId, $cityId);
+
+            if (!$this->assignmentIsWithinStationScope($effectiveStationIds, $managerStationIds)) {
+                return response()->json(['errors' => ['Les affectations dépassent votre périmètre géographique.']], 403);
+            }
+
             DB::beginTransaction();
 
             if ($userId) {
                 $user = User::findOrFail($userId);
-                if ($managerStationId !== null && (int) ($user->station_id ?? 0) !== $managerStationId) {
+                if (!$this->userIsWithinStationScope($user, $managerStationIds)) {
                     DB::rollBack();
-                    return response()->json(['errors' => 'Utilisateur hors station du manager.'], 403);
+                    return response()->json(['errors' => 'Utilisateur hors du périmètre de l’utilisateur connecté.'], 403);
                 }
 
                 $updateData = [
                     'name' => $data['name'],
                     'email' => $data['email'],
-                    'station_id' => $managerStationId ?? ($data['station_id'] ?? null),
+                    'station_id' => count($stationIds) === 1 ? $stationIds[0] : null,
+                    'region_id' => $regionId,
+                    'city_id' => $cityId,
                     'matricule_prefix' => $data['matricule_prefix'] ?? null,
                 ];
                 if (!empty($data['password'])) {
@@ -207,10 +252,16 @@ class UserController extends Controller
                     'name' => $data['name'],
                     'email' => $data['email'],
                     'role' => $data['role'],
-                    'station_id' => $managerStationId ?? ($data['station_id'] ?? null),
+                    'station_id' => count($stationIds) === 1 ? $stationIds[0] : null,
+                    'region_id' => $regionId,
+                    'city_id' => $cityId,
                     'matricule_prefix' => $data['matricule_prefix'] ?? null,
                     'password' => Hash::make($data['password']),
                 ]);
+            }
+
+            if (array_key_exists('station_ids', $data) || array_key_exists('station_id', $data)) {
+                $user->stations()->sync($stationIds);
             }
 
             $newRole = (string) $data['role'];
@@ -233,7 +284,9 @@ class UserController extends Controller
 
             $user->syncRoles([$newRole]);
             $user->role = $newRole;
-            $user->station_id = $managerStationId ?? ($data['station_id'] ?? null);
+            $user->station_id = count($stationIds) === 1 ? $stationIds[0] : null;
+            $user->region_id = $regionId;
+            $user->city_id = $cityId;
             $user->matricule_prefix = $data['matricule_prefix'] ?? null;
             $user->save();
 
@@ -260,7 +313,7 @@ class UserController extends Controller
 
             return response()->json([
                 'message' => $userId ? 'Utilisateur mis a jour avec succes' : 'Utilisateur cree avec succes',
-                'user' => $user->load(['roles', 'station']),
+                'user' => $user->load(['roles', 'station', 'stations', 'region', 'city']),
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['errors' => $e->validator->errors()->all()]);
@@ -277,6 +330,12 @@ class UserController extends Controller
             ]);
 
             $user = User::findOrFail($data['user_id']);
+            if (!$this->userIsWithinStationScope($user, ManagerStationContext::stationIds())) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ['Utilisateur hors du périmètre de l’utilisateur connecté.'],
+                ], 403);
+            }
 
             // Vérifier si l'utilisateur est un admin
             if ($user->hasRole('admin')) {
@@ -312,7 +371,7 @@ class UserController extends Controller
     {
         try {
             $userId = (int) $request->user_id;
-            $managerStationId = $this->managerStationId();
+            $managerStationIds = ManagerStationContext::stationIds();
 
             $validated = $request->validate([
                 'user_id' => 'required|int|exists:users,id',
@@ -322,9 +381,9 @@ class UserController extends Controller
             DB::beginTransaction();
 
             $user = User::findOrFail($userId);
-            if ($managerStationId !== null && (int) ($user->station_id ?? 0) !== $managerStationId) {
+            if (!$this->userIsWithinStationScope($user, $managerStationIds)) {
                 DB::rollBack();
-                return response()->json(['errors' => 'Utilisateur hors station du manager.'], 403);
+                return response()->json(['errors' => 'Utilisateur hors du périmètre de l’utilisateur connecté.'], 403);
             }
 
             if (array_key_exists('permissions', $validated)) {
@@ -400,21 +459,58 @@ class UserController extends Controller
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 
-    private function managerStationId(): ?int
+    private function effectiveAssignmentStationIds(array $stationIds, ?int $regionId, ?int $cityId): ?array
     {
-        $auth = auth()->user();
-        if (!$auth) {
+        if (!$stationIds && $regionId === null && $cityId === null) {
             return null;
         }
 
-        if (method_exists($auth, 'hasRole') && $auth->hasRole('admin')) {
-            return null;
+        $query = DB::table('sites')->select('id');
+        if ($stationIds) {
+            $query->whereIn('id', $stationIds);
+        }
+        if ($regionId !== null) {
+            $query->where('region_id', $regionId);
+        }
+        if ($cityId !== null) {
+            $query->where('city_id', $cityId);
         }
 
-        if ($auth->station_id === null || $auth->station_id === '') {
-            return null;
+        return $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    private function assignmentIsWithinStationScope(?array $assignmentStationIds, ?array $allowedStationIds): bool
+    {
+        if ($allowedStationIds === null) {
+            return true;
         }
 
-        return (int) $auth->station_id;
+        return $assignmentStationIds !== null
+            && array_diff($assignmentStationIds, $allowedStationIds) === [];
+    }
+
+    private function userIsWithinStationScope(User $user, ?array $allowedStationIds): bool
+    {
+        if ($allowedStationIds === null) {
+            return true;
+        }
+
+        $stationIds = DB::table('user_station')
+            ->where('user_id', $user->id)
+            ->pluck('station_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        if (!$stationIds && $user->station_id !== null) {
+            $stationIds = [(int) $user->station_id];
+        }
+
+        $userStationIds = $this->effectiveAssignmentStationIds(
+            $stationIds,
+            $user->region_id !== null ? (int) $user->region_id : null,
+            $user->city_id !== null ? (int) $user->city_id : null
+        );
+
+        return $userStationIds !== null
+            && $this->assignmentIsWithinStationScope($userStationIds, $allowedStationIds);
     }
 }

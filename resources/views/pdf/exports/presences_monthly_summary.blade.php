@@ -16,6 +16,9 @@
             <th style="width: 15%;">Agent</th>
             <th style="width: 12%;">Fonction</th>
             <th style="width: 10%;">Station</th>
+            @if($showManualAttendance ?? false)
+            <th style="width: 5%;">Pointages manuels</th>
+            @endif
             <th style="width: 5%;">Près.</th>
             <th style="width: 5%;">Ret.</th>
             <th style="width: 5%;">Abs.</th>
@@ -45,6 +48,9 @@
                 </td>
                 <td>{{ $a['fonction'] ?? '-' }}</td>
                 <td style="font-size: 8px;">{{ $a['station_name'] ?? '-' }}</td>
+                @if($showManualAttendance ?? false)
+                <td>{{ $r['total_manual'] ?? 0 }}</td>
+                @endif
                 <td>{{ $r['present'] ?? 0 }}</td>
                 <td>{{ $r['retard'] ?? 0 }}</td>
                 <td>{{ $r['absent'] ?? 0 }}</td>

@@ -114,6 +114,7 @@
 
         /* Status Colors */
         .code-1   { background-color: #dcfce7; color: #166534; }
+        .code-1M  { background-color: #dcfce7; color: #166534; }
         .code-1-R { background-color: #e0f2fe; color: #075985; }
         .code-A   { background-color: #fee2e2; color: #991b1b; }
         .code-AN  { background-color: #fee2e2; color: #991b1b; border: 1px solid #991b1b !important; }
@@ -183,6 +184,9 @@
                     @endforeach
                     <th class="col-stat-summary" title="Total jours">TOT</th>
                     <th class="col-stat-summary" title="Présences">PRS</th>
+                    @if($showManualAttendance ?? false)
+                    <th class="col-stat-summary" title="Pointages manuels">1M</th>
+                    @endif
                     <th class="col-stat-summary" title="Absences">ABS</th>
                     <th class="col-stat-summary" title="Oubli de sortie">AN</th>
                     <th class="col-stat-summary" title="Retards (nombre)">RET</th>
@@ -219,6 +223,9 @@
                         @endforeach
                         <td class="col-stat-summary">{{ $r['total_count'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #166534;">{{ $r['total_presences'] ?? 0 }}</td>
+                        @if($showManualAttendance ?? false)
+                        <td class="col-stat-summary" style="color: #1e40af;">{{ $r['total_manual'] ?? 0 }}</td>
+                        @endif
                         <td class="col-stat-summary" style="color: #991b1b;">{{ $r['total_absences'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #991b1b;">{{ $r['total_an'] ?? 0 }}</td>
                         <td class="col-stat-summary" style="color: #075985;">{{ $r['total_retards'] ?? 0 }}</td>
@@ -238,6 +245,9 @@
 
         <div class="footer-legend">
             <div class="legend-item"><span class="swatch code-1"></span> <strong>1</strong> : Présent</div>
+            @if($showManualAttendance ?? false)
+            <div class="legend-item"><span class="swatch code-1M"></span> <strong>1M</strong> : Présence enregistrée manuellement</div>
+            @endif
             <div class="legend-item"><span class="swatch code-1-R"></span> <strong>1-R</strong> : Retard</div>
             <div class="legend-item"><span class="swatch code-A"></span> <strong>A</strong> : Absent / Justifié</div>
             <div class="legend-item"><span class="swatch code-AN"></span> <strong>AN</strong> : Entrée sans sortie</div>

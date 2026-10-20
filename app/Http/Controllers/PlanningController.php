@@ -42,14 +42,14 @@ class PlanningController extends Controller
     {
         $stationId = $request->query('station_id');
         $userPrefix = ManagerStationContext::matriculePrefix();
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $agents = Agent::withoutGlobalScopes()
             ->when($userPrefix !== null, function($q) use ($userPrefix) {
                 $q->where('matricule', 'like', $userPrefix . '%');
             })
-            ->when($managerStationId !== null, function($q) use ($managerStationId) {
-                $q->where('site_id', $managerStationId);
+            ->when($managerStationIds !== null, function($q) use ($managerStationIds) {
+                $q->whereIn('site_id', $managerStationIds);
             })
             ->when($stationId, fn($q) => $q->where('site_id', (int) $stationId))
             ->orderBy('fullname')
@@ -186,7 +186,7 @@ class PlanningController extends Controller
         $startOfWeek = Carbon::parse($request->date)->startOfWeek(Carbon::MONDAY);
         $endOfWeek = $startOfWeek->copy()->addDays(6);
         $userPrefix = ManagerStationContext::matriculePrefix();
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $query = AgentGroupPlanning::withoutGlobalScopes()
             ->with([
@@ -201,10 +201,13 @@ class PlanningController extends Controller
                     $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
                 });
             })
-            ->when($managerStationId !== null, function($q) use ($managerStationId) {
-                $q->where(function($qq) use ($managerStationId) {
-                    $qq->where('site_id', $managerStationId)
-                      ->orWhereHas('agent', fn($aaa) => $aaa->withoutGlobalScopes()->where('site_id', $managerStationId));
+            ->when($managerStationIds !== null, function($q) use ($managerStationIds) {
+                $q->where(function($qq) use ($managerStationIds) {
+                    $qq->whereIn('site_id', $managerStationIds)
+                      ->orWhere(function ($unassignedPlanning) use ($managerStationIds) {
+                          $unassignedPlanning->whereNull('site_id')
+                              ->whereHas('agent', fn($agent) => $agent->withoutGlobalScopes()->whereIn('site_id', $managerStationIds));
+                      });
                 });
             });
 
@@ -265,7 +268,17 @@ class PlanningController extends Controller
             'plannings.*.is_rest_day' => 'required|boolean',
         ]);
 
+        $stationIds = ManagerStationContext::stationIds();
         $agent = Agent::withoutGlobalScopes()->findOrFail($data['agent_id']);
+        if ($stationIds !== null && !in_array((int) $agent->site_id, $stationIds, true)) {
+            abort(403, 'Agent hors périmètre autorisé.');
+        }
+        foreach ($data['plannings'] as $planning) {
+            $siteId = $planning['site_id'] ?? $agent->site_id;
+            if ($stationIds !== null && !in_array((int) $siteId, $stationIds, true)) {
+                abort(403, 'Station de planning hors périmètre autorisé.');
+            }
+        }
 
         try {
             DB::beginTransaction();

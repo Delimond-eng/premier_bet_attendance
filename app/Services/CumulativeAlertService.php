@@ -213,10 +213,10 @@ class CumulativeAlertService
     {
         $start = Carbon::today()->startOfDay();
         $end = Carbon::today()->startOfDay();
-        $stationId = ManagerStationContext::stationId();
+        $stationIds = ManagerStationContext::stationIds();
         $userPrefix = ManagerStationContext::matriculePrefix();
 
-        $alerts = $this->buildAlerts($start, $end, $stationId, $threshold);
+        $alerts = $this->buildAlerts($start, $end, count($stationIds ?? []) === 1 ? $stationIds[0] : null, $threshold);
 
         $unassignedCount = 0;
         if (str_contains(request()->getHost(), 'premierbet') || request()->getHost() === '127.0.0.1') {
@@ -225,6 +225,9 @@ class CumulativeAlertService
             $presencesQuery = PresenceAgents::withoutGlobalScopes()
                 ->whereDate('date_reference', $today)
                 ->whereNotNull('station_check_in_id');
+            if ($stationIds !== null) {
+                $presencesQuery->whereIn('station_check_in_id', $stationIds);
+            }
 
             if ($userPrefix !== null) {
                 $presencesQuery->whereHas('agent', function($q) use ($userPrefix) {
@@ -262,7 +265,7 @@ class CumulativeAlertService
                     $expectedStationId = $planning ? $planning->site_id : $agent->site_id;
 
                     if ($p->station_check_in_id != $expectedStationId) {
-                        if ($stationId && $expectedStationId != $stationId) {
+                        if ($stationIds !== null && !in_array((int) $expectedStationId, $stationIds, true)) {
                             continue;
                         }
                         $unassignedCount++;
@@ -386,6 +389,7 @@ class CumulativeAlertService
         $monthFrom = $monthStart->copy()->startOfMonth()->startOfDay();
         $monthTo = $monthStart->copy()->endOfMonth()->startOfDay();
         $userPrefix = ManagerStationContext::matriculePrefix();
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $from = $globalStart->gt($monthFrom) ? $globalStart->copy() : $monthFrom->copy();
         $to = $globalEnd->lt($monthTo) ? $globalEnd->copy() : $monthTo->copy();
@@ -411,11 +415,19 @@ class CumulativeAlertService
             });
         }
 
+        $stationFilterIds = $managerStationIds;
         if ($stationId !== null) {
-            $rowsQuery->where(function ($q) use ($stationId) {
-                $q->where('site_id', (int) $stationId)
-                    ->orWhere('station_check_in_id', (int) $stationId)
-                    ->orWhere('station_check_out_id', (int) $stationId);
+            $requestedStationIds = [(int) $stationId];
+            $stationFilterIds = $managerStationIds === null
+                ? $requestedStationIds
+                : array_values(array_intersect($managerStationIds, $requestedStationIds));
+        }
+
+        if ($stationFilterIds !== null) {
+            $rowsQuery->where(function ($q) use ($stationFilterIds) {
+                $q->whereIn('site_id', $stationFilterIds)
+                    ->orWhereIn('station_check_in_id', $stationFilterIds)
+                    ->orWhereIn('station_check_out_id', $stationFilterIds);
             });
         }
 

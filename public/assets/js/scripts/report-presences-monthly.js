@@ -70,10 +70,14 @@ function computeSummary(matrix, agentsByKey = {}) {
             total_preste: 0,
             total_overtime_minutes: 0,
             total_late_minutes: 0,
+            manual_count: 0,
         };
         Object.keys(days).forEach((d) => {
             const day = days[d] || {};
             const s = day.status;
+            if (window.manualAttendanceReportingEnabled) {
+                acc.manual_count += Number(day.manual_count || (day.manual ? 1 : 0));
+            }
             const presenceCount = Number(day.presence_count || (s === 'double_shift' ? 2 : 1));
 
             if (day.depart === "AN") {
@@ -153,7 +157,7 @@ function mapDayStatus(status, dayData = {}) {
             else if (cCode === 'CM') cClass = "bg-purple text-white";
             return { code: cCode, cellClass: cClass, bucket: "conge" };
         case "autorisation":
-            const aCode = dayData.arrivee || "AS";
+            const aCode = "AS";
             let aClass = "bg-dark text-white";
             if (aCode === 'M') aClass = "bg-warning text-dark";
             else if (aCode === 'CC') aClass = "bg-info text-white";
@@ -173,6 +177,8 @@ function mapDayStatus(status, dayData = {}) {
 
 function getStatusLabel(code, dayData = {}) {
     switch (code) {
+        case "1M":
+            return "Présence enregistrée manuellement";
         case "1":
             return "Présence";
         case "2":
@@ -294,17 +300,25 @@ function computeDetailedRows(matrix, agentsByKey = {}, dayKeys = []) {
             total_others: 0,
             total_overtime_minutes: 0,
             total_late_minutes: 0,
+            total_manual: 0,
         };
 
         dayKeys.forEach((day) => {
             const dayData = days[day] || { status: "future" };
             const status = dayData.status;
             const mapped = mapDayStatus(status, dayData);
+            if (window.manualAttendanceReportingEnabled && dayData.manual && dayData.depart !== "AN") {
+                mapped.code = "1M";
+                mapped.cellClass = "badge-success";
+            }
 
             row.day_codes[day] = mapped.code;
             row.day_classes[day] = mapped.cellClass;
             row.day_titles[day] = getStatusLabel(mapped.code, dayData);
             row.day_details[day] = buildDayPopoverHtml(dayData, mapped.code);
+            if (window.manualAttendanceReportingEnabled) {
+                row.total_manual += Number(dayData.manual_count || (dayData.manual ? 1 : 0));
+            }
 
             if (dayData.overtime_minutes) {
                 row.total_overtime_minutes += dayData.overtime_minutes;
@@ -383,6 +397,7 @@ new Vue({
 
         return {
             isLoading: false,
+            showManualAttendance: Boolean(window.manualAttendanceReportingEnabled),
             activeTab: "brut",
             sites: [],
             regions,
@@ -638,6 +653,7 @@ new Vue({
                 this.summaryTotals = this.rows.reduce((totals, row) => ({
                     present: totals.present + (row.present || 0),
                     retard: totals.retard + (row.retard || 0),
+                    manual_count: totals.manual_count + (row.manual_count || 0),
                     absent: totals.absent + (row.absent || 0),
                     an: totals.an + (row.an || 0),
                     conge: totals.conge + (row.conge || 0),
@@ -653,6 +669,7 @@ new Vue({
                 }), {
                     present: 0,
                     retard: 0,
+                    manual_count: 0,
                     absent: 0,
                     an: 0,
                     conge: 0,

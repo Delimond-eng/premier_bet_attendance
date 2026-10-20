@@ -15,13 +15,13 @@ class AgentGroupAssignment extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_station', function (Builder $builder) {
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds === null) {
                 return;
             }
 
-            $builder->whereHas('agent', function (Builder $query) use ($stationId) {
-                $query->withoutGlobalScopes()->where('site_id', $stationId);
+            $builder->whereHas('agent', function (Builder $query) use ($stationIds) {
+                $query->withoutGlobalScopes()->whereIn('site_id', $stationIds);
             });
         });
     }

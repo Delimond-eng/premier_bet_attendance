@@ -9,6 +9,7 @@ use App\Models\TaskSubtask;
 use App\Models\TaskEvidence;
 use App\Models\MobileDevice;
 use App\Services\FcmService;
+use App\Support\ManagerStationContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -37,8 +38,12 @@ class TaskController extends Controller
         $query = Task::withoutGlobalScope('manager_station')
             ->with(['agents', 'station', 'subtasks', 'evidences.agent']);
 
+        $stationIds = ManagerStationContext::stationIds();
         if ($request->station_id) {
             $query->where('station_id', $request->station_id);
+        }
+        if ($stationIds !== null) {
+            $query->whereIn('station_id', $stationIds);
         }
 
         if ($request->status) {
@@ -276,9 +281,13 @@ class TaskController extends Controller
     public function fetchMonitoringData(Request $request)
     {
         $query = Task::withoutGlobalScope('manager_station')->with(['subtasks', 'station']);
+        $stationIds = ManagerStationContext::stationIds();
 
         if ($request->station_ids && is_array($request->station_ids)) {
             $query->whereIn('station_id', $request->station_ids);
+        }
+        if ($stationIds !== null) {
+            $query->whereIn('station_id', $stationIds);
         }
 
         $tasks = $query->get();
@@ -297,10 +306,16 @@ class TaskController extends Controller
         if ($request->station_ids && is_array($request->station_ids)) {
             $stationQuery->whereIn('id', $request->station_ids);
         }
+        if ($stationIds !== null) {
+            $stationQuery->whereIn('id', $stationIds);
+        }
 
         $stationProgress = $stationQuery->get()
-            ->map(function($s) {
-                $stationTasks = Task::withoutGlobalScope('manager_station')->where('station_id', $s->id)->get();
+            ->map(function($s) use ($stationIds) {
+                $stationTasks = Task::withoutGlobalScope('manager_station')
+                    ->where('station_id', $s->id)
+                    ->when($stationIds !== null, fn ($q) => $q->whereIn('station_id', $stationIds))
+                    ->get();
                 $avgProgress = $stationTasks->count() > 0 ? round($stationTasks->avg('progress')) : 0;
 
                 return [
@@ -317,6 +332,9 @@ class TaskController extends Controller
             $evidenceQuery->whereHas('task', function($q) use ($request) {
                 $q->whereIn('station_id', $request->station_ids);
             });
+        }
+        if ($stationIds !== null) {
+            $evidenceQuery->whereHas('task', fn ($q) => $q->whereIn('station_id', $stationIds));
         }
 
         $recentEvidences = $evidenceQuery->take(10)->get();

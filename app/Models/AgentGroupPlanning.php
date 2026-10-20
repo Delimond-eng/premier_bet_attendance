@@ -17,13 +17,15 @@ class AgentGroupPlanning extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_restriction', function (Builder $builder) {
-            // Restriction par station
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId !== null) {
-                $builder->where(function (Builder $query) use ($stationId) {
-                    $query->where($query->qualifyColumn('site_id'), $stationId)
-                          ->orWhereHas('agent', function (Builder $q) use ($stationId) {
-                              $q->withoutGlobalScopes()->where('site_id', $stationId);
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds !== null) {
+                $builder->where(function (Builder $query) use ($stationIds) {
+                    $query->whereIn($query->qualifyColumn('site_id'), $stationIds)
+                          ->orWhere(function (Builder $unassignedPlanning) use ($stationIds) {
+                              $unassignedPlanning->whereNull($unassignedPlanning->qualifyColumn('site_id'))
+                                  ->whereHas('agent', function (Builder $q) use ($stationIds) {
+                                      $q->withoutGlobalScopes()->whereIn('site_id', $stationIds);
+                                  });
                           });
                 });
             }

@@ -210,6 +210,28 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
         Route::get('/timesheet.view', fn () => view('rh_timesheet'))
             ->name('timesheet.view')
             ->middleware('can:timesheet.view');
+        Route::get('/manual-attendance.view', function () {
+            $host = strtolower(request()->getHost());
+            abort_unless(
+                str_contains($host, 'electrocool') || in_array($host, ['localhost', '127.0.0.1'], true),
+                404
+            );
+
+            return view('rh_manual_attendance', [
+                'defaultMonth' => \Carbon\Carbon::now('Africa/Kinshasa')->format('Y-m'),
+            ]);
+        })
+            ->name('manual_attendance.view')
+            ->middleware('can:timesheet.view');
+        Route::get('/manual-attendance/agents', [HRController::class, 'manualAttendanceAgents'])
+            ->name('manual_attendance.agents')
+            ->middleware('can:timesheet.view');
+        Route::get('/manual-attendance/month', [HRController::class, 'manualAttendanceMonth'])
+            ->name('manual_attendance.month')
+            ->middleware('can:timesheet.view');
+        Route::post('/manual-attendance/store', [HRController::class, 'manualAttendanceStore'])
+            ->name('manual_attendance.store')
+            ->middleware('can:timesheet.view');
         Route::get('/conges.view', fn () => view('rh_conges'))
             ->name('conges.view')
             ->middleware('can:conges.view');
@@ -343,6 +365,8 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             'regions' => \App\Models\Region::with('cityRecords:id,region_id,name,timezone')
                 ->orderBy('name')
                 ->get(['id', 'name', 'timezone']),
+            'manualAttendanceReportingEnabled' => str_contains(strtolower(request()->getHost()), 'electrocool')
+                || request()->getHost() === '127.0.0.1',
         ]))
             ->name('reports.monthly.view')
             ->middleware('can:rapport_presences.view');
@@ -433,7 +457,17 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
 
     // Admin pages
     Route::prefix('admin')->name('admin.')->group(function () {
-        Route::get('/users', fn () => view('users', ['sites' => \App\Models\Station::all()]))
+        Route::get('/users', fn () => view('users', [
+            'sites' => \App\Models\Station::all(),
+            'regions' => \App\Models\Region::with(['cityRecords' => function ($query) {
+                $stationIds = \App\Support\ManagerStationContext::stationIds();
+                $query->when($stationIds !== null, fn ($cities) => $cities->whereHas('stations', fn ($stations) => $stations->whereIn('sites.id', $stationIds)))
+                    ->select(['id', 'region_id', 'name']);
+            }])
+                ->when(($stationIds = \App\Support\ManagerStationContext::stationIds()) !== null, fn ($query) => $query->whereHas('stations', fn ($stations) => $stations->whereIn('sites.id', $stationIds)))
+                ->orderBy('name')
+                ->get(['id', 'name']),
+        ]))
             ->name('users')
             ->middleware('can:users.view');
         Route::get('/roles', fn () => view('roles'))

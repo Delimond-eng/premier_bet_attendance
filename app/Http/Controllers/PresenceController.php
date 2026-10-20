@@ -922,7 +922,7 @@ class PresenceController extends Controller
         $regionId = $data['region_id'] ?? null;
         $cityId = $data['city_id'] ?? null;
         $userPrefix = ManagerStationContext::matriculePrefix();
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $query = PresenceAgents::withoutGlobalScopes()
             ->with([
@@ -941,8 +941,8 @@ class PresenceController extends Controller
             });
         }
 
-        if ($managerStationId !== null) {
-            $query->where('site_id', $managerStationId);
+        if ($managerStationIds !== null) {
+            $query->whereIn('site_id', $managerStationIds);
         }
 
         if ($stationId !== null) {
@@ -1072,7 +1072,7 @@ class PresenceController extends Controller
         }
 
         $userPrefix = ManagerStationContext::matriculePrefix();
-        $managerStationId = ManagerStationContext::stationId();
+        $managerStationIds = ManagerStationContext::stationIds();
 
         $presencesQuery = PresenceAgents::withoutGlobalScopes()
             ->with([
@@ -1088,7 +1088,7 @@ class PresenceController extends Controller
                     $qq->withoutGlobalScopes()->where('matricule', 'like', $userPrefix . '%');
                 });
             })
-            ->when($managerStationId !== null, fn($q) => $q->where('site_id', $managerStationId))
+            ->when($managerStationIds !== null, fn($q) => $q->whereIn('site_id', $managerStationIds))
             ->when(!empty($data['station_id']), fn ($q) => $q->where('site_id', $data['station_id']))
             ->when(!empty($data['matricule_prefix']), function($q) use ($data) {
                 $q->whereHas('agent', function($qq) use ($data) {
@@ -1113,9 +1113,11 @@ class PresenceController extends Controller
         $host = $request->getHost();
         $showMatriculeFilter = str_contains($host, 'premierbet') || str_contains($host, 'electrocool') || $host === '127.0.0.1';
         $prefixes = [];
+        $accessibleStationIds = ManagerStationContext::stationIds();
 
         if ($showMatriculeFilter) {
             $prefixes = Agent::withoutGlobalScopes()
+                ->when($accessibleStationIds !== null, fn ($query) => $query->whereIn('site_id', $accessibleStationIds))
                 ->whereNotNull('matricule')
                 ->get(['matricule'])
                 ->map(function ($a) {
@@ -1463,7 +1465,26 @@ class PresenceController extends Controller
 
     public function createHoraire(Request $request): JsonResponse
     {
-        $h = PresenceHoraire::updateOrCreate(['id' => $request->id], $request->all());
+        $data = $request->validate([
+            'id' => 'nullable|integer|exists:presence_horaires,id',
+            'libelle' => 'required|string|max:255',
+            'started_at' => 'required|date_format:H:i',
+            'mid_check' => 'nullable|date_format:H:i',
+            'ended_at' => 'required|date_format:H:i',
+            'tolerence_minutes' => 'nullable|integer|min:0',
+            'site_id' => 'required|integer|exists:sites,id',
+        ]);
+
+        $stationIds = ManagerStationContext::stationIds();
+        if ($stationIds !== null && !in_array((int) $data['site_id'], $stationIds, true)) {
+            abort(403, 'Station hors périmètre autorisé.');
+        }
+
+        $h = !empty($data['id'])
+            ? PresenceHoraire::findOrFail($data['id'])
+            : new PresenceHoraire();
+        $h->fill($data);
+        $h->save();
         return response()->json(['status' => 'success', 'result' => $h]);
     }
 
@@ -1480,6 +1501,14 @@ class PresenceController extends Controller
             'horaire_id' => 'nullable|integer|exists:presence_horaires,id',
             'status' => 'required|string|in:actif,inactif',
         ]);
+
+        if (!empty($data['horaire_id']) && !PresenceHoraire::whereKey($data['horaire_id'])->exists()) {
+            abort(403, 'Horaire hors périmètre autorisé.');
+        }
+
+        if (!empty($data['id']) && !AgentGroup::whereKey($data['id'])->exists()) {
+            abort(403, 'Groupe hors périmètre autorisé.');
+        }
 
         $group = AgentGroup::updateOrCreate(['id' => $data['id'] ?? null], [
             'libelle' => $data['libelle'],
@@ -2052,9 +2081,11 @@ class PresenceController extends Controller
         $host = $request->getHost();
         $showMatriculeFilter = str_contains($host, 'premierbet') || str_contains($host, 'electrocool') || $host === '127.0.0.1';
         $prefixes = [];
+        $accessibleStationIds = ManagerStationContext::stationIds();
 
         if ($showMatriculeFilter) {
             $prefixes = Agent::withoutGlobalScopes()
+                ->when($accessibleStationIds !== null, fn ($query) => $query->whereIn('site_id', $accessibleStationIds))
                 ->whereNotNull('matricule')
                 ->get(['matricule'])
                 ->map(function ($a) {
@@ -2208,10 +2239,16 @@ class PresenceController extends Controller
 
         $start = !empty($data['from']) ? Carbon::parse($data['from'])->startOfDay() : Carbon::today()->startOfDay();
         $end = !empty($data['to']) ? Carbon::parse($data['to'])->endOfDay() : Carbon::today()->endOfDay();
+        $stationIds = ManagerStationContext::stationIds();
+        $userPrefix = ManagerStationContext::matriculePrefix();
 
         $presences = PresenceAgents::withoutGlobalScopes()
             ->with(['agent.station', 'stationCheckIn', 'horaire'])
             ->whereBetween('date_reference', [$start->toDateString(), $end->toDateString()])
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
+            ->when($userPrefix !== null, function ($query) use ($userPrefix) {
+                $query->whereHas('agent', fn ($agents) => $agents->where('matricule', 'like', $userPrefix . '%'));
+            })
             ->orderByDesc('started_at')
             ->get();
 
@@ -2223,10 +2260,14 @@ class PresenceController extends Controller
             ->with('station')
             ->whereIn('agent_id', $agentIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('site_id', $stationIds))
             ->get()
             ->groupBy(['agent_id', 'date']);
 
-        $stationsById = Station::withoutGlobalScopes()->get()->keyBy('id');
+        $stationsById = Station::withoutGlobalScopes()
+            ->when($stationIds !== null, fn ($query) => $query->whereIn('id', $stationIds))
+            ->get()
+            ->keyBy('id');
 
         foreach ($presences as $p) {
             $agent = $p->agent;

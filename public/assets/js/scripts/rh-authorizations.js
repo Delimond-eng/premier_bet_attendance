@@ -73,6 +73,7 @@ new Vue({
             globalForm: {
                 region_id: "",
                 city_id: "",
+                station_id: "",
                 date_reference: new Date().toISOString().slice(0, 10),
                 type: "retard",
                 minutes: "",
@@ -104,6 +105,13 @@ new Vue({
                 return true;
             });
         },
+        globalFilteredSites() {
+            return this.sites.filter((site) => {
+                if (this.globalForm.region_id && String(site.region_id) !== String(this.globalForm.region_id)) return false;
+                if (this.globalForm.city_id && String(site.city_id) !== String(this.globalForm.city_id)) return false;
+                return true;
+            });
+        },
     },
 
     mounted() {
@@ -115,6 +123,7 @@ new Vue({
             this.initCityFilterSelect2();
             this.initGlobalRegionSelect2();
             this.initGlobalCitySelect2();
+            this.initGlobalStationSelect2();
         });
         this.init();
     },
@@ -151,13 +160,25 @@ new Vue({
             this.bindSelect2(this.$refs.globalRegionSelect, "Sélectionner une région", (value) => {
                 this.globalForm.region_id = value;
                 this.globalForm.city_id = "";
-                this.$nextTick(() => this.initGlobalCitySelect2());
+                this.globalForm.station_id = "";
+                this.$nextTick(() => {
+                    this.initGlobalCitySelect2();
+                    this.initGlobalStationSelect2();
+                });
             }, "#global_auth_modal");
         },
 
         initGlobalCitySelect2() {
             this.bindSelect2(this.$refs.globalCitySelect, "Toutes les cités", (value) => {
                 this.globalForm.city_id = value;
+                this.globalForm.station_id = "";
+                this.$nextTick(() => this.initGlobalStationSelect2());
+            }, "#global_auth_modal");
+        },
+
+        initGlobalStationSelect2() {
+            this.bindSelect2(this.$refs.globalStationSelect, "Toutes les stations sélectionnées", (value) => {
+                this.globalForm.station_id = value;
             }, "#global_auth_modal");
         },
 
@@ -253,6 +274,7 @@ new Vue({
             this.globalForm = {
                 region_id: "",
                 city_id: "",
+                station_id: "",
                 date_reference: new Date().toISOString().slice(0, 10),
                 type: "retard",
                 minutes: "",
@@ -261,6 +283,7 @@ new Vue({
             this.$nextTick(() => {
                 this.initGlobalRegionSelect2();
                 this.initGlobalCitySelect2();
+                this.initGlobalStationSelect2();
             });
         },
 
@@ -271,7 +294,10 @@ new Vue({
             }
             this.isLoading = true;
             try {
-                const { data } = await postJson("/rh/authorizations/global", this.globalForm);
+                const { data } = await postJson("/rh/authorizations/global", {
+                    ...this.globalForm,
+                    station_id: this.globalForm.station_id || null,
+                });
                 if (data?.errors) {
                     alert(data.errors.join("\n"));
                     return;

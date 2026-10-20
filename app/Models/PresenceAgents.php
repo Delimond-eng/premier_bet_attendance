@@ -30,10 +30,13 @@ class PresenceAgents extends Model
         'photos_fin', // Legacy (plus utilisé)
         'commentaires',
         'status',
+        'is_manual',
+        'manual_recorded_by',
         'date_reference',
     ];
 
     protected $casts = [
+        'is_manual' => 'boolean',
         'created_at' => 'date:d/m/Y',
         'started_at' => 'datetime:H:i',
         'mid_check' => 'datetime:H:i',
@@ -44,10 +47,9 @@ class PresenceAgents extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_restriction', function (Builder $builder) {
-            // Restriction par station
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId !== null) {
-                $builder->where($builder->qualifyColumn('site_id'), $stationId);
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds !== null) {
+                $builder->whereIn($builder->qualifyColumn('site_id'), $stationIds);
             }
 
             // Restriction par sous-traitance (préfixe matricule)
@@ -83,6 +85,11 @@ class PresenceAgents extends Model
     public function assignedStation(): BelongsTo
     {
         return $this->belongsTo(Station::class, 'site_id');
+    }
+
+    public function manualRecorder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manual_recorded_by');
     }
 
     public function station(): BelongsTo

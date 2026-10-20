@@ -6,19 +6,23 @@ new Vue({
             error: null,
             result: null,
             isLoading: false,
+            isEditingUser: false,
             search: "",
             users: [],
             roles: [],
             prefixes: [], // Pour stocker les préfixes de sous-traitance
             actions: [],
             sites: Array.isArray(window.__SITES__) ? window.__SITES__ : [],
+            regions: Array.isArray(window.__REGIONS__) ? window.__REGIONS__ : [],
             userToDelete: null,
             form: {
                 name: "",
                 email: "",
                 password: "",
                 role: "",
-                station_id: "",
+                station_ids: [],
+                region_id: "",
+                city_id: "",
                 matricule_prefix: "",
                 user_id: "",
                 permissions: [],
@@ -167,13 +171,23 @@ new Vue({
         },
 
         editUser(user) {
+            this.isEditingUser = true;
             this.form.name = user.name;
             this.form.email = user.email;
             this.form.role = user.role;
-            this.form.station_id = user.station_id ?? "";
+            this.form.region_id = user.region_id ?? "";
+            this.form.city_id = user.city_id ?? "";
             this.form.matricule_prefix = user.matricule_prefix ?? "";
             this.form.user_id = user.id;
-            $("#add_users").modal("show");
+            this.$nextTick(() => {
+                this.form.station_ids = user.stations?.length
+                    ? user.stations.map((station) => station.id)
+                    : user.station_id
+                      ? [user.station_id]
+                      : [];
+                this.isEditingUser = false;
+                $("#add_users").modal("show");
+            });
         },
 
         prepareDelete(user) {
@@ -218,7 +232,9 @@ new Vue({
                 email: "",
                 password: "",
                 role: "",
-                station_id: "",
+                station_ids: [],
+                region_id: "",
+                city_id: "",
                 matricule_prefix: "",
                 user_id: "",
                 permissions: [],
@@ -235,12 +251,23 @@ new Vue({
     watch: {
         "form.role"(value) {
             if (value === "admin") {
-                this.form.station_id = "";
+                this.form.station_ids = [];
+                this.form.region_id = "";
+                this.form.city_id = "";
                 this.form.matricule_prefix = "";
             }
             if (!this.isTraitanceRole) {
                 this.form.matricule_prefix = "";
             }
+        },
+        "form.region_id"() {
+            if (this.isEditingUser) return;
+            this.form.city_id = "";
+            this.form.station_ids = [];
+        },
+        "form.city_id"() {
+            if (this.isEditingUser) return;
+            this.form.station_ids = [];
         },
     },
 
@@ -268,6 +295,23 @@ new Vue({
 
         allSites() {
             return this.sites;
+        },
+
+        allRegions() {
+            return this.regions;
+        },
+
+        availableCities() {
+            const region = this.regions.find((item) => String(item.id) === String(this.form.region_id));
+            return region ? region.city_records : [];
+        },
+
+        availableSites() {
+            return this.sites.filter((site) => {
+                const regionMatches = !this.form.region_id || String(site.region_id) === String(this.form.region_id);
+                const cityMatches = !this.form.city_id || String(site.city_id) === String(this.form.city_id);
+                return regionMatches && cityMatches;
+            });
         },
     },
 });

@@ -36,16 +36,17 @@ class MaintenanceAgent extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_restriction', function (Builder $builder) {
-            $stationId = ManagerStationContext::stationId();
+            $stationIds = ManagerStationContext::stationIds();
             $prefix = ManagerStationContext::matriculePrefix();
-
-            if ($stationId !== null || $prefix !== null) {
-                $builder->where(function (Builder $q) use ($stationId, $prefix) {
-                    // Restriction par station (affectation de l'agent ou station de l'intervention)
-                    if ($stationId !== null) {
-                        $q->where($q->qualifyColumn('station_id'), $stationId)
-                            ->orWhereHas('agent', function (Builder $qq) use ($stationId) {
-                                $qq->withoutGlobalScopes()->where('site_id', $stationId);
+            if ($stationIds !== null || $prefix !== null) {
+                $builder->where(function (Builder $q) use ($stationIds, $prefix) {
+                    if ($stationIds !== null) {
+                        $q->whereIn($q->qualifyColumn('station_id'), $stationIds)
+                            ->orWhere(function (Builder $unassignedMaintenance) use ($stationIds) {
+                                $unassignedMaintenance->whereNull($unassignedMaintenance->qualifyColumn('station_id'))
+                                    ->whereHas('agent', function (Builder $qq) use ($stationIds) {
+                                        $qq->withoutGlobalScopes()->whereIn('site_id', $stationIds);
+                                    });
                             });
                     }
 

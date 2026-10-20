@@ -68,11 +68,10 @@ class Conge extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_restriction', function (Builder $builder) {
-            // Restriction par station
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId !== null) {
-                $builder->whereHas('agent', function (Builder $query) use ($stationId) {
-                    $query->withoutGlobalScopes()->where('site_id', $stationId);
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds !== null) {
+                $builder->whereHas('agent', function (Builder $query) use ($stationIds) {
+                    $query->withoutGlobalScopes()->whereIn('site_id', $stationIds);
                 });
             }
 

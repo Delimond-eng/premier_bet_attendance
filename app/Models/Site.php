@@ -73,12 +73,12 @@ class Site extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('manager_station', function (Builder $builder) {
-            $stationId = ManagerStationContext::stationId();
-            if ($stationId === null) {
+            $stationIds = ManagerStationContext::stationIds();
+            if ($stationIds === null) {
                 return;
             }
 
-            $builder->where($builder->qualifyColumn('id'), $stationId);
+            $builder->whereIn($builder->qualifyColumn('id'), $stationIds);
         });
     }
 
