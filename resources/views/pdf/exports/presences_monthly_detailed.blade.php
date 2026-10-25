@@ -116,6 +116,7 @@
         .code-1   { background-color: #dcfce7; color: #166534; }
         .code-1M  { background-color: #dcfce7; color: #166534; }
         .code-1-R { background-color: #e0f2fe; color: #075985; }
+        .code-multi { font-size: 6px; }
         .code-A   { background-color: #fee2e2; color: #991b1b; }
         .code-AN  { background-color: #fee2e2; color: #991b1b; border: 1px solid #991b1b !important; }
         .code-OFF { background-color: #f1f5f9; color: #94a3b8; }
@@ -216,6 +217,9 @@
                                 $code = $r['days'][$day] ?? '--';
                                 $class = 'code-' . $code;
                                 if ($code == '--') $class = 'code-fut';
+                                if (preg_match('/^(?:[2-9]|[1-9]\d+)(?: C-1)?$/', $code)) {
+                                    $class = (str_contains($code, 'C-1') ? 'code-1-R' : 'code-1') . ' code-multi';
+                                }
                             @endphp
                             <td class="col-day-cell {{ $class }}">
                                 {{ $code }}
@@ -245,6 +249,7 @@
 
         <div class="footer-legend">
             <div class="legend-item"><span class="swatch code-1"></span> <strong>1</strong> : Présent</div>
+            <div class="legend-item"><span class="swatch code-1"></span> <strong>2+</strong> : Plusieurs shifts pointés</div>
             @if($showManualAttendance ?? false)
             <div class="legend-item"><span class="swatch code-1M"></span> <strong>1M</strong> : Présence enregistrée manuellement</div>
             @endif

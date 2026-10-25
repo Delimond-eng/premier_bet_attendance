@@ -43,6 +43,10 @@ new Vue({
         this.getActions();
         this.viewAllRoles();
         this.viewAllUsers();
+        this.$nextTick(() => this.initStationSelect2());
+        $("#add_users").on("shown.bs.modal.stationSelect", () => {
+            this.$nextTick(() => this.initStationSelect2());
+        });
     },
 
     methods: {
@@ -88,7 +92,16 @@ new Vue({
 
         createUser() {
             this.isLoading = true;
-            postJson("/user/create", this.form)
+            const selectedStationIds = this.$refs.stationSelect
+                ? Array.from(this.$refs.stationSelect.selectedOptions).map((option) => option.value)
+                : this.form.station_ids.map(String);
+            const payload = {
+                ...this.form,
+                station_ids: selectedStationIds.includes("__all_stations__")
+                    ? []
+                    : selectedStationIds.map(Number),
+            };
+            postJson("/user/create", payload)
                 .then(({ data, status }) => {
                     this.isLoading = false;
                     // Gestion des erreurs
@@ -184,7 +197,7 @@ new Vue({
                     ? user.stations.map((station) => station.id)
                     : user.station_id
                       ? [user.station_id]
-                      : [];
+                      : ["__all_stations__"];
                 this.isEditingUser = false;
                 $("#add_users").modal("show");
             });
@@ -246,6 +259,60 @@ new Vue({
                 role_id: "",
             };
         },
+
+        handleStationSelection(event) {
+            const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+            this.form.station_ids = selectedIds.includes("__all_stations__")
+                ? ["__all_stations__"]
+                : selectedIds.map((id) => Number(id));
+        },
+
+        initStationSelect2() {
+            const $ = window.$;
+            const element = this.$refs.stationSelect;
+            if (!element || !$ || !$.fn || !$.fn.select2) return;
+
+            const select = $(element);
+            if (select.hasClass("select2-hidden-accessible")) {
+                select.select2("destroy");
+            }
+
+            select.select2({
+                width: "100%",
+                placeholder: "Sélectionner une ou plusieurs stations",
+                allowClear: true,
+                closeOnSelect: false,
+                dropdownParent: $("#add_users"),
+                templateResult: (station) => {
+                    if (!station.id) return station.text;
+
+                    const option = $(
+                        '<span class="d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input mt-0" tabindex="-1" aria-hidden="true" style="pointer-events: none;"><span></span></span>'
+                    );
+                    option.find("input").prop("checked", station.selected);
+                    option.find("span").last().text(station.text);
+                    return option;
+                },
+            });
+
+            this.syncStationSelect2();
+        },
+
+        syncStationSelect2() {
+            const $ = window.$;
+            const element = this.$refs.stationSelect;
+            if (!element || !$ || !$.fn || !$.fn.select2) return;
+
+            const select = $(element);
+            if (!select.hasClass("select2-hidden-accessible")) return;
+
+            const selectedIds = (this.form.station_ids || []).map(String);
+            select.val(selectedIds).trigger("change.select2");
+            $("#add_users .select2-container--open .select2-results__option").each(function () {
+                const isSelected = $(this).attr("aria-selected") === "true";
+                $(this).find('input[type="checkbox"]').prop("checked", isSelected);
+            });
+        },
     },
 
     watch: {
@@ -268,6 +335,12 @@ new Vue({
         "form.city_id"() {
             if (this.isEditingUser) return;
             this.form.station_ids = [];
+        },
+        "form.station_ids"() {
+            this.$nextTick(() => this.syncStationSelect2());
+        },
+        availableSites() {
+            this.$nextTick(() => this.initStationSelect2());
         },
     },
 

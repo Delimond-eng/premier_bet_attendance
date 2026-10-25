@@ -5,7 +5,8 @@ new Vue({
 
     data() {
         return {
-            month: window.manualAttendanceDefaultMonth,
+            from: window.manualAttendanceDefaultRange.from,
+            to: window.manualAttendanceDefaultRange.to,
             agentId: "",
             agent: null,
             agentsById: {},
@@ -17,6 +18,7 @@ new Vue({
     },
 
     mounted() {
+        this.initRangePicker();
         this.loadAgents();
     },
 
@@ -58,13 +60,40 @@ new Vue({
             }
         },
 
+        initRangePicker() {
+            const $ = window.$;
+            if (!$ || !$.fn || !$.fn.daterangepicker) return;
+
+            const start = window.moment(this.from);
+            const end = window.moment(this.to);
+            $('#manual-range').daterangepicker({
+                startDate: start,
+                endDate: end,
+                opens: 'left',
+                locale: {
+                    format: 'DD/MM/YYYY',
+                    applyLabel: "Appliquer",
+                    cancelLabel: "Annuler",
+                    daysOfWeek: ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"],
+                    monthNames: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"],
+                    firstDay: 1,
+                },
+            }, (rangeStart, rangeEnd) => {
+                this.from = rangeStart.format('YYYY-MM-DD');
+                this.to = rangeEnd.format('YYYY-MM-DD');
+                this.loadMonth();
+            });
+
+            $('#manual-range').val(`${start.format('DD/MM/YYYY')} - ${end.format('DD/MM/YYYY')}`);
+        },
+
         async loadMonth() {
-            if (!this.agentId || !this.month) return;
+            if (!this.agentId || !this.from || !this.to) return;
             this.isLoading = true;
             this.error = "";
             this.success = "";
             try {
-                const params = new URLSearchParams({ agent_id: this.agentId, month: this.month });
+                const params = new URLSearchParams({ agent_id: this.agentId, from: this.from, to: this.to });
                 const { data, status } = await get(`/rh/manual-attendance/month?${params.toString()}`);
                 if (status < 200 || status >= 300) throw new Error(data?.message || "Impossible de charger les pointages.");
                 this.agent = data.agent;

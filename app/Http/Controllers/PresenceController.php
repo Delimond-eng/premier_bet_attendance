@@ -59,6 +59,7 @@ class PresenceController extends Controller
             ], 200);
         }
 
+        $data['key'] = strtolower($data['key']);
         $now = Carbon::now()->setTimezone('Africa/Kinshasa');
 
         // Mobile Fix: Use withoutGlobalScopes to find agent by matricule
@@ -66,7 +67,7 @@ class PresenceController extends Controller
         $assignedStationId = $agent->site_id;
 
         $stationId = null;
-        if ($data['key'] !== 'confirmation' || $data['key'] === 'Confirmation') {
+        if ($data['key'] !== 'confirmation') {
             $stationId = $this->resolveStationId(
                 stationId: $data['station_id'] ?? null,
                 coordonnees: $data['coordonnees'] ?? null,
@@ -124,13 +125,26 @@ class PresenceController extends Controller
             }
         }
 
-        if ($data['key'] === 'confirmation' || $data['key'] === 'Confirmation') {
+        $openPresence = null;
+        if ($data['key'] === 'confirmation') {
             $now = $this->nowForStation($assignedStationId);
+            $dateReference = $now->copy()->startOfDay();
+            $openPresence = $this->findPresenceForConfirmation($agent, $dateReference);
+            if (!$openPresence) {
+                return response()->json([
+                    'status' => 'error',
+                    'errors' => ["Impossible de confirmer: Aucun pointage d'entrée trouvé pour aujourd'hui."],
+                ], 200);
+            }
+
+            $presenceStationId = $openPresence->station_check_in_id ?: $openPresence->gps_site_id ?: $openPresence->site_id;
+            $now = $this->nowForStation($presenceStationId);
+            $dateReference = Carbon::parse($openPresence->getRawOriginal('date_reference'))->startOfDay();
         }
 
         $horaire = null;
-        $dateReference = $now->copy()->startOfDay();
-        if (in_array($data['key'], ['check-in', 'confirmation', 'Confirmation'], true)) {
+        $dateReference ??= $now->copy()->startOfDay();
+        if ($data['key'] === 'check-in') {
             $horaire = $this->getHoraireForAgent($agent, $now, $stationId);
             if ($data['key'] === 'check-in' && !$horaire) {
                 return response()->json([
@@ -164,22 +178,6 @@ class PresenceController extends Controller
         }
 
         // VÉRIFICATION POUR CONFIRMATION (MID-CHECK)
-        if ($data['key'] === 'confirmation' || $data['key'] === 'Confirmation') {
-            $openPresence = PresenceAgents::withoutGlobalScopes()
-                ->where('agent_id', $agent->id)
-                ->whereDate('date_reference', $dateReference->toDateString())
-                ->whereNotNull('started_at')
-                ->whereNull('ended_at')
-                ->first();
-
-            if (!$openPresence) {
-                return response()->json([
-                    'status' => 'error',
-                    'errors' => ["Impossible de confirmer: Aucun pointage d'entrée (check-in) actif trouvé for aujourd'hui."],
-                ], 200);
-            }
-        }
-
         // Check for OFF Day
         if ($data['key'] === 'check-in') {
             $gid = AgentGroupAssignment::query()
@@ -192,13 +190,13 @@ class PresenceController extends Controller
                 ->value('agent_group_id');
             $gid = $gid ? (int) $gid : ($agent->groupe_id ? (int) $agent->groupe_id : null);
 
-            $isOffDay = AgentGroupPlanning::withoutGlobalScopes()
+            $dayPlans = AgentGroupPlanning::withoutGlobalScopes()
                 ->where('agent_id', $agent->id)
                 ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
-                ->when($stationId !== null, fn ($q) => $q->where('site_id', $stationId))
                 ->whereDate('date', $dateReference->toDateString())
-                ->where('is_rest_day', true)
-                ->exists();
+                ->get(['is_rest_day']);
+            $isOffDay = $dayPlans->isNotEmpty()
+                && $dayPlans->every(fn ($plan) => (bool) $plan->is_rest_day);
 
             if ($isOffDay) {
                 return response()->json(['status' => 'error', 'errors' => ['Jour OFF: pointage non autorise.']], 200);
@@ -225,13 +223,7 @@ class PresenceController extends Controller
             try {
                 $geoStationId = null;
                 if ($data['key'] === 'confirmation') {
-                    $openPresence = PresenceAgents::withoutGlobalScopes()
-                        ->where('agent_id', $agent->id)
-                        ->whereDate('date_reference', $dateReference->toDateString())
-                        ->whereNotNull('started_at')
-                        ->whereNull('ended_at')
-                        ->orderByDesc('started_at')
-                        ->first();
+                    $openPresence = $openPresence ?: $this->findOpenPresence($agent);
 
                     $geoStationId = $openPresence ? ($openPresence->station_check_in_id ?: $openPresence->gps_site_id ?: $openPresence->site_id) : null;
                 } else {
@@ -286,11 +278,30 @@ class PresenceController extends Controller
 
     private function handleCheckIn(Agent $agent, ?int $assignedStationId, int $stationId, ?PresenceHoraire $horaire, Carbon $dateReference, Carbon $now, ?string $photoDebut = null, ?string $coordonnees = null): JsonResponse
     {
-        $dayPresences = PresenceAgents::query()
+        $dayPresences = PresenceAgents::withoutGlobalScopes()
             ->where('agent_id', $agent->id)
             ->whereDate('date_reference', $dateReference->toDateString())
             ->orderBy('started_at')
             ->get();
+
+        $openPresence = PresenceAgents::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->whereNotNull('started_at')
+            ->whereNull('ended_at')
+            ->exists();
+        if ($openPresence) {
+            return response()->json(['status' => 'error', 'errors' => ['Un pointage d’entrée est déjà ouvert.']], 200);
+        }
+
+        $sameScheduledShift = $dayPresences->contains(function ($presence) use ($stationId, $horaire) {
+            $presenceStationId = $presence->station_check_in_id ?: $presence->site_id;
+            return !empty($presence->started_at)
+                && (int) $presenceStationId === $stationId
+                && (int) $presence->horaire_id === (int) ($horaire?->id);
+        });
+        if ($sameScheduledShift) {
+            return response()->json(['status' => 'error', 'errors' => ['Pointage d’entrée déjà effectué pour cet horaire.']], 200);
+        }
 
         $hasAnyCheckIn = $dayPresences->contains(fn ($presence) => !empty($presence->started_at));
         $hasCompletedShift = $dayPresences->contains(fn ($presence) => !empty($presence->started_at) && !empty($presence->ended_at));
@@ -360,7 +371,7 @@ class PresenceController extends Controller
 
     private function handleCheckOut(Agent $agent, int $stationId, Carbon $now, ?string $photoFin = null, ?string $coordonnees = null): JsonResponse
     {
-        $presence = PresenceAgents::query()
+        $presence = PresenceAgents::withoutGlobalScopes()
             ->where('agent_id', $agent->id)
             ->whereNotNull('started_at')
             ->whereNull('ended_at')
@@ -511,16 +522,10 @@ class PresenceController extends Controller
 
     private function handleMidCheckConfirmation(Agent $agent, Carbon $dateReference, Carbon $now, ?string $coordonnees = null): JsonResponse
     {
-        $presence = PresenceAgents::query()
-            ->where('agent_id', $agent->id)
-            ->whereDate('date_reference', $dateReference->toDateString())
-            ->whereNotNull('started_at')
-            ->whereNull('ended_at')
-            ->orderByDesc('started_at')
-            ->first();
+        $presence = $this->findPresenceForConfirmation($agent, $dateReference);
 
         if (!$presence) {
-            return response()->json(['status' => 'error', 'errors' => ["Aucun pointage d'entree ouvert trouve."]], 200);
+            return response()->json(['status' => 'error', 'errors' => ["Aucun pointage d'entree trouve pour aujourd'hui."]], 200);
         }
 
         if (!empty($presence->mid_check)) {
@@ -544,6 +549,31 @@ class PresenceController extends Controller
             'message' => 'Controle intermediaire enregistre.',
             'result' => $presence,
         ]);
+    }
+
+    private function findOpenPresence(Agent $agent): ?PresenceAgents
+    {
+        return PresenceAgents::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->whereNotNull('started_at')
+            ->whereNull('ended_at')
+            ->orderByDesc('started_at')
+            ->first();
+    }
+
+    private function findPresenceForConfirmation(Agent $agent, Carbon $dateReference): ?PresenceAgents
+    {
+        $query = PresenceAgents::withoutGlobalScopes()
+            ->where('agent_id', $agent->id)
+            ->whereDate('date_reference', $dateReference->toDateString())
+            ->whereNotNull('started_at')
+            ->orderByDesc('started_at');
+
+        $unconfirmed = (clone $query)->whereNull('mid_check');
+
+        return (clone $unconfirmed)->whereNull('ended_at')->first()
+            ?: $unconfirmed->first()
+            ?: $query->first();
     }
 
     private function handleMaintenanceIn(Agent $agent, int $stationId, Carbon $now, ?string $photoDebut, ?string $coordonnees): JsonResponse
@@ -824,17 +854,27 @@ class PresenceController extends Controller
 
         $planningFor = function (string $d, ?int $sid = null) use ($agent, $groupIdFor) {
             $gid = $groupIdFor($d);
-            return AgentGroupPlanning::withoutGlobalScopes()
+            $query = AgentGroupPlanning::withoutGlobalScopes()
                 ->where('agent_id', $agent->id)
                 ->when($gid !== null, fn ($q) => $q->where('agent_group_id', $gid))
-                ->when($sid !== null, fn ($q) => $q->where('site_id', $sid))
                 ->whereDate('date', $d)
-                ->where('is_rest_day', false)
-                ->first();
+                ->where('is_rest_day', false);
+
+            if ($sid !== null) {
+                $stationPlannings = (clone $query)->where('site_id', $sid)->get();
+                if ($stationPlannings->isNotEmpty()) {
+                    return $stationPlannings;
+                }
+            }
+
+            return $query->get();
         };
 
-        $planningYesterday = $planningFor($yesterday, $stationId);
-        if ($planningYesterday?->horaire_id) {
+        $planningsYesterday = $planningFor($yesterday, $stationId);
+        foreach ($planningsYesterday as $planningYesterday) {
+            if (!$planningYesterday->horaire_id) {
+                continue;
+            }
             $h = PresenceHoraire::find($planningYesterday->horaire_id);
             if ($h) {
                 try {
@@ -846,18 +886,61 @@ class PresenceController extends Controller
                             return $h;
                         }
                     }
-                } catch (\Throwable $_) {
+                } catch (\Throwable $e) {
+                    Log::warning('Unable to evaluate planned shift schedule', [
+                        'agent_id' => $agent->id,
+                        'horaire_id' => $h->id,
+                        'error' => $e->getMessage(),
+                    ]);
                 }
             }
         }
 
-        if ($isFlexibleYesterday && $planningYesterday && empty($planningYesterday->horaire_id)) {
+        if ($isFlexibleYesterday && $planningsYesterday->isNotEmpty() && $planningsYesterday->every(fn ($planning) => empty($planning->horaire_id))) {
             return null;
         }
 
-        $planning = $planningFor($date, $stationId);
-        if ($planning?->horaire_id) {
-            return PresenceHoraire::find($planning->horaire_id);
+        $plannings = $planningFor($date, $stationId);
+        $scheduled = [];
+        foreach ($plannings as $planning) {
+            if (!$planning->horaire_id) {
+                continue;
+            }
+            $candidate = PresenceHoraire::find($planning->horaire_id);
+            if (!$candidate) {
+                continue;
+            }
+
+            try {
+                $startTime = (string) $candidate->getRawOriginal('started_at');
+                $endTime = (string) $candidate->getRawOriginal('ended_at');
+                if ($startTime === '' || $endTime === '') {
+                    continue;
+                }
+                $startAt = $now->copy()->startOfDay()->setTimeFromTimeString($startTime);
+                $endAt = $now->copy()->startOfDay()->setTimeFromTimeString($endTime);
+                if ($endAt->lte($startAt)) {
+                    $endAt->addDay();
+                }
+
+                if ($now->betweenIncluded($startAt, $endAt)) {
+                    $scheduled[] = [0, -$startAt->getTimestamp(), (int) $candidate->id, $candidate];
+                } elseif ($now->lt($startAt)) {
+                    $scheduled[] = [1, $startAt->getTimestamp(), (int) $candidate->id, $candidate];
+                } else {
+                    $scheduled[] = [2, -$startAt->getTimestamp(), (int) $candidate->id, $candidate];
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Unable to evaluate planned shift schedule', [
+                    'agent_id' => $agent->id,
+                    'horaire_id' => $candidate->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        if ($scheduled !== []) {
+            usort($scheduled, fn ($a, $b) => [$a[0], $a[1], $a[2]] <=> [$b[0], $b[1], $b[2]]);
+            return $scheduled[0][3];
         }
 
         if ($isFlexibleToday) {

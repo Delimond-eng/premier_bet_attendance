@@ -745,6 +745,7 @@ class ExportController extends Controller
         $legend = [
             'Légende des codes :',
             '1 = Présent, 1-R = Retard, A = Absent, AN = Entrée sans sortie',
+            '2+ = Plusieurs shifts pointés sur la même journée (C-1 indique un retard au premier pointage)',
             'OFF = Repos, AUT = Autre',
             'CA = Congé Annuel, CC = Congé Circonstance, CM = Congé Maternité, M = Maladie, AS = Autorisation',
         ];
@@ -1415,6 +1416,13 @@ class ExportController extends Controller
                     $acc['an'] += 1;
                     $code = $leaveCode;
                 } else if ($s === 'present') $acc['present'] += 1;
+                else if ($s === 'double_shift') {
+                    $acc['present'] += 1;
+                    if (!empty($cell['late_first_checkin'])) {
+                        $acc['retard'] += 1;
+                        $acc['total_retards'] += 1;
+                    }
+                }
                 else if ($s === 'retard') {
                     $acc['present'] += 1;
                     $acc['retard'] += 1;
@@ -1498,6 +1506,8 @@ class ExportController extends Controller
         switch ($status) {
             case "present":
                 return ['code' => '1', 'bucket' => 'presence'];
+            case "double_shift":
+                return ['code' => $leaveCode ?: '2', 'bucket' => 'presence'];
             case "retard":
             case "retard_justifie":
                 return ['code' => '1-R', 'bucket' => 'retard'];
@@ -1816,6 +1826,11 @@ class ExportController extends Controller
                     $res['total_absent']++;
                 } elseif ($status === 'present') {
                     $res['total_present']++;
+                } elseif ($status === 'double_shift') {
+                    $res['total_present']++;
+                    if (!empty($cell['late_first_checkin'])) {
+                        $res['total_retard']++;
+                    }
                 } elseif ($status === 'absent') {
                     $res['total_absent']++;
                 } elseif ($status === 'retard' || $status === 'retard_justifie') {

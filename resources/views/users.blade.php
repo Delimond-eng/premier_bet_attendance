@@ -101,6 +101,7 @@
                                 <span v-if="data.city" class="badge badge-info mb-1">@{{ data.city.name }}</span>
                                 <span v-for="station in data.stations" :key="station.id" class="badge badge-purple mb-1 me-1">@{{ station.name }}</span>
                                 <span v-if="(!data.stations || !data.stations.length) && data.station" class="badge badge-purple mb-1">@{{ data.station.name }}</span>
+                                <span v-if="(!data.stations || !data.stations.length) && !data.station && (data.region || data.city)" class="badge badge-purple mb-1">Toutes les stations de la zone</span>
                                 <span v-if="data.matricule_prefix" class="badge badge-info d-block">Sous-traitance: @{{ data.matricule_prefix }}</span>
                                 <span v-if="!data.region && !data.city && (!data.stations || !data.stations.length) && !data.station && !data.matricule_prefix" class="text-muted">Accès global</span>
                             </td>
@@ -195,10 +196,11 @@
                                 <div class="col-md-12" v-if="form.role !== 'admin'">
                                     <div class="mb-3">
                                         <label class="form-label">Stations (sélection multiple)</label>
-                                        <select class="form-select" v-model="form.station_ids" multiple size="5">
+                                        <select class="form-select" ref="stationSelect" v-model="form.station_ids" @change="handleStationSelection" multiple>
+                                            <option value="__all_stations__">Toutes les stations de la zone</option>
                                             <option v-for="s in availableSites" :key="s.id" :value="s.id">@{{ s.name }}</option>
                                         </select>
-                                        <small class="text-muted">Optionnel. Les stations proposées suivent la province et la cité sélectionnées. Sans station choisie, l’accès couvre la zone sélectionnée; sans zone non plus, l’accès est global.</small>
+                                        <small class="text-muted">Choisissez « Toutes les stations » pour couvrir la province ou la cité, ou sélectionnez une ou plusieurs stations. Sans zone sélectionnée, l’accès est global.</small>
                                     </div>
                                 </div>
                                 <div class="col-md-6" v-if="isTraitanceRole">

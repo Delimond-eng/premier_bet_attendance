@@ -117,7 +117,7 @@
                 @endcanany
 
                 <!-- MAINTENANCE & TACHES -->
-                @if(!str_contains(request()->getHost(), 'premierbet') && !str_contains(request()->getHost(), 'electrocool'))
+                @if(!str_contains(strtolower(request()->getHost()), 'premierbet') && !str_contains(strtolower(request()->getHost()), 'electrocool') && !str_contains(strtolower(request()->getHost()), 'magenya-attendance'))
                 @can('tasks.view')
                 <li class="menu-title"><span>OPERATIONS</span></li>
                 <li>
@@ -239,7 +239,7 @@
                                 @endcan
                                 @can('timesheet.view')
                                 <li><a class="@active(['rh.timesheet.view'])" href="{{ route('rh.timesheet.view') }}">Pointage mensuel</a></li>
-                                @if(str_contains(strtolower(request()->getHost()), 'electrocool') || in_array(strtolower(request()->getHost()), ['localhost', '127.0.0.1'], true))
+                                @if(strtolower((string) Auth::user()->role) === 'admin' && (str_contains(strtolower(request()->getHost()), 'electrocool') || in_array(strtolower(request()->getHost()), ['localhost', '127.0.0.1'], true)))
                                 <li><a class="@active(['rh.manual_attendance.*'])" href="{{ route('rh.manual_attendance.view') }}">Pointage manuel</a></li>
                                 @endif
                                 @endcan

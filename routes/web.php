@@ -212,13 +212,17 @@ Route::middleware(['auth', 'manager.station.context'])->group(function () {
             ->middleware('can:timesheet.view');
         Route::get('/manual-attendance.view', function () {
             $host = strtolower(request()->getHost());
+            abort_unless(strtolower((string) Auth::user()->role) === 'admin', 403);
             abort_unless(
                 str_contains($host, 'electrocool') || in_array($host, ['localhost', '127.0.0.1'], true),
                 404
             );
 
             return view('rh_manual_attendance', [
-                'defaultMonth' => \Carbon\Carbon::now('Africa/Kinshasa')->format('Y-m'),
+                'defaultRange' => [
+                    'from' => \Carbon\Carbon::now('Africa/Kinshasa')->startOfMonth()->toDateString(),
+                    'to' => \Carbon\Carbon::now('Africa/Kinshasa')->endOfMonth()->toDateString(),
+                ],
             ]);
         })
             ->name('manual_attendance.view')

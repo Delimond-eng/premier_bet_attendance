@@ -174,7 +174,7 @@ class AttendanceReportService
 
                         $row[$dayLabel] = [
                             'status' => 'double_shift',
-                            'arrivee' => $lateFirstCheckIn ? '2 C-1' : '2',
+                                'arrivee' => $lateFirstCheckIn ? $presenceCount . ' C-1' : (string) $presenceCount,
                             'depart' => $lastPresence && $lastPresence->ended_at ? Carbon::parse($lastPresence->ended_at)->format('H:i') : '--:--',
                             'horaire' => $firstPresence->horaire?->libelle ?? '--',
                             'overtime_minutes' => $totalOvertime,
@@ -221,7 +221,9 @@ class AttendanceReportService
                     } elseif ($cursor->gt($today)) {
                         $row[$dayLabel] = ['status' => 'future', 'arrivee' => '--:--', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0];
                     } else {
-                        $plan = optional($plannings->get($agent->id . '|' . $isoDate))->first();
+                        $dayPlans = $plannings->get($agent->id . '|' . $isoDate, collect());
+                        $hasWorkPlan = $dayPlans->contains(fn ($planning) => !$planning->is_rest_day);
+                        $hasRestDayPlan = $dayPlans->isNotEmpty() && !$hasWorkPlan;
                         $hasConge = false;
                         if (isset($conges[$agent->id])) {
                             foreach ($conges[$agent->id] as $c) {
@@ -278,7 +280,7 @@ class AttendanceReportService
                                 'started_at' => $auth->started_at,
                                 'ended_at' => $auth->ended_at,
                             ];
-                        } elseif ($plan && $plan->is_rest_day) {
+                        } elseif ($hasRestDayPlan) {
                             $row[$dayLabel] = ['status' => 'off', 'arrivee' => 'OFF', 'depart' => '', 'horaire' => 'OFF', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0, 'type' => 'Repos', 'motif' => 'Repos'];
                         } else {
                             $row[$dayLabel] = ['status' => 'absent', 'arrivee' => 'ABS', 'depart' => '', 'horaire' => '--', 'overtime_minutes' => 0, 'late_minutes' => 0, 'duration_minutes' => 0, 'type' => 'Absence', 'motif' => 'Absence non justifiée'];

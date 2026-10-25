@@ -18,15 +18,20 @@
         <div class="card">
             <div class="card-header">
                 <div class="row g-3 align-items-end">
-                    <div class="col-md-6">
+                    <div class="col-md-5">
                         <label class="form-label" for="manual-agent">Agent</label>
                         <select id="manual-agent" class="form-select" ref="agentSelect">
                             <option value=""></option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label" for="manual-month">Mois</label>
-                        <input id="manual-month" type="month" class="form-control" v-model="month" @change="loadMonth" :disabled="!agentId">
+                    <div class="col-md-4">
+                        <label class="form-label" for="manual-range">Période</label>
+                        <div class="input-icon position-relative">
+                            <span class="input-icon-addon">
+                                <i class="ti ti-calendar text-gray-9"></i>
+                            </span>
+                            <input id="manual-range" type="text" class="form-control date-range bookingrange" placeholder="dd/mm/yyyy - dd/mm/yyyy" :disabled="!agentId">
+                        </div>
                     </div>
                     <div class="col-md-3">
                         <div class="text-muted small" v-if="agent">@{{ agent.fullname }} — @{{ agent.matricule }}</div>
@@ -38,13 +43,13 @@
                 <div v-if="error" class="alert alert-danger" role="alert">@{{ error }}</div>
                 <div v-if="success" class="alert alert-success" role="status">@{{ success }}</div>
                 <div v-if="isLoading" class="text-center py-5">
-                    <span class="spinner-border spinner-border-sm me-2"></span>Chargement du mois...
+                    <span class="spinner-border spinner-border-sm me-2"></span>Chargement de la période...
                 </div>
                 <div v-else-if="!agentId" class="text-center text-muted py-5">
-                    Sélectionnez d’abord un agent pour afficher son calendrier mensuel.
+                    Sélectionnez d’abord un agent pour afficher les journées de la période.
                 </div>
                 <div v-else-if="days.length === 0" class="text-center text-muted py-5">
-                    Aucun jour à afficher pour ce mois.
+                    Aucun jour à afficher pour cette période.
                 </div>
                 <div v-else class="table-responsive">
                     <table class="table table-bordered align-middle">
@@ -100,7 +105,7 @@
 
 @push('scripts')
     <script>
-        window.manualAttendanceDefaultMonth = @json($defaultMonth);
+        window.manualAttendanceDefaultRange = @json($defaultRange);
     </script>
     <script type="module" src="{{ asset('assets/js/scripts/rh-manual-attendance.js') . '?v=' . filemtime(public_path('assets/js/scripts/rh-manual-attendance.js')) }}"></script>
 @endpush

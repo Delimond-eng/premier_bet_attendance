@@ -49,15 +49,17 @@ class HRController extends Controller
         $this->ensureElectrocoolManualAttendance();
         $data = $request->validate([
             'agent_id' => 'required|integer|exists:agents,id',
-            'month' => 'required|date_format:Y-m',
+            'from' => 'required|date_format:Y-m-d',
+            'to' => 'required|date_format:Y-m-d|after_or_equal:from',
         ]);
 
         $agent = $this->findManualAttendanceAgent((int) $data['agent_id']);
-        $month = Carbon::createFromFormat('Y-m', $data['month'], 'Africa/Kinshasa')->startOfMonth();
+        $start = Carbon::createFromFormat('Y-m-d', $data['from'], 'Africa/Kinshasa')->startOfDay();
+        $end = Carbon::createFromFormat('Y-m-d', $data['to'], 'Africa/Kinshasa')->startOfDay();
         $today = Carbon::now('Africa/Kinshasa')->startOfDay();
         $days = [];
 
-        for ($day = $month->copy(); $day->lte($month->copy()->endOfMonth()); $day->addDay()) {
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
             $date = $day->toDateString();
             $schedule = $this->manualAttendanceSchedule($agent, $date);
             $presence = PresenceAgents::withoutGlobalScopes()
@@ -187,6 +189,8 @@ class HRController extends Controller
 
     private function ensureElectrocoolManualAttendance(): void
     {
+        abort_unless(strtolower((string) request()->user()?->role) === 'admin', 403);
+
         $host = strtolower(request()->getHost());
         abort_unless(
             str_contains($host, 'electrocool') || in_array($host, ['localhost', '127.0.0.1'], true),
